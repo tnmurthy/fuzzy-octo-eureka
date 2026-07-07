@@ -1,0 +1,14 @@
+{
+  "name": "arunachala-dashboard",
+  "version": "1.0.0",
+  "description": "Local operations dashboard for the Arunachala AI workspace (Ollama, OpenClaw, Hermes agents).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
