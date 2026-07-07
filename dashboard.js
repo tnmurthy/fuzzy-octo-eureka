@@ -606,6 +606,7 @@ function pollTelemetry() {
         telemetryLive = true;
         lastTelemetryData = data;
         updateTelemetryUI(data);
+        updateLastSyncedIndicator();
       }
     })
     .catch(() => {
@@ -614,10 +615,37 @@ function pollTelemetry() {
     });
 }
 
+// Stamps the sidebar with the time of the last successful poll, and turns
+// it amber/red if the daemon appears to have stopped writing telemetry.
+let lastSyncedAt = null;
+function updateLastSyncedIndicator() {
+  lastSyncedAt = Date.now();
+  renderLastSyncedIndicator();
+}
+function renderLastSyncedIndicator() {
+  const el = document.getElementById('id-last-synced');
+  if (!el) return;
+  if (!lastSyncedAt) {
+    el.innerText = 'never';
+    el.style.color = 'var(--color-text-muted)';
+    return;
+  }
+  const secsAgo = Math.round((Date.now() - lastSyncedAt) / 1000);
+  el.innerText = secsAgo <= 1 ? 'just now' : `${secsAgo}s ago`;
+  if (secsAgo > 30) {
+    el.style.color = 'var(--status-red)';
+  } else if (secsAgo > 12) {
+    el.style.color = 'var(--status-amber)';
+  } else {
+    el.style.color = 'var(--status-green)';
+  }
+}
+
 function startTelemetryPolling(intervalMs = 3000) {
   seedChartsFromHistory();
   pollTelemetry();
   setInterval(pollTelemetry, intervalMs);
+  setInterval(renderLastSyncedIndicator, 1000);
 }
 
 // ---------------------------------------------------------------------------
