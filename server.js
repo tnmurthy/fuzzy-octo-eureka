@@ -15,6 +15,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const ReBACEngine = require('./rebac-engine');
 
 const PORT = process.env.PORT || 8787;
 const DASHBOARD_DIR = __dirname;
@@ -24,6 +25,24 @@ const HISTORY_FILE = path.join(DASHBOARD_DIR, 'history.json');
 const OLLAMA_HOST = '127.0.0.1';
 const OLLAMA_PORT = 11434;
 const PING_TIMEOUT_MS = 3000;
+
+// Initialize ReBAC Engine and Seed Permission Nodes & Relations
+const rebac = new ReBACEngine();
+
+// Nodes
+rebac.addNode('user:sriad', 'User', { name: 'Sriad' });
+rebac.addNode('team:opscore', 'Team', { name: 'Ops Core Team' });
+rebac.addNode('role:admin', 'Role', { action: '*' });
+rebac.addNode('perm:ping', 'Permission', { action: 'ping:execute' });
+rebac.addNode('resource:ollama_cluster', 'Resource', { name: 'Ollama Cluster' });
+rebac.addNode('resource:telemetry_feed', 'Resource', { name: 'Telemetry Feed' });
+
+// Edges
+rebac.addEdge('user:sriad', 'MEMBER_OF', 'team:opscore');
+rebac.addEdge('team:opscore', 'GRANTED', 'role:admin');
+rebac.addEdge('role:admin', 'INCLUDES', 'perm:ping');
+rebac.addEdge('perm:ping', 'APPLIES_TO', 'resource:ollama_cluster');
+rebac.addEdge('team:opscore', 'OWNER_OF', 'resource:telemetry_feed');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -46,7 +65,6 @@ function sendJson(res, statusCode, payload) {
 function serveJsonFile(res, filePath, emptyValue) {
   fs.readFile(filePath, 'utf8', (err, data) => {
     if (err) {
-      // File doesn't exist yet (daemon hasn't run a cycle) - not a hard error.
       return sendJson(res, 200, emptyValue);
     }
     try {
@@ -64,7 +82,6 @@ function serveStaticFile(req, res) {
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
-  // Prevent path traversal outside the dashboard directory.
   if (!filePath.startsWith(DASHBOARD_DIR)) {
     res.writeHead(403);
     return res.end('Forbidden');
@@ -82,10 +99,16 @@ function serveStaticFile(req, res) {
 }
 
 function handlePing(req, res) {
+  // ReBAC Graph Authorization check
+  const auth = rebac.canAccess('user:sriad', 'ping:execute', 'resource:ollama_cluster');
+  if (!auth.authorized) {
+    return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied', path: auth.path });
+  }
+
   const start = Date.now();
   const timer = setTimeout(() => {
     apiReq.destroy();
-    sendJson(res, 200, { ok: false, error: 'timeout', latencyMs: Date.now() - start });
+    sendJson(res, 200, { ok: false, error: 'timeout', latencyMs: Date.now() - start, rebacPath: auth.path });
   }, PING_TIMEOUT_MS);
 
   const apiReq = http.get(
@@ -99,9 +122,9 @@ function handlePing(req, res) {
         try {
           const parsed = JSON.parse(body);
           const models = (parsed.models || []).map(m => m.name);
-          sendJson(res, 200, { ok: true, latencyMs, statusCode: apiRes.statusCode, models });
+          sendJson(res, 200, { ok: true, latencyMs, statusCode: apiRes.statusCode, models, rebacPath: auth.path });
         } catch (e) {
-          sendJson(res, 200, { ok: apiRes.statusCode === 200, latencyMs, statusCode: apiRes.statusCode, models: [] });
+          sendJson(res, 200, { ok: apiRes.statusCode === 200, latencyMs, statusCode: apiRes.statusCode, models: [], rebacPath: auth.path });
         }
       });
     }
@@ -109,7 +132,7 @@ function handlePing(req, res) {
 
   apiReq.on('error', () => {
     clearTimeout(timer);
-    sendJson(res, 200, { ok: false, error: 'connection_failed', latencyMs: Date.now() - start });
+    sendJson(res, 200, { ok: false, error: 'connection_failed', latencyMs: Date.now() - start, rebacPath: auth.path });
   });
 }
 
@@ -119,6 +142,12 @@ const server = http.createServer((req, res) => {
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
+  }
+  if (req.url.startsWith('/api/rebac/inspect')) {
+    return sendJson(res, 200, {
+      nodes: Array.from(rebac.nodes.entries()),
+      edges: rebac.edges
+    });
   }
   if (req.url.startsWith('/api/ping')) {
     return handlePing(req, res);
@@ -130,3 +159,4 @@ server.listen(PORT, () => {
   console.log(`Arunachala dashboard server running at http://localhost:${PORT}`);
   console.log(`Serving files from: ${DASHBOARD_DIR}`);
 });
+

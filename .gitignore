@@ -2,6 +2,9 @@
 telemetry.json
 history.json
 
+# NSSM service logs
+logs/
+
 # Legacy output format, in case it's still lying around from before the refactor
 telemetry.js
 
@@ -12,6 +15,9 @@ npm-debug.log*
 # OS noise
 .DS_Store
 Thumbs.db
+
+# draw.io autosave backups
+.$*.bkp
 
 # Never commit secrets
 *.env

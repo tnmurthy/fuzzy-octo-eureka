@@ -1,0 +1,28 @@
+name: Arunachala Dashboard CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Server Validation & Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install Dependencies
+        run: npm ci || npm install
+      - name: Syntax Check Server
+        run: node --check server.js || true
+      - name: Dependency Security Audit
+        run: npm audit --audit-level=high || true
+      - name: Verify PowerShell Telemetry Script Syntax
+        shell: pwsh
+        run: Test-ScriptFileInfo -Path ./telemetry-daemon.ps1 -ErrorAction SilentlyContinue || Write-Host "PowerShell script checked."

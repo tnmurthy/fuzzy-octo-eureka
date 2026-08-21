@@ -1,527 +1,506 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arunachala Operations Center - AI Workspace Dashboard</title>
-  <!-- Google Fonts Outfit & JetBrains Mono -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  
-  <link rel="stylesheet" href="dashboard.css">
-</head>
-<body>
+ <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Arunachala Operations Center - AI Workspace Dashboard</title>
+      <!-- Google Fonts Outfit & JetBrains Mono -->
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <div class="dashboard-container">
-    
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="logo-container">
-        <div class="logo-icon">🧭</div>
-        <div class="logo-text">
-          <h1>Arunachala</h1>
-          <p>Local Operations Center</p>
-        </div>
-      </div>
-      
-      <nav>
-        <ul class="nav-list">
-          <li class="nav-item active" onclick="switchTab('dashboard')"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
-          <li class="nav-item" onclick="switchTab('agents')"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
-          <li class="nav-item" onclick="switchTab('infra')"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
-          <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
-        </ul>
-      </nav>
-      
-      <div class="system-status-widget">
-        <div class="system-status-title">Active Services</div>
-        
-        <div class="status-row">
-          <span>Ollama Server</span>
-          <span class="status-badge"><span class="status-dot green" id="id-ollama-dot"></span>Online</span>
-        </div>
-        <div class="status-row">
-          <span>OpenClaw Gateway</span>
-          <span class="status-badge"><span class="status-dot green" id="id-openclaw-dot"></span>Online</span>
-        </div>
-        <div class="status-row">
-          <span>Hermes Service</span>
-          <span class="status-badge"><span class="status-dot green" id="id-hermes-dot"></span>Ready</span>
-        </div>
-        <div class="status-row" style="margin-top:6px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.05);">
-          <span style="color:var(--color-text-muted);">Last synced</span>
-          <span id="id-last-synced" style="font-family:'JetBrains Mono', monospace; color:var(--color-text-muted);">never</span>
-        </div>
-      </div>
-    </aside>
-    
-    <!-- Main Panel -->
-    <main class="main-panel">
-      
-      <!-- ==================== DASHBOARD TAB ==================== -->
-      <div id="dashboard" class="tab-content active">
-        <section class="header-panel">
-          <div class="header-title">
-            <h2>Talia AI Fabric Agents Monitor</h2>
-            <p>Real-time visual monitoring of local models, workspace topologies, and agent handshakes.</p>
-          </div>
-          <div class="action-group">
-            <button class="btn btn-secondary" onclick="triggerStatusSweep()">🔄 Run Status Sweep</button>
-            <button class="btn btn-primary" onclick="testOllamaHandshake()">⚡ Test Handshake</button>
-          </div>
-        </section>
-        
-        <section class="metrics-row">
-          <div class="metric-card">
-            <div class="metric-header">Host CPU Load</div>
-            <div class="metric-value" id="id-cpu-val">12.4%</div>
-            <div class="metric-sub"><span class="status-dot green"></span> Intel i7-13700H (16c)</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">Intel Iris Xe GPU</div>
-            <div class="metric-value" id="id-gpu-val">Active</div>
-            <div class="metric-sub"><span class="status-dot green"></span> Vulkan Assist Enabled</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">Workspace Status</div>
-            <div class="metric-value">100% Clean</div>
-            <div class="metric-sub"><span class="status-dot green"></span> Reorganization Complete</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">Ollama Latency</div>
-            <div class="metric-value" id="id-latency-val">42 ms</div>
-            <div class="metric-sub" id="id-latency-sub"><span class="status-dot green"></span> Handshake verified</div>
-          </div>
-        </section>
-        
-        <section class="dashboard-row">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">
-                <span class="card-title-icon">🌐</span>
-                <h3>Workspace Topology Handshake</h3>
-              </div>
-              <span class="status-badge"><span class="status-dot green"></span>Smartscape Flow</span>
-            </div>
-            
-            <div class="topology-container">
-              <div class="topology-node">
-                <div class="node-circle green">💻</div>
-                <div class="node-label">Ollama Host</div>
-                <div class="node-sub">Native Port 11434</div>
-              </div>
-              <div class="topology-line"></div>
-              <div class="topology-node">
-                <div class="node-circle green">🦁</div>
-                <div class="node-label">OpenClaw Gateway</div>
-                <div class="node-sub">Local Port 18789</div>
-              </div>
-              <div class="topology-line"></div>
-              <div class="topology-node">
-                <div class="node-circle green">🐍</div>
-                <div class="node-label">Hermes ACP</div>
-                <div class="node-sub">Stdio Transport</div>
-              </div>
-              <div class="topology-line"></div>
-              <div class="topology-node">
-                <div class="node-circle">⚙️</div>
-                <div class="node-label">Workspaces</div>
-                <div class="node-sub">01_projects/</div>
-              </div>
-            </div>
-            
-            <div class="handshake-log-panel" id="id-handshake-logs">
-              <div class="log-entry info">[15:39:50] [system] Handshake audit started...</div>
-              <div class="log-entry success">[15:39:50] [ollama] Native service detected at http://127.0.0.1:11434. Port is open.</div>
-              <div class="log-entry success">[15:39:51] [openclaw] JSON configuration verified. Gateway active.</div>
-              <div class="log-entry success">[15:39:52] [acp-handshake] hermes-agent handshake resolved via JSON-RPC stdio.</div>
-              <div class="log-entry info">[15:39:52] [system] Handshake healthy. 100% path resolution.</div>
+      <link rel="stylesheet" href="dashboard.css">
+    </head>
+    <body>
+
+      <div class="dashboard-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+          <div class="logo-container">
+            <div class="logo-icon">🧭</div>
+            <div class="logo-text">
+              <h1>Arunachala</h1>
+              <p>Local Operations Center</p>
             </div>
           </div>
-          
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">
-                <span class="card-title-icon">📊</span>
-                <h3>Performance Monitoring</h3>
-              </div>
+
+          <nav>
+            <ul class="nav-list">
+              <li class="nav-item active" onclick="switchTab('dashboard')"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
+              <li class="nav-item" onclick="switchTab('agents')"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
+              <li class="nav-item" onclick="switchTab('infra')"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
+              <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
+            </ul>
+          </nav>
+
+          <div class="system-status-widget">
+            <div class="system-status-title">Active Services</div>
+
+            <div class="status-row">
+              <span>Ollama Server</span>
+              <span class="status-badge"><span class="status-dot green" id="id-ollama-dot"></span>Online</span>
             </div>
-            <div style="display:flex; flex-direction:column; gap: 15px;">
-              <div>
-                <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px;">
-                  <span>Ollama Latency Trend</span>
-                  <span id="id-latency-trend">42 ms</span>
+            <div class="status-row">
+              <span>OpenClaw Gateway</span>
+              <span class="status-badge"><span class="status-dot green" id="id-openclaw-dot"></span>Online</span>
+            </div>
+            <div class="status-row">
+              <span>Hermes Service</span>
+              <span class="status-badge"><span class="status-dot green" id="id-hermes-dot"></span>Ready</span>
+            </div>
+            <div class="status-row">
+              <span>Docker Watchtower</span>
+              <span class="status-badge"><span class="status-dot green" id="id-watchtower-dot"></span>Online</span>
+            </div>
+            <div class="status-row" style="margin-top:6px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.05);">
+              <span style="color:var(--color-text-muted);">Last synced</span>
+              <span id="id-last-synced" style="font-family:'JetBrains Mono', monospace; color:var(--color-text-muted);">never</span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Panel -->
+        <main class="main-panel">
+
+          <!-- ==================== DASHBOARD TAB ==================== -->
+          <div id="dashboard" class="tab-content active">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>Talia AI Fabric Agents Monitor</h2>
+                <p>Real-time visual monitoring of local models, workspace topologies, and agent handshakes.</p>
+              </div>
+              <div class="action-group">
+                <button class="btn btn-secondary" onclick="triggerStatusSweep()">🔄 Run Status Sweep</button>
+                <button class="btn btn-primary" onclick="testOllamaHandshake()">⚡ Test Handshake</button>
+              </div>
+            </section>
+
+            <section class="metrics-row">
+              <div class="metric-card">
+                <div class="metric-header">Host CPU Load</div>
+                <div class="metric-value" id="id-cpu-val">12.4%</div>
+                <div class="metric-sub"><span class="status-dot green"></span> Intel i7-13700H (16c)</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-header">Intel Iris Xe GPU</div>
+                <div class="metric-value" id="id-gpu-val">Active</div>
+                <div class="metric-sub"><span class="status-dot green"></span> Vulkan Assist Enabled</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-header">Workspace Status</div>
+                <div class="metric-value">100% Clean</div>
+                <div class="metric-sub"><span class="status-dot green"></span> Reorganization Complete</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-header">Ollama Latency</div>
+                <div class="metric-value" id="id-latency-val">42 ms</div>
+                <div class="metric-sub" id="id-latency-sub"><span class="status-dot green"></span> Handshake verified</div>
+              </div>
+            </section>
+
+            <section class="dashboard-row">
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">⚡</span>
+                    <h3>Real-Time Ollama Latency Trend</h3>
+                  </div>
+                  <span id="id-latency-trend" style="font-family:'JetBrains Mono', monospace; font-size:0.85rem; color:var(--status-blue);">42 ms</span>
                 </div>
                 <div class="chart-container">
                   <canvas id="latencyChart"></canvas>
                 </div>
               </div>
-              <div>
-                <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px;">
-                  <span>CPU Thread Utilization</span>
-                  <span id="id-cpu-util">12.4%</span>
+
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">📊</span>
+                    <h3>CPU Utilization (16 Cores)</h3>
+                  </div>
+                  <span id="id-cpu-util" style="font-family:'JetBrains Mono', monospace; font-size:0.85rem; color:var(--status-green);">12.4%</span>
                 </div>
                 <div class="chart-container">
                   <canvas id="cpuChart"></canvas>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-      </div>
+            </section>
 
-      <!-- ==================== AGENTS BOARD TAB ==================== -->
-      <div id="agents" class="tab-content">
-        <section class="header-panel">
-          <div class="header-title">
-            <h2>Agent Workforce Control Board</h2>
-            <p>Inspect roles, tasks, status, and configuration prompts for your hired subagents.</p>
-          </div>
-          <div class="action-group">
-            <button class="btn btn-secondary" onclick="triggerStatusSweep()">🔄 Sweep Statuses</button>
-          </div>
-        </section>
-
-        <section class="agent-split-layout">
-          <!-- Left side: List of agents -->
-          <div class="agent-grid" style="grid-template-columns: 1fr; gap: 12px; align-self: start;">
-            <div class="agent-card" onclick="selectAgent('po')">
-              <div class="agent-header">
-                <div class="agent-title">🧭 Arunachala Ramana</div>
-                <span class="status-badge"><span class="status-dot green"></span>Active</span>
-              </div>
-              <div class="agent-role">Product Owner & Strategist</div>
-            </div>
-            <div class="agent-card" onclick="selectAgent('tech')">
-              <div class="agent-header">
-                <div class="agent-title">💻 Tech Lead</div>
-                <span class="status-badge"><span class="status-dot green"></span>Idle</span>
-              </div>
-              <div class="agent-role">Lead Engineer & Architect</div>
-            </div>
-            <div class="agent-card" onclick="selectAgent('qa')">
-              <div class="agent-header">
-                <div class="agent-title">🧪 QA Engineer</div>
-                <span class="status-badge"><span class="status-dot green"></span>Idle</span>
-              </div>
-              <div class="agent-role">QA & Verification Specialist</div>
-            </div>
-            <div class="agent-card" onclick="selectAgent('infra')">
-              <div class="agent-header">
-                <div class="agent-title">🛠️ DevOps Expert</div>
-                <span class="status-badge"><span class="status-dot green"></span>Idle</span>
-              </div>
-              <div class="agent-role">Infrastructure & DevOps Specialist</div>
-            </div>
-            <div class="agent-card" onclick="selectAgent('doc')">
-              <div class="agent-header">
-                <div class="agent-title">📝 Doc Specialist</div>
-                <span class="status-badge"><span class="status-dot green"></span>Idle</span>
-              </div>
-              <div class="agent-role">Technical Writer & Memory Keeper</div>
-            </div>
-          </div>
-
-          <!-- Right side: Detail Panel -->
-          <div class="agent-detail-panel">
-            <div style="border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:12px;">
-              <h3 id="id-detail-title" style="font-size:1.3rem;">Select an Agent</h3>
-              <p id="id-detail-role-header" style="color:var(--status-blue); font-size:0.8rem; font-weight:600; text-transform:uppercase; margin-top:4px;"></p>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:16px;">
-              <div>
-                <strong style="font-size:0.9rem; color:#fff;">Role Description</strong>
-                <p id="id-detail-role" style="font-size:0.85rem; color:var(--color-text-muted); margin-top:4px; line-height:1.4;"></p>
-              </div>
-              <div>
-                <strong style="font-size:0.9rem; color:#fff;">Active Task</strong>
-                <p id="id-detail-task" style="font-size:0.85rem; color:var(--color-text-main); margin-top:4px; font-style:italic;"></p>
-              </div>
-              <div>
-                <strong style="font-size:0.9rem; color:#fff;">System Prompt (Baseline Behavior)</strong>
-                <div class="prompt-block" id="id-detail-prompt" style="max-height:150px; margin-top:6px;"></div>
-              </div>
-              
-              <!-- Telemetry Stats Section -->
-              <div id="id-detail-telemetry" style="display:none; flex-direction:column; gap:12px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
-                <strong style="font-size:0.9rem; color:#fff;">Agent Operational Metrics</strong>
-                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-                  <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:6px; text-align:center; border: 1px solid var(--border-color);">
-                    <div style="font-size:0.65rem; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em;">Assigned</div>
-                    <div id="id-metric-assigned" style="font-size:1.2rem; font-weight:bold; color:#fff; margin-top:4px;">0</div>
-                  </div>
-                  <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:6px; text-align:center; border: 1px solid var(--border-color);">
-                    <div style="font-size:0.65rem; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em;">Active</div>
-                    <div id="id-metric-active" style="font-size:1.2rem; font-weight:bold; color:var(--status-blue); margin-top:4px;">0</div>
-                  </div>
-                  <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:6px; text-align:center; border: 1px solid var(--border-color);">
-                    <div style="font-size:0.65rem; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em;">Completed</div>
-                    <div id="id-metric-completed" style="font-size:1.2rem; font-weight:bold; color:var(--status-green); margin-top:4px;">0</div>
-                  </div>
-                </div>
-                
-                <strong style="font-size:0.9rem; color:#fff; margin-top:8px;">Tool Invocation Counters</strong>
-                <div id="id-tool-metrics-list" style="display:flex; flex-direction:column; gap:6px; max-height:140px; overflow-y:auto; font-size:0.8rem; background:rgba(0,0,0,0.3); padding:10px; border-radius:6px; border:1px solid rgba(255,255,255,0.03);">
-                  <!-- Dynamic rows of tools -->
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <!-- ==================== INFRASTRUCTURE TAB ==================== -->
-      <div id="infra" class="tab-content">
-        <section class="header-panel">
-          <div class="header-title">
-            <h2>System Infrastructure Audit</h2>
-            <p>Inspect model routing matrices, host directories, and container configurations.</p>
-          </div>
-        </section>
-
-        <section class="dashboard-row equal">
-          <!-- Left side: Model Routing -->
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">
-                <span class="card-title-icon">🧠</span>
-                <h3>Model Routing Configuration</h3>
-              </div>
-              <span class="status-badge"><span class="status-dot green"></span>Ollama native</span>
-            </div>
-            <div class="model-list">
-              <div class="model-item">
-                <div class="model-name">qwen2.5-coder:7b</div>
-                <div class="model-role">Primary Coding</div>
-                <div class="model-stat">32k ctx</div>
-                <div class="model-badge">Primary</div>
-              </div>
-              <div class="model-item">
-                <div class="model-name">qwen2.5-coder:1.5b</div>
-                <div class="model-role">Fast/Lightweight</div>
-                <div class="model-stat">32k ctx</div>
-                <div class="model-badge">Online</div>
-              </div>
-              <div class="model-item">
-                <div class="model-name">llama3.1:8b</div>
-                <div class="model-role">Architect/Planning</div>
-                <div class="model-stat">128k ctx</div>
-                <div class="model-badge">Online</div>
-              </div>
-              <div class="model-item">
-                <div class="model-name">gemma2:9b</div>
-                <div class="model-role">Creative/Alternative</div>
-                <div class="model-stat">8k ctx</div>
-                <div class="model-badge">Online</div>
-              </div>
-              <div class="model-item">
-                <div class="model-name">nomic-embed-text</div>
-                <div class="model-role">Embeddings/RAG</div>
-                <div class="model-stat">8k ctx</div>
-                <div class="model-badge">Vector</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Right side: Workspace Map & Host Info -->
-          <div style="display:flex; flex-direction:column; gap:20px;">
-            <!-- Workspace layout -->
-            <div class="card">
+            <section class="card" style="margin-top: 24px;">
               <div class="card-header">
                 <div class="card-title">
-                  <span class="card-title-icon">📂</span>
-                  <h3>Active Workspace Layout</h3>
+                  <span class="card-title-icon">📡</span>
+                  <h3>System Handshake & Health Diagnostics</h3>
                 </div>
+                <span class="status-badge"><span class="status-dot green"></span>Active Diagnostics</span>
               </div>
-              <div class="workspace-map">
-                <div class="workspace-item">
-                  <div class="workspace-num">01</div>
-                  <div class="workspace-details">
-                    <div class="workspace-name">01_projects/</div>
-                    <div class="workspace-info">Consolidated active code repositories (telangana-live, redesigned-utsav)</div>
-                  </div>
-                </div>
-                <div class="workspace-item">
-                  <div class="workspace-num">02</div>
-                  <div class="workspace-details">
-                    <div class="workspace-name">02_engines/</div>
-                    <div class="workspace-info">AI Agent runtimes (openclaw/, hermes-agent/)</div>
-                  </div>
-                </div>
-                <div class="workspace-item">
-                  <div class="workspace-num">03</div>
-                  <div class="workspace-details">
-                    <div class="workspace-name">03_documents/</div>
-                    <div class="workspace-info">Cleaned-up files, spreadsheets, and reference materials</div>
-                  </div>
-                </div>
-                <div class="workspace-item">
-                  <div class="workspace-num">04</div>
-                  <div class="workspace-details">
-                    <div class="workspace-name">04_internal/</div>
-                    <div class="workspace-info">Development sandboxes, execution logs, and secrets/keys</div>
-                  </div>
-                </div>
+              <div class="log-panel" id="id-handshake-logs">
+                <div class="log-entry success">[18:30:01] [system] Arunachala Operations Dashboard initialized.</div>
+                <div class="log-entry info">[18:30:02] [probe] Checking local Ollama endpoint at http://127.0.0.1:11434...</div>
+                <div class="log-entry success">[18:30:03] [handshake] Ollama HTTP Response 200 OK. Available models: qwen2.5-coder:7b, qwen2.5-coder:1.5b, llama3.1:8b, gemma2:9b, nomic-embed-text.</div>
+                <div class="log-entry success">[18:30:04] [workspace] Relocation verified. Root C:/tt-ai-stack structured (01_projects, 02_engines, 03_documents, 04_internal).</div>
               </div>
-            </div>
-
-            <!-- Host environment specs -->
-            <div class="card">
-              <div class="card-header">
-                <div class="card-title">
-                  <span class="card-title-icon">⚙️</span>
-                  <h3>Host Specs & Status</h3>
-                </div>
-              </div>
-              <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:8px;">
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OS:</span><span>Windows 11 (Vulkan Assist)</span></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">CPU:</span><span>Intel Core i7-13700H</span></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">GPU:</span><span>Intel Iris Xe (Integrated)</span></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Ollama Endpoint:</span><code>http://127.0.0.1:11434</code></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config:</span><code>openclaw.json</code></div>
-              </div>
-            </div>
+            </section>
           </div>
-        </section>
 
-        <!-- Dynamic Local Engine Stack Details (Track 4) -->
-        <section class="dashboard-row equal" style="margin-top:24px;">
-          <!-- Left side: Local Engine Stack Details -->
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">
-                <span class="card-title-icon">⚙️</span>
-                <h3>Local Engine Integration (Drill-down)</h3>
+          <!-- ==================== AGENTS TAB ==================== -->
+          <div id="agents" class="tab-content">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>Hired Workforce Matrix</h2>
+                <p>Inspect active agent personas, system prompts, role boundaries, and runtime assignments.</p>
               </div>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:12px;">
-              <!-- Paperclip -->
-              <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <strong style="color:#fff; font-size:0.9rem;">🖇️ Paperclip (Governance)</strong>
-                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Workforce, Cost limits, Gated Approvals, Task Board</div>
+            </section>
+
+            <section class="dashboard-row equal">
+              <!-- Left side: List of agents -->
+              <div class="agent-grid" style="grid-template-columns: 1fr;">
+
+                <div class="agent-card" onclick="selectAgent('po')" style="border-color: var(--status-blue);">
+                  <div class="agent-card-header">
+                    <div class="agent-name">🧭 Arunachala Ramana</div>
+                    <div class="agent-badge active">Active</div>
+                  </div>
+                  <div class="agent-role">Product Strategist & PO (Main Agent)</div>
+                  <div class="agent-desc">Orchestrates business strategy, maintains backlog, and coordinates subagents.</div>
                 </div>
-                <div style="text-align:right;">
-                  <span class="status-badge" style="background-color:rgba(0,176,255,0.15); color:var(--status-blue); border-color:var(--status-blue); font-size:0.7rem; font-weight:bold;">Active</span>
-                  <div id="id-paperclip-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">5 Hired Agents</div>
+
+                <div class="agent-card" onclick="selectAgent('tech')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">💻 Tech Lead & Architect</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">System Architecture & Engineering Lead</div>
+                  <div class="agent-desc">Designs architecture, handles complex code changes, refactors components.</div>
                 </div>
-              </div>
-              
-              <!-- OpenClaw -->
-              <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <strong style="color:#fff; font-size:0.9rem;">🦁 OpenClaw (Gateway)</strong>
-                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">MCP Servers, Stdio/TCP Router, Sandbox Execution</div>
+
+                <div class="agent-card" onclick="selectAgent('qa')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">🧪 QA & Verification Specialist</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">Pre-Commit Verification & Test Lead</div>
+                  <div class="agent-desc">Runs linting, Vitest sweeps, checks regressions before commits.</div>
                 </div>
-                <div style="text-align:right;">
-                  <span id="id-openclaw-status-badge" class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Online</span>
-                  <div id="id-openclaw-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">16 Registered Tools</div>
+
+                <div class="agent-card" onclick="selectAgent('infra')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">🛠️ DevOps & Infrastructure</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">Containers, Ollama Offload & Scripts</div>
+                  <div class="agent-desc">Manages Docker, Ollama Vulkan configuration, and workspace health.</div>
                 </div>
+
+                <div class="agent-card" onclick="selectAgent('doc')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">📝 Documentation Specialist</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">Memory, Changelogs & Daily Logs</div>
+                  <div class="agent-desc">Tracks task completions, logs changes, updates daily memory entries.</div>
+                </div>
+
               </div>
 
-              <!-- Hermes -->
-              <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <strong style="color:#fff; font-size:0.9rem;">🐍 Hermes (Reasoning)</strong>
-                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Cognitive loop, Planning/Verification, Skills compiler</div>
+              <!-- Right side: Detail Panel -->
+              <div class="card" id="id-agent-detail-panel">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">📋</span>
+                    <h3 id="id-detail-title">🧭 Arunachala Ramana</h3>
+                  </div>
+                  <span class="status-badge" id="id-detail-badge"><span class="status-dot green"></span>Role Specifications</span>
                 </div>
-                <div style="text-align:right;">
-                  <span class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Ready</span>
-                  <div id="id-hermes-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">1 Active Runner</div>
+
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                  <div>
+                    <span class="metric-header">Role & Responsibilities</span>
+                    <p id="id-detail-role" style="font-size:0.9rem; color:#fff; margin-top:4px;">
+                      AI Product Strategist & Product Owner (Main Agent). Orchestrates high-level business strategy, maintains the backlog, coordinates subagents, and acts as the strategic interface for the human operator.
+                    </p>
+                  </div>
+
+                  <!-- Live Telemetry Section (Track 3) -->
+                  <div id="id-detail-telemetry" style="background:rgba(0,176,255,0.06); padding:14px; border-radius:10px; border:1px solid rgba(0,176,255,0.2); display:flex; flex-direction:column; gap:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-weight:600; font-size:0.8rem; color:var(--status-blue); text-transform:uppercase; letter-spacing:0.5px;">⚡ Session Telemetry</span>
+                      <span class="status-badge" style="font-size:0.7rem;"><span class="status-dot green"></span>Live Transcripts</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+                      <div style="background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px; border:1px solid var(--border-color);">
+                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Assigned Tasks</div>
+                        <div id="id-metric-assigned" style="font-size:1.1rem; font-weight:700; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:2px;">0</div>
+                      </div>
+                      <div style="background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px; border:1px solid var(--border-color);">
+                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Active Subtasks</div>
+                        <div id="id-metric-active" style="font-size:1.1rem; font-weight:700; color:var(--status-blue); font-family:'JetBrains Mono', monospace; margin-top:2px;">0</div>
+                      </div>
+                      <div style="background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px; border:1px solid var(--border-color);">
+                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Completed Tasks</div>
+                        <div id="id-metric-completed" style="font-size:1.1rem; font-weight:700; color:var(--status-green); font-family:'JetBrains Mono', monospace; margin-top:2px;">0</div>
+                      </div>
+                    </div>
+
+                    <!-- Tool Call Breakdown -->
+                    <div style="margin-top:4px;">
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-bottom:6px;">Tool Invocations Breakdown:</div>
+                      <div id="id-tool-metrics-list" style="display:flex; flex-direction:column; gap:4px; font-size:0.8rem;">
+                        <!-- Populated dynamically via JS -->
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span class="metric-header">System Instructions / Identity</span>
+                    <pre id="id-detail-prompt" style="background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; font-size:0.8rem; color:#b0bec5; font-family:'JetBrains Mono', monospace; white-space:pre-wrap; border:1px solid var(--border-color); margin-top:4px;">You are:
+  Arunachala Ramana
+    Vibe: Calm, strategic, practical, precise
+    Role: High-level product strategy, backlog management, and orchestration of engineering and QA subagents.</pre>
+                  </div>
+
+                  <div>
+                    <span class="metric-header">Current Focus & Milestones</span>
+                    <p id="id-detail-task" style="font-size:0.85rem; color:var(--color-text-muted); margin-top:4px;">
+                      Directing the overall workspace restructuring, relocation of OpenClaw and Hermes engines, and model latency benchmarks.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
           </div>
-          
-          <!-- Right side: Dynamic Engine Performance Audit -->
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">
-                <span class="card-title-icon">📈</span>
-                <h3>Engine Integration Health</h3>
+
+          <!-- ==================== INFRASTRUCTURE TAB ==================== -->
+          <div id="infra" class="tab-content">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>System Infrastructure Audit</h2>
+                <p>Inspect model routing matrices, host directories, and container configurations.</p>
               </div>
-            </div>
-            <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:10px;">
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">JSON-RPC Protocol:</span><span style="color:var(--status-green); font-weight:bold;">Healthy (Stdio)</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Codex Environment Bridge:</span><span style="color:#fff; font-family:'JetBrains Mono', monospace;">CODEX_HOME Verified</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Active Traces Recorded:</span><span id="id-traces-count" style="color:#fff; font-family:'JetBrains Mono', monospace;">0 logs</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config File:</span><span style="color:var(--status-green); font-weight:bold;">openclaw.json (Valid)</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Vulkan GPGPU Assist:</span><span style="color:#fff;">Intel Xe Core (Active)</span></div>
-            </div>
+            </section>
+
+            <section class="dashboard-row equal">
+              <!-- Left side: Model Routing -->
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">🧠</span>
+                    <h3>Model Routing Configuration</h3>
+                  </div>
+                  <span class="status-badge"><span class="status-dot green"></span>Ollama native</span>
+                </div>
+                <div class="model-list">
+                  <div class="model-item">
+                    <div class="model-name">qwen2.5-coder:7b</div>
+                    <div class="model-role">Primary Coding</div>
+                    <div class="model-stat">32k ctx</div>
+                    <div class="model-badge">Primary</div>
+                  </div>
+                  <div class="model-item">
+                    <div class="model-name">qwen2.5-coder:1.5b</div>
+                    <div class="model-role">Fast/Lightweight</div>
+                    <div class="model-stat">32k ctx</div>
+                    <div class="model-badge">Online</div>
+                  </div>
+                  <div class="model-item">
+                    <div class="model-name">llama3.1:8b</div>
+                    <div class="model-role">Architect/Planning</div>
+                    <div class="model-stat">128k ctx</div>
+                    <div class="model-badge">Online</div>
+                  </div>
+                  <div class="model-item">
+                    <div class="model-name">gemma2:9b</div>
+                    <div class="model-role">Creative/Alternative</div>
+                    <div class="model-stat">8k ctx</div>
+                    <div class="model-badge">Online</div>
+                  </div>
+                  <div class="model-item">
+                    <div class="model-name">nomic-embed-text</div>
+                    <div class="model-role">Embeddings/RAG</div>
+                    <div class="model-stat">8k ctx</div>
+                    <div class="model-badge">Vector</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right side: Workspace Map & Host Info -->
+              <div style="display:flex; flex-direction:column; gap:20px;">
+                <!-- Workspace layout -->
+                <div class="card">
+                  <div class="card-header">
+                    <div class="card-title">
+                      <span class="card-title-icon">📂</span>
+                      <h3>Active Workspace Layout</h3>
+                    </div>
+                  </div>
+                  <div class="workspace-map">
+                    <div class="workspace-item">
+                      <div class="workspace-num">01</div>
+                      <div class="workspace-details">
+                        <div class="workspace-name">01_projects/</div>
+                        <div class="workspace-info">Consolidated active code repositories (telangana-live, arunachala-dashboard)</div>
+                      </div>
+                    </div>
+                    <div class="workspace-item">
+                      <div class="workspace-num">02</div>
+                      <div class="workspace-details">
+                        <div class="workspace-name">02_engines/</div>
+                        <div class="workspace-info">AI Agent runtimes (openclaw/, hermes-agent/)</div>
+                      </div>
+                    </div>
+                    <div class="workspace-item">
+                      <div class="workspace-num">03</div>
+                      <div class="workspace-details">
+                        <div class="workspace-name">03_documents/</div>
+                        <div class="workspace-info">Cleaned-up files, spreadsheets, and reference materials</div>
+                      </div>
+                    </div>
+                    <div class="workspace-item">
+                      <div class="workspace-num">04</div>
+                      <div class="workspace-details">
+                        <div class="workspace-name">04_internal/</div>
+                        <div class="workspace-info">Development sandboxes, execution logs, and secrets/keys</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Host environment specs -->
+                <div class="card">
+                  <div class="card-header">
+                    <div class="card-title">
+                      <span class="card-title-icon">⚙️</span>
+                      <h3>Host Specs & Status</h3>
+                    </div>
+                  </div>
+                  <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:8px;">
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OS:</span><span>Windows 11 (Vulkan Assist)</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">CPU:</span><span>Intel Core i7-13700H</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">GPU:</span><span>Intel Iris Xe (Integrated)</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Ollama Endpoint:</span><code>http://127.0.0.1:11434</code></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config:</span><code>openclaw.json</code></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Dynamic Local Engine Stack Details (Track 4) -->
+            <section class="dashboard-row equal" style="margin-top:24px;">
+              <!-- Left side: Local Engine Stack Details -->
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">⚙️</span>
+                    <h3>Local Engine Integration (Drill-down)</h3>
+                  </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                  <!-- Paperclip -->
+                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <strong style="color:#fff; font-size:0.9rem;">🖇️ Paperclip (Governance)</strong>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Workforce, Cost limits, Gated Approvals, Task Board</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span class="status-badge" style="background-color:rgba(0,176,255,0.15); color:var(--status-blue); border-color:var(--status-blue); font-size:0.7rem; font-weight:bold;">Active</span>
+                      <div id="id-paperclip-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">5 Hired Agents</div>
+                    </div>
+                  </div>
+
+                  <!-- OpenClaw -->
+                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <strong style="color:#fff; font-size:0.9rem;">🦁 OpenClaw (Gateway)</strong>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">MCP Servers, Stdio/TCP Router, Sandbox Execution</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span id="id-openclaw-status-badge" class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Online</span>
+                      <div id="id-openclaw-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">16 Registered Tools</div>
+                    </div>
+                  </div>
+
+                  <!-- Hermes -->
+                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <strong style="color:#fff; font-size:0.9rem;">🐍 Hermes (Reasoning)</strong>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Cognitive loop, Planning/Verification, Skills compiler</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Ready</span>
+                      <div id="id-hermes-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">1 Active Runner</div>
+                    </div>
+                  </div>
+
+                  <!-- Watchtower -->
+                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <strong style="color:#fff; font-size:0.9rem;">🔭 Watchtower (Container Watcher)</strong>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Automated Docker container lifecycle & image updates</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span id="id-watchtower-status-badge" class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Online</span>
+                      <div id="id-watchtower-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">Checking...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right side: Dynamic Engine Performance Audit -->
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">📊</span>
+                    <h3>Engine Pipeline & Execution Audit</h3>
+                  </div>
+                </div>
+                <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:10px;">
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Paperclip Sync:</span><span style="color:var(--status-green);">Enabled (Local Task Orchestration)</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config File:</span><span style="font-family:'JetBrains Mono', monospace; color:var(--status-blue);">C:/tt-ai-stack/openclaw.json</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Hermes Traces Directory:</span><span id="id-traces-count" style="font-family:'JetBrains Mono', monospace; color:#fff;">0 logs</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Sandboxed Tool Mode:</span><span>Full Read/Write (Internal stack)</span></div>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
+
+          <!-- ==================== LOGS TAB ==================== -->
+          <div id="logs" class="tab-content">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>Live Console & Operational Log Stream</h2>
+                <p>Unified tail of background daemon events, subagent tool calls, and model invocations.</p>
+              </div>
+            </section>
+
+            <section class="console-wrapper">
+              <div class="console-header">
+                <div class="console-tabs">
+                  <div class="console-tab active" onclick="filterLogs('all', event)">All Output</div>
+                  <div class="console-tab" onclick="filterLogs('handshake', event)">Handshakes</div>
+                  <div class="console-tab" onclick="filterLogs('relocate', event)">Workspace Map</div>
+                  <div class="console-tab" onclick="filterLogs('agent', event)">Agent Actions</div>
+                </div>
+              </div>
+
+              <div class="console-body" id="id-console-log-list">
+                <div class="log-entry success" data-cat="handshake">[18:30:00] [system] Operations daemon connected.</div>
+                <div class="log-entry info" data-cat="handshake">[18:30:01] [ollama] Ollama endpoint http://127.0.0.1:11434 verified online.</div>
+                <div class="log-entry success" data-cat="relocate">[18:30:02] [workspace] Relocated OpenClaw gateway from 04_internal/openclaw to 02_engines/openclaw.</div>
+                <div class="log-entry success" data-cat="relocate">[18:30:03] [workspace] Relocated Hermes agent from 04_internal/hermes-agent to 02_engines/hermes-agent.</div>
+                <div class="log-entry info" data-cat="agent">[18:30:04] [po] Arunachala Ramana dispatched verification tasks to Tech Lead and QA.</div>
+              </div>
+
+              <div class="console-input-row">
+                <span class="console-prompt">arunachala-admin@host:~$</span>
+                <input type="text" class="console-input" placeholder="Type a command (e.g. 'status', 'ping', 'agents', 'help')..." id="id-terminal-input" onkeydown="handleTerminalCommand(event)">
+              </div>
+            </section>
+          </div>
+
+        </main>
       </div>
 
-      <!-- ==================== ACTION LOGS TAB ==================== -->
-      <div id="logs" class="tab-content">
-        <section class="header-panel">
-          <div class="header-title">
-            <h2>Console logs & Action Traces</h2>
-            <p>Detailed tracking of terminal commands, relocation results, and test suite verification.</p>
-          </div>
-        </section>
-
-        <!-- Console terminal -->
-        <div class="console-terminal">
-          <div class="console-header">
-            <div class="console-tabs">
-              <button class="console-tab active" onclick="filterLogs('all', event)">All logs</button>
-              <button class="console-tab" onclick="filterLogs('relocate', event)">Relocation</button>
-              <button class="console-tab" onclick="filterLogs('tests', event)">QA Tests</button>
-              <button class="console-tab" onclick="filterLogs('handshake', event)">Handshake</button>
-            </div>
-            <span>System Terminal</span>
-          </div>
-
-          <div class="console-logs" id="id-console-log-list">
-            <!-- Relocation logs -->
-            <div class="log-entry info" data-cat="relocate">[15:15:10] [relocate] Creating directories: 01_projects, 02_engines, 03_documents, 04_internal...</div>
-            <div class="log-entry success" data-cat="relocate">[15:15:11] [relocate] Moving items from C:\tt-ai-stack\Projects to 01_projects/...</div>
-            <div class="log-entry warn" data-cat="relocate">[15:15:12] [relocate] Skipping pytest cache: C:\tt-ai-stack\Projects\telangana-live\backend\.pytest_cache (Locked by WSL/Docker)</div>
-            <div class="log-entry success" data-cat="relocate">[15:15:14] [relocate] Moving engine openclaw to 02_engines/openclaw...</div>
-            <div class="log-entry success" data-cat="relocate">[15:15:15] [relocate] Moving engine hermes-agent to 02_engines/hermes-agent...</div>
-            <div class="log-entry success" data-cat="relocate">[15:15:17] [relocate] Moving individual reference documents to 03_documents/...</div>
-            <div class="log-entry success" data-cat="relocate">[15:15:20] [relocate] Moving sandboxes, logs, and keys to 04_internal/...</div>
-            <div class="log-entry success" data-cat="relocate">[15:20:10] [relocate_p2] Moving portal repository to 01_projects/portal...</div>
-            <div class="log-entry success" data-cat="relocate">[15:21:40] [relocate_p2] Moving read-only file using -LiteralPath wrapper.</div>
-            <div class="log-entry success" data-cat="relocate">[15:22:01] [relocate_p2] Phase 2 Relocation complete. Root workspace is 100% clean.</div>
-            
-            <!-- Install logs -->
-            <div class="log-entry info" data-cat="tests">[15:39:02] [qa] Node dependencies broken inside relocated monorepo. Initiating recovery...</div>
-            <div class="log-entry info" data-cat="tests">[15:39:03] [system] Global installation: npm install -g pnpm@10.33.2</div>
-            <div class="log-entry success" data-cat="tests">[15:39:06] [system] pnpm v10.33.2 successfully installed globally.</div>
-            <div class="log-entry info" data-cat="tests">[15:39:08] [system] Running 'pnpm install' inside 02_engines/openclaw...</div>
-            <div class="log-entry success" data-cat="tests">[15:39:43] [system] pnpm install complete. Restored package-to-package monorepo symlinks.</div>
-            
-            <!-- Test logs -->
-            <div class="log-entry info" data-cat="tests">[15:44:00] [qa] Running Vitest unit tests: node scripts/run-vitest.mjs run --config test/vitest/vitest.unit.config.ts</div>
-            <div class="log-entry info" data-cat="tests">[15:44:04] [qa] RUN v4.1.5 C:/tt-ai-stack/02_engines/openclaw</div>
-            <div class="log-entry success" data-cat="tests">[15:44:28] [qa] 31 test files passed successfully (177 tests).</div>
-            <div class="log-entry error" data-cat="tests">[15:44:29] [qa] FAIL: plugin-state-store.test.ts. Error: EBUSY: resource busy or locked, unlink state.sqlite</div>
-            <div class="log-entry error" data-cat="tests">[15:44:30] [qa] FAIL: proxy-server.managed-proxy.test.ts. Error: openssl is required but missing from PATH.</div>
-            <div class="log-entry warn" data-cat="tests">[15:44:30] [qa] Validation Sweep finished. Failures identified as Windows environment constraints. Engine is ready.</div>
-            
-            <!-- Handshake logs -->
-            <div class="log-entry info" data-cat="handshake">[15:46:51] [tech_lead] Handshake audit started...</div>
-            <div class="log-entry success" data-cat="handshake">[15:46:52] [tech_lead] Checked local port bindings. Ollama (11434) and OpenClaw (18789) are online.</div>
-            <div class="log-entry success" data-cat="handshake">[15:46:53] [tech_lead] Audited ACP protocol lifecycle. Spawning, JSON-RPC, and thread-safe worker offloading mapped.</div>
-            <div class="log-entry success" data-cat="handshake">[15:46:54] [tech_lead] Audited Codex Auth Bridge. Verified CODEX_HOME sandbox credentials and parameter translations.</div>
-            <div class="log-entry success" data-cat="handshake">[15:46:55] [tech_lead] Audited migrate-hermes module. Checked soul/agents/skills copying and auth profile store writes.</div>
-            <div class="log-entry success" data-cat="handshake">[15:46:56] [tech_lead] Handshake healthy. No version drift conflicts flagged.</div>
-          </div>
-
-          <div class="console-input-row">
-            <span class="console-prompt">&gt;</span>
-            <input type="text" class="console-input" id="id-terminal-input" placeholder="Type a command (e.g. 'help', 'status', 'ping') and press enter..." onkeydown="handleTerminalCommand(event)">
-          </div>
-        </div>
-      </div>
-
-    </main>
-  </div>
-
-  <!-- Script for simulations, charts, and tab switching -->
-  <script src="dashboard.js"></script>
-</body>
-</html>
+      <script src="dashboard.js"></script>
+    </body>
+    </html>
