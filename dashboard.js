@@ -485,28 +485,6 @@
         consoleLogList.scrollTop = consoleLogList.scrollHeight;
       });
     }
-        }
-        if (exists) return;
-
-        const entry = document.createElement('div');
-        entry.setAttribute('data-cat', 'handshake');
-
-        const lower = cleanText.toLowerCase();
-        if (lower.includes('error') || lower.includes('fail')) {
-          entry.className = 'log-entry error';
-        } else if (lower.includes('warn')) {
-          entry.className = 'log-entry warn';
-        } else if (lower.includes('success') || lower.includes('complete') || lower.includes('synced')) {
-          entry.className = 'log-entry success';
-        } else {
-          entry.className = 'log-entry info';
-        }
-
-        entry.innerText = cleanText;
-        consoleLogList.appendChild(entry);
-        consoleLogList.scrollTop = consoleLogList.scrollHeight;
-      });
-    }
 
     function updateAgentTelemetryPanel(data) {
       const telemetrySection = document.getElementById('id-detail-telemetry');
@@ -679,6 +657,77 @@
     }
 
     // ---------------------------------------------------------------------------
+    // OpenClaw model usage / sessions / pending tasks
+    // ---------------------------------------------------------------------------
+    function formatTokens(n) {
+      if (typeof n !== 'number') return '—';
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+      return String(n);
+    }
+
+    function renderModelBreakdown(el, models) {
+      const entries = Object.entries(models || {}).filter(([, tokens]) => tokens > 0);
+      if (!entries.length) {
+        el.innerText = '';
+        return;
+      }
+      el.innerText = entries.map(([model, tokens]) => `${model}: ${formatTokens(tokens)}`).join('  ·  ');
+    }
+
+    function renderOpenclawStatus(data) {
+      const updatedEl = document.getElementById('id-openclaw-updated');
+      if (updatedEl) {
+        if (!data.ok && !data.updatedAt) {
+          updatedEl.innerText = data.error || 'not synced';
+        } else if (data.updatedAt) {
+          const secsAgo = Math.round((Date.now() - data.updatedAt) / 1000);
+          updatedEl.innerText = data.ok
+            ? (secsAgo <= 1 ? 'synced just now' : `synced ${secsAgo}s ago`)
+            : `stale (${data.error || 'poll failed'})`;
+        }
+      }
+
+      const usage = data.tokenUsage || { local: {}, cloud: {} };
+      const localEl = document.getElementById('id-tokens-local');
+      const cloudEl = document.getElementById('id-tokens-cloud');
+      if (localEl) localEl.innerText = formatTokens(usage.local && usage.local.tokens);
+      if (cloudEl) cloudEl.innerText = formatTokens(usage.cloud && usage.cloud.tokens);
+      const localModelsEl = document.getElementById('id-tokens-local-models');
+      const cloudModelsEl = document.getElementById('id-tokens-cloud-models');
+      if (localModelsEl) renderModelBreakdown(localModelsEl, usage.local && usage.local.models);
+      if (cloudModelsEl) renderModelBreakdown(cloudModelsEl, usage.cloud && usage.cloud.models);
+
+      const sessionCountEl = document.getElementById('id-session-count');
+      if (sessionCountEl) sessionCountEl.innerText = Array.isArray(data.sessions) ? String(data.sessions.length) : '—';
+      const resetsEl = document.getElementById('id-session-resets');
+      if (resetsEl) resetsEl.innerText = typeof data.sessionResets === 'number' ? String(data.sessionResets) : '—';
+      const pendingCountEl = document.getElementById('id-pending-count');
+      if (pendingCountEl) pendingCountEl.innerText = typeof data.pendingCount === 'number' ? String(data.pendingCount) : '—';
+
+      const pendingListEl = document.getElementById('id-pending-list');
+      if (pendingListEl) {
+        const pending = data.pendingTasks || [];
+        pendingListEl.innerText = pending.length
+          ? pending.map(t => `${t.status}: ${t.task}`).join('\n')
+          : '';
+      }
+    }
+
+    function pollOpenclawStatus() {
+      fetch('/api/openclaw')
+        .then(res => res.json())
+        .then(data => renderOpenclawStatus(data))
+        .catch(() => {});
+    }
+
+    function startOpenclawPolling(intervalMs = 15000) {
+      pollOpenclawStatus();
+      setInterval(pollOpenclawStatus, intervalMs);
+    }
+
+    // ---------------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------------
     startTelemetryPolling();
+    startOpenclawPolling();

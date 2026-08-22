@@ -2,6 +2,9 @@
 telemetry.json
 history.json
 
+# Runtime-generated OpenClaw status cache (written by server.js's poller)
+openclaw-status.json
+
 # NSSM service logs
 logs/
 

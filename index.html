@@ -462,6 +462,46 @@
                 </div>
               </div>
             </section>
+
+            <!-- OpenClaw model usage: local vs cloud tokens, sessions, pending tasks -->
+            <section class="dashboard-row equal" style="margin-top:24px;">
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">🪙</span>
+                    <h3>Model Token Usage</h3>
+                  </div>
+                  <span id="id-openclaw-updated" style="font-size:0.7rem; color:var(--color-text-muted);">not synced</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                    <span style="color:var(--color-text-muted); font-size:0.85rem;">🖥️ Local (Ollama)</span>
+                    <span id="id-tokens-local" style="font-family:'JetBrains Mono', monospace; font-size:1.1rem; color:#fff;">—</span>
+                  </div>
+                  <div id="id-tokens-local-models" style="font-size:0.7rem; color:var(--color-text-muted); font-family:'JetBrains Mono', monospace;"></div>
+                  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:6px;">
+                    <span style="color:var(--color-text-muted); font-size:0.85rem;">☁️ Cloud (fallback)</span>
+                    <span id="id-tokens-cloud" style="font-family:'JetBrains Mono', monospace; font-size:1.1rem; color:#fff;">—</span>
+                  </div>
+                  <div id="id-tokens-cloud-models" style="font-size:0.7rem; color:var(--color-text-muted); font-family:'JetBrains Mono', monospace;"></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span class="card-title-icon">🗂️</span>
+                    <h3>Sessions &amp; Pending Tasks</h3>
+                  </div>
+                </div>
+                <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:8px;">
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Active sessions:</span><span id="id-session-count" style="font-family:'JetBrains Mono', monospace;">—</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Session resets:</span><span id="id-session-resets" style="font-family:'JetBrains Mono', monospace;">—</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Pending tasks:</span><span id="id-pending-count" style="font-family:'JetBrains Mono', monospace;">—</span></div>
+                  <div id="id-pending-list" style="font-size:0.75rem; color:var(--color-text-muted); margin-top:4px;"></div>
+                </div>
+              </div>
+            </section>
           </div>
 
           <!-- ==================== LOGS TAB ==================== -->
@@ -501,6 +541,6 @@
         </main>
       </div>
 
-      <script src="dashboard.js"></script>
+      <script src="dashboard.js?v=20260822a"></script>
     </body>
     </html>
