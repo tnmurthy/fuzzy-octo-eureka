@@ -24,4 +24,13 @@ jobs:
         run: npm audit --audit-level=high || true
       - name: Verify PowerShell Telemetry Script Syntax
         shell: pwsh
-        run: Test-ScriptFileInfo -Path ./telemetry-daemon.ps1 -ErrorAction SilentlyContinue || Write-Host "PowerShell script checked."
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./telemetry-daemon.ps1), [ref]$null, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host "::error::$_" }
+            exit 1
+          }
+          Write-Host "telemetry-daemon.ps1: no syntax errors."
