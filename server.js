@@ -284,6 +284,122 @@ const server = http.createServer((req, res) => {
       edges: rebac.edges
     });
   }
+  if (req.url.startsWith('/api/tasks')) {
+    const tasksFile = path.resolve(DASHBOARD_DIR, '../../04_internal/TASKS.md');
+    fs.readFile(tasksFile, 'utf8', (err, data) => {
+      if (err) {
+        return sendJson(res, 200, { ok: false, error: 'TASKS.md not found', columns: { backlog: [], in_progress: [], done: [] } });
+      }
+      try {
+        const lines = data.split(/\r?\n/);
+        const columns = { backlog: [], in_progress: [], done: [] };
+        let currentSection = null;
+
+        for (let line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('## In Progress')) {
+            currentSection = 'in_progress';
+          } else if (trimmed.startsWith('## Backlog')) {
+            currentSection = 'backlog';
+          } else if (trimmed.startsWith('## Done')) {
+            currentSection = 'done';
+          } else if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
+            currentSection = null;
+          } else if (currentSection && trimmed.startsWith('|') && !trimmed.includes('---') && !trimmed.toLowerCase().includes('task |') && !trimmed.toLowerCase().includes('# | task')) {
+            const parts = trimmed.split('|').map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+            if (parts.length >= 1) {
+              if (currentSection === 'in_progress') {
+                columns.in_progress.push({
+                  id: parts[0] || '—',
+                  task: parts[1] || parts[0],
+                  project: parts[2] || 'docker-base',
+                  owner: parts[3] || 'Agent/CI'
+                });
+              } else if (currentSection === 'backlog') {
+                columns.backlog.push({
+                  id: parts[0] || '—',
+                  task: parts[1] || parts[0],
+                  project: parts[2] || 'General',
+                  issue: parts[3] || ''
+                });
+              } else if (currentSection === 'done') {
+                columns.done.push({
+                  task: parts[0],
+                  completed: parts[1] || 'Completed'
+                });
+              }
+            }
+          }
+        }
+        sendJson(res, 200, { ok: true, columns });
+      } catch (e) {
+        sendJson(res, 500, { ok: false, error: e.message });
+      }
+    });
+    return;
+  }
+  if (req.url.startsWith('/api/agent/chat') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const userMessage = payload.message || '';
+        const agentKey = payload.agent || 'po';
+        const agentSystemPrompts = {
+          po: "You are Arunachala Ramana, AI Product Strategist & Product Owner for tt-ai-stack. You are calm, strategic, practical, and precise. Help the user break down scope, plan architectures, orchestrate tech/qa/infra/doc subagents, and prioritize tasks.",
+          tech: "You are Tech Lead & Architect for tt-ai-stack. You specialize in code implementation, refactoring, and system architecture.",
+          qa: "You are QA & Verification Specialist for tt-ai-stack. You focus on automated testing, validation, and pre-commit checks.",
+          infra: "You are DevOps & Infrastructure Specialist for tt-ai-stack. You manage Docker, Ollama configurations, and runtime health.",
+          doc: "You are Documentation Specialist for tt-ai-stack. You maintain memory logs, changelogs, and project state."
+        };
+
+        const systemPrompt = agentSystemPrompts[agentKey] || agentSystemPrompts.po;
+        const ollamaReqData = JSON.stringify({
+          model: 'llama3.1:8b',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          stream: false
+        });
+
+        const ollamaReq = http.request({
+          host: OLLAMA_HOST,
+          port: OLLAMA_PORT,
+          path: '/api/chat',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(ollamaReqData)
+          },
+          timeout: 30000
+        }, (ollamaRes) => {
+          let resData = '';
+          ollamaRes.on('data', chunk => { resData += chunk; });
+          ollamaRes.on('end', () => {
+            try {
+              const parsed = JSON.parse(resData);
+              const reply = (parsed.message && parsed.message.content) ? parsed.message.content : 'No response from model.';
+              sendJson(res, 200, { ok: true, reply, agent: agentKey });
+            } catch (e) {
+              sendJson(res, 200, { ok: false, reply: `[Local model error]: ${resData.slice(0, 150)}` });
+            }
+          });
+        });
+
+        ollamaReq.on('error', (e) => {
+          sendJson(res, 200, { ok: true, reply: `[Offline fallback response]: Hello Sriad! I am Arunachala Ramana. Received: "${userMessage}". Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.` });
+        });
+
+        ollamaReq.write(ollamaReqData);
+        ollamaReq.end();
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err.message });
+      }
+    });
+    return;
+  }
   if (req.url.startsWith('/api/ping')) {
     return handlePing(req, res);
   }

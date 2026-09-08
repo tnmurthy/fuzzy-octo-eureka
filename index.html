@@ -28,6 +28,7 @@
           <nav>
             <ul class="nav-list">
               <li class="nav-item active" onclick="switchTab('dashboard')"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
+              <li class="nav-item" onclick="switchTab('kanban')"><span class="nav-link" id="id-nav-kanban">📌 Kanban Board</span></li>
               <li class="nav-item" onclick="switchTab('agents')"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
               <li class="nav-item" onclick="switchTab('infra')"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
               <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
@@ -127,6 +128,94 @@
               </div>
             </section>
 
+            <!-- ==================== VISUAL AGENT SPAWNING & TOOL EXECUTION FLOW ==================== -->
+            <section class="flow-diagram-wrapper">
+              <div class="card-header" style="margin-bottom:0; padding-bottom:12px; border-bottom:1px solid var(--border-color);">
+                <div class="card-title">
+                  <span class="card-title-icon">🕸️</span>
+                  <h3>Live Subagent Spawning & Tool Execution Topology</h3>
+                </div>
+                <span class="status-badge"><span class="status-dot green"></span>Autonomous Loop Active</span>
+              </div>
+
+              <!-- Pipeline Flow Bar -->
+              <div class="flow-live-pipeline">
+                <div class="pipeline-node"><span class="status-dot green"></span><strong>User Directive</strong></div>
+                <div class="pipeline-arrow">➔</div>
+                <div class="pipeline-node"><span class="flow-node-badge cyan">🧭 Arunachala Ramana</span></div>
+                <div class="pipeline-arrow">➔</div>
+                <div class="pipeline-node"><span class="flow-node-badge amber">🖇️ Paperclip (Scope & ReBAC)</span></div>
+                <div class="pipeline-arrow">➔</div>
+                <div class="pipeline-node"><span class="flow-node-badge cyan">🦁 OpenClaw (MCP Router)</span></div>
+                <div class="pipeline-arrow">➔</div>
+                <div class="pipeline-node"><span class="flow-node-badge green">⚡ Subagents (:11434)</span></div>
+              </div>
+
+              <!-- Subagent Cards Grid with Active Tools -->
+              <div class="flow-step-grid">
+                <!-- Tech Lead -->
+                <div class="flow-node-card highlight">
+                  <div class="flow-node-header">
+                    <span>💻 Tech Lead</span>
+                    <span class="flow-node-badge cyan">qwen2.5-coder:7b</span>
+                  </div>
+                  <div class="flow-node-desc">Spawns on code edit tasks. Performs AST inspection & surgical file diffs.</div>
+                  <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
+                  <div class="flow-tool-chips">
+                    <span class="tool-chip">view_file</span>
+                    <span class="tool-chip">replace_file_content</span>
+                    <span class="tool-chip">grep_search</span>
+                    <span class="tool-chip">find_by_name</span>
+                  </div>
+                </div>
+
+                <!-- QA Specialist -->
+                <div class="flow-node-card">
+                  <div class="flow-node-header">
+                    <span>🧪 QA Lead</span>
+                    <span class="flow-node-badge green">qwen2.5-coder:1.5b</span>
+                  </div>
+                  <div class="flow-node-desc">Spawns before commits. Runs automated linting, unit tests, and regression sweeps.</div>
+                  <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
+                  <div class="flow-tool-chips">
+                    <span class="tool-chip">run_command (npm test)</span>
+                    <span class="tool-chip">run_command (lint)</span>
+                    <span class="tool-chip">view_file</span>
+                  </div>
+                </div>
+
+                <!-- DevOps -->
+                <div class="flow-node-card">
+                  <div class="flow-node-header">
+                    <span>🛠️ DevOps</span>
+                    <span class="flow-node-badge cyan">qwen2.5-coder:7b</span>
+                  </div>
+                  <div class="flow-node-desc">Spawns for container lifecycle, tunnel management, and host configurations.</div>
+                  <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
+                  <div class="flow-tool-chips">
+                    <span class="tool-chip">docker-compose</span>
+                    <span class="tool-chip">cloudflared</span>
+                    <span class="tool-chip">powershell</span>
+                  </div>
+                </div>
+
+                <!-- Doc Specialist -->
+                <div class="flow-node-card">
+                  <div class="flow-node-header">
+                    <span>📝 Doc Scribe</span>
+                    <span class="flow-node-badge amber">llama3.1:8b</span>
+                  </div>
+                  <div class="flow-node-desc">Spawns upon task completion to update MEMORY.md and daily transaction journals.</div>
+                  <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
+                  <div class="flow-tool-chips">
+                    <span class="tool-chip">write_to_file</span>
+                    <span class="tool-chip">view_file</span>
+                    <span class="tool-chip">list_dir</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <section class="card" style="margin-top: 24px;">
               <div class="card-header">
                 <div class="card-title">
@@ -140,6 +229,63 @@
                 <div class="log-entry info">[18:30:02] [probe] Checking local Ollama endpoint at http://127.0.0.1:11434...</div>
                 <div class="log-entry success">[18:30:03] [handshake] Ollama HTTP Response 200 OK. Available models: qwen2.5-coder:7b, qwen2.5-coder:1.5b, llama3.1:8b, gemma2:9b, nomic-embed-text.</div>
                 <div class="log-entry success">[18:30:04] [workspace] Relocation verified. Root C:/tt-ai-stack structured (01_projects, 02_engines, 03_documents, 04_internal).</div>
+              </div>
+            </section>
+          </div>
+
+          <!-- ==================== KANBAN TAB ==================== -->
+          <div id="kanban" class="tab-content">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>Master Task Kanban Board</h2>
+                <p>Live synchronized task management parsed directly from <code>04_internal/TASKS.md</code>.</p>
+              </div>
+              <div class="action-group">
+                <button class="btn btn-secondary" onclick="loadKanbanTasks()">🔄 Refresh Tasks</button>
+              </div>
+            </section>
+
+            <section class="kanban-board">
+              <!-- Backlog Column -->
+              <div class="kanban-col">
+                <div class="kanban-col-header">
+                  <div class="kanban-col-title">
+                    <span>📋</span>
+                    <span>Backlog</span>
+                  </div>
+                  <span class="kanban-badge-count" id="id-backlog-count">0</span>
+                </div>
+                <div class="kanban-card-list" id="id-kanban-backlog">
+                  <!-- Populated dynamically via JS -->
+                </div>
+              </div>
+
+              <!-- In Progress Column -->
+              <div class="kanban-col" style="border-top: 3px solid var(--status-blue);">
+                <div class="kanban-col-header">
+                  <div class="kanban-col-title">
+                    <span>⚡</span>
+                    <span>In Progress</span>
+                  </div>
+                  <span class="kanban-badge-count" id="id-inprogress-count" style="color:var(--status-blue);">0</span>
+                </div>
+                <div class="kanban-card-list" id="id-kanban-inprogress">
+                  <!-- Populated dynamically via JS -->
+                </div>
+              </div>
+
+              <!-- Done Column -->
+              <div class="kanban-col" style="border-top: 3px solid var(--status-green);">
+                <div class="kanban-col-header">
+                  <div class="kanban-col-title">
+                    <span>✅</span>
+                    <span>Done</span>
+                  </div>
+                  <span class="kanban-badge-count" id="id-done-count" style="color:var(--status-green);">0</span>
+                </div>
+                <div class="kanban-card-list" id="id-kanban-done">
+                  <!-- Populated dynamically via JS -->
+                </div>
               </div>
             </section>
           </div>
@@ -265,6 +411,22 @@
                     <p id="id-detail-task" style="font-size:0.85rem; color:var(--color-text-muted); margin-top:4px;">
                       Directing the overall workspace restructuring, relocation of OpenClaw and Hermes engines, and model latency benchmarks.
                     </p>
+                  </div>
+
+                  <!-- Direct Agent Communicator (Track 5) -->
+                  <div>
+                    <span class="metric-header">Direct Communicator</span>
+                    <div class="agent-chat-wrapper">
+                      <div class="agent-chat-messages" id="id-agent-chat-messages">
+                        <div class="chat-bubble agent">
+                          <strong>🧭 Arunachala Ramana:</strong> Greetings Sriad. What objective or workflow would you like to assign to the team today?
+                        </div>
+                      </div>
+                      <div class="agent-chat-input-row">
+                        <input type="text" class="agent-chat-input" id="id-agent-chat-input" placeholder="Message the agent..." onkeydown="handleAgentChatKey(event)">
+                        <button class="agent-chat-send" onclick="sendAgentMessage()">Send</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -541,6 +703,6 @@
         </main>
       </div>
 
-      <script src="dashboard.js?v=20260822a"></script>
+      <script src="dashboard.js?v=20260902c"></script>
     </body>
     </html>

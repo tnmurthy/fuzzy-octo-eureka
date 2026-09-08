@@ -62,6 +62,7 @@
     const AGENT_INDEX_MAP = { po: 0, tech: 1, qa: 2, infra: 3, doc: 4 };
     const NAV_TAB_MAP = {
       dashboard: 'id-nav-dashboard',
+      kanban: 'id-nav-kanban',
       agents: 'id-nav-agents',
       infra: 'id-nav-infra',
       logs: 'id-nav-logs'
@@ -87,6 +88,10 @@
         selectAgent('po');
       }
 
+      if (tabId === 'kanban') {
+        loadKanbanTasks();
+      }
+
       if (tabId === 'dashboard') {
         setTimeout(() => {
           if (latencyChart && typeof latencyChart.resize === 'function') latencyChart.resize();
@@ -96,17 +101,112 @@
     }
 
     // ---------------------------------------------------------------------------
+    // Kanban Board Functions
+    // ---------------------------------------------------------------------------
+    function loadKanbanTasks() {
+      fetch('/api/tasks')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.columns) {
+            renderKanban(data.columns);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load tasks:', err);
+        });
+    }
+
+    function renderKanban(columns) {
+      const backlogEl = document.getElementById('id-kanban-backlog');
+      const inprogressEl = document.getElementById('id-kanban-inprogress');
+      const doneEl = document.getElementById('id-kanban-done');
+
+      const backlogCount = document.getElementById('id-backlog-count');
+      const inprogressCount = document.getElementById('id-inprogress-count');
+      const doneCount = document.getElementById('id-done-count');
+
+      if (backlogCount) backlogCount.innerText = (columns.backlog || []).length;
+      if (inprogressCount) inprogressCount.innerText = (columns.in_progress || []).length;
+      if (doneCount) doneCount.innerText = (columns.done || []).length;
+
+      // Render Backlog
+      if (backlogEl) {
+        backlogEl.innerHTML = '';
+        (columns.backlog || []).forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'kanban-card';
+          card.innerHTML = `
+            <div class="kanban-card-header">
+              <span class="kanban-card-id">#${item.id}</span>
+              <span class="kanban-card-project">${item.project}</span>
+            </div>
+            <div class="kanban-card-body">${item.task}</div>
+            ${item.issue ? `<div class="kanban-card-footer"><a href="${item.issue.replace(/#\d+\s+/, '')}" target="_blank" style="color:var(--status-blue); text-decoration:none; font-size:0.75rem;">🔗 GitHub Issue</a></div>` : ''}
+          `;
+          backlogEl.appendChild(card);
+        });
+      }
+
+      // Render In Progress
+      if (inprogressEl) {
+        inprogressEl.innerHTML = '';
+        (columns.in_progress || []).forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'kanban-card';
+          card.style.borderColor = 'rgba(0, 176, 255, 0.3)';
+          card.innerHTML = `
+            <div class="kanban-card-header">
+              <span class="kanban-card-id" style="color:var(--status-blue);">ACTIVE</span>
+              <span class="kanban-card-project">${item.project}</span>
+            </div>
+            <div class="kanban-card-body">${item.task}</div>
+            <div class="kanban-card-footer">
+              <span class="kanban-owner">👤 ${item.owner}</span>
+              <span class="status-badge" style="font-size:0.65rem; padding:1px 6px;"><span class="status-dot green"></span>Running</span>
+            </div>
+          `;
+          inprogressEl.appendChild(card);
+        });
+      }
+
+      // Render Done
+      if (doneEl) {
+        doneEl.innerHTML = '';
+        (columns.done || []).forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'kanban-card';
+          card.style.opacity = '0.85';
+          card.innerHTML = `
+            <div class="kanban-card-header">
+              <span class="kanban-card-id" style="color:var(--status-green);">✓ DONE</span>
+              <span class="kanban-card-project">${item.completed}</span>
+            </div>
+            <div class="kanban-card-body" style="color:#cfd8dc;">${item.task}</div>
+          `;
+          doneEl.appendChild(card);
+        });
+      }
+    }
+
+    // ---------------------------------------------------------------------------
     // Agent selection (Agents tab detail panel)
     // ---------------------------------------------------------------------------
     function selectAgent(key) {
       currentSelectedAgent = key;
       const profile = agentProfiles[key];
+      if (!profile) return;
 
-      document.getElementById('id-detail-title').innerText = profile.title;
-      document.getElementById('id-detail-role-header').innerText = profile.title.split(' ').slice(1).join(' ');
-      document.getElementById('id-detail-role').innerText = profile.role;
-      document.getElementById('id-detail-prompt').innerText = profile.prompt;
-      document.getElementById('id-detail-task').innerText = profile.task;
+      const titleEl = document.getElementById('id-detail-title');
+      const roleHeaderEl = document.getElementById('id-detail-role-header');
+      const roleEl = document.getElementById('id-detail-role');
+      const promptEl = document.getElementById('id-detail-prompt');
+      const taskEl = document.getElementById('id-detail-task');
+
+      if (titleEl) titleEl.innerText = profile.title;
+      if (roleHeaderEl) roleHeaderEl.innerText = profile.title.split(' ').slice(1).join(' ');
+      if (roleEl) roleEl.innerText = profile.role;
+      if (promptEl) promptEl.innerText = profile.prompt;
+      if (taskEl) taskEl.innerText = profile.task;
 
       const cards = document.querySelectorAll('#agents .agent-card');
       cards.forEach(card => card.style.borderColor = 'var(--border-color)');
@@ -114,9 +214,80 @@
         cards[AGENT_INDEX_MAP[key]].style.borderColor = 'var(--status-blue)';
       }
 
+      // Reset chat greetings for selected agent
+      const chatMessages = document.getElementById('id-agent-chat-messages');
+      if (chatMessages) {
+        chatMessages.innerHTML = `
+          <div class="chat-bubble agent">
+            <strong>${profile.title}:</strong> Greetings Sriad. I am ready. What task or directive would you like to assign?
+          </div>
+        `;
+      }
+
       if (lastTelemetryData) {
         updateTelemetryUI(lastTelemetryData);
       }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Agent Direct Communicator
+    // ---------------------------------------------------------------------------
+    function handleAgentChatKey(e) {
+      if (e.key === 'Enter') {
+        sendAgentMessage();
+      }
+    }
+
+    function sendAgentMessage() {
+      const inputEl = document.getElementById('id-agent-chat-input');
+      const messagesEl = document.getElementById('id-agent-chat-messages');
+      if (!inputEl || !messagesEl) return;
+
+      const message = inputEl.value.trim();
+      if (!message) return;
+
+      // Append user bubble
+      const userBubble = document.createElement('div');
+      userBubble.className = 'chat-bubble user';
+      userBubble.innerText = message;
+      messagesEl.appendChild(userBubble);
+      inputEl.value = '';
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      // Append typing indicator
+      const typingBubble = document.createElement('div');
+      typingBubble.className = 'chat-bubble agent';
+      typingBubble.id = 'id-agent-typing-indicator';
+      typingBubble.innerHTML = `<em>${agentProfiles[currentSelectedAgent].title} is reasoning...</em>`;
+      messagesEl.appendChild(typingBubble);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      fetch('/api/agent/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, agent: currentSelectedAgent })
+      })
+        .then(res => res.json())
+        .then(data => {
+          const typing = document.getElementById('id-agent-typing-indicator');
+          if (typing) typing.remove();
+
+          const agentBubble = document.createElement('div');
+          agentBubble.className = 'chat-bubble agent';
+          agentBubble.innerHTML = `<strong>${agentProfiles[currentSelectedAgent].title}:</strong> ${data.reply || 'Task acknowledged.'}`;
+          messagesEl.appendChild(agentBubble);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        })
+        .catch(err => {
+          const typing = document.getElementById('id-agent-typing-indicator');
+          if (typing) typing.remove();
+
+          const errorBubble = document.createElement('div');
+          errorBubble.className = 'chat-bubble agent';
+          errorBubble.innerHTML = `<strong>${agentProfiles[currentSelectedAgent].title}:</strong> Received: "${message}". Local stack connection timeout.`;
+          messagesEl.appendChild(errorBubble);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        });
     }
 
     // ---------------------------------------------------------------------------
