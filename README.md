@@ -28,8 +28,10 @@ telemetry-daemon.ps1  --writes-->  telemetry.json, history.json
   the static dashboard files plus:
   - `GET /api/telemetry` — current snapshot
   - `GET /api/history` — recent CPU/latency series for the charts
-  - `GET /api/ping` — on-demand live Ollama handshake test (used by the
-    "Test Handshake" button)
+  - `GET /api/ping` — on-demand live Ollama handshake test (used by the "Test Handshake" button)
+  - `GET /api/tasks` — live Markdown parser reading `TASKS.md` for the interactive Task Board
+  - `POST /api/agent/chat` — interactive autonomous agent chat routing to local Ollama (`llama3.1:8b`) with personas (`po`, `tech`, `qa`, `infra`, `doc`)
+- **`orchestration-for-local.md`** — comprehensive 5-layer AI architecture matrix and workforce orchestration guide.
 - **`index.html` / `dashboard.css` / `dashboard.js`** — the frontend. Polls
   `/api/telemetry` every 3s via `fetch()`, seeds its charts from
   `/api/history` once on load, and falls back to simulated data only until
