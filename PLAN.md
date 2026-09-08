@@ -22,10 +22,10 @@
   - [ ] Killing the daemon doesn't crash the page (should just stop updating)
 - [ ] Git: initialize repo, first commit (see below)
 
-### Phase 2 — Make the daemon durable (not yet started)
+### Phase 2 — Make the daemon durable
 - [ ] Register `telemetry-daemon.ps1` as a Windows Scheduled Task (or NSSM service) so it survives reboots without a manual `.\telemetry-daemon.ps1`
-- [ ] Add a lockfile/PID check so two instances can't run at once and clobber `telemetry.json`
-- [ ] Route daemon errors to a dedicated rotating log file instead of only stdout
+- [x] Add a lockfile/PID check so two instances can't run at once and clobber `telemetry.json` (`.telemetry-daemon.lock`)
+- [x] Route daemon errors to a dedicated rotating log file instead of only stdout (`logs/daemon.log` with >5MB rotation)
 - [ ] Decide whether `server.js` should also auto-start (Scheduled Task or `pm2`), or stay manual
 
 ### Phase 3 — Security hardening
@@ -35,9 +35,9 @@
 - [ ] Review file permissions on `04_internal/` given it holds logs and previously held secrets
 
 ### Phase 4 — UX polish
-- [ ] Add a "last synced" timestamp in the sidebar so a stalled daemon is obvious at a glance
-- [ ] Desktop/toast notification when a service (Ollama/OpenClaw) flips offline
-- [ ] Pull the Infrastructure tab's model list live from `ollama list` instead of the hardcoded array
+- [x] Add a "last synced" timestamp in the sidebar so a stalled daemon is obvious at a glance
+- [x] Desktop/toast notification when a service (Ollama/OpenClaw/Watchtower) flips offline or online
+- [x] Pull the Infrastructure tab's model list live from `/api/models` (Ollama tags/ps) instead of the hardcoded array
 - [ ] Consider WebSocket/SSE push from `server.js` instead of 3s polling, if snappier updates matter
 
 ### Phase 5 — Testing

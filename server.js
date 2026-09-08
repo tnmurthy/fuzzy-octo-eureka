@@ -403,6 +403,27 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/ping')) {
     return handlePing(req, res);
   }
+  if (req.url.startsWith('/api/models')) {
+    const apiReq = http.get(
+      { host: OLLAMA_HOST, port: OLLAMA_PORT, path: '/api/tags', timeout: PING_TIMEOUT_MS },
+      (apiRes) => {
+        let body = '';
+        apiRes.on('data', chunk => { body += chunk; });
+        apiRes.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            sendJson(res, 200, { ok: true, models: parsed.models || [] });
+          } catch (e) {
+            sendJson(res, 200, { ok: false, error: 'Failed to parse models', models: [] });
+          }
+        });
+      }
+    );
+    apiReq.on('error', (err) => {
+      sendJson(res, 200, { ok: false, error: err.message, models: [] });
+    });
+    return;
+  }
   if (req.url.startsWith('/api/openclaw')) {
     return sendJson(res, 200, openclawCache);
   }

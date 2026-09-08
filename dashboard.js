@@ -577,13 +577,102 @@
       }
     }
 
+    // ---------------------------------------------------------------------------
+    // Toast Notifications & Service Health Tracking
+    // ---------------------------------------------------------------------------
+    function showToast(message, type = 'info', icon = 'ℹ️', duration = 4500) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <div class="toast-message">${message}</div>
+      `;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(15px)';
+        setTimeout(() => toast.remove(), 350);
+      }, duration);
+    }
+
+    const previousServiceStates = {
+      ollama: null,
+      openclaw: null,
+      watchtower: null
+    };
+
+    function checkServiceStatusTransitions(services) {
+      if (!services) return;
+
+      const checkFlip = (key, name, icon) => {
+        if (!services[key]) return;
+        const current = !!services[key].online;
+        const prev = previousServiceStates[key];
+        if (prev !== null && prev !== current) {
+          if (!current) {
+            showToast(`⚠️ Service Offline: ${name} is unreachable.`, 'error', '🚨');
+          } else {
+            showToast(`✅ Service Restored: ${name} is back online.`, 'success', '⚡');
+          }
+        }
+        previousServiceStates[key] = current;
+      };
+
+      checkFlip('ollama', 'Ollama Local Cluster', '🧠');
+      checkFlip('openclaw', 'OpenClaw Gateway', '🦁');
+      checkFlip('watchtower', 'Docker Watchtower', '🐳');
+    }
+
     function updateServiceDots(data) {
+      if (!data || !data.services) return;
+      checkServiceStatusTransitions(data.services);
+
       if (data.services.ollama) setServiceDot('id-ollama-dot', data.services.ollama.online, 'Online', 'Offline');
       if (data.services.openclaw) setServiceDot('id-openclaw-dot', data.services.openclaw.online, 'Online', 'Offline');
       if (data.services.watchtower) setServiceDot('id-watchtower-dot', data.services.watchtower.online, 'Online', 'Offline');
     }
 
-     function updateModelRoutingTable(data) {
+    let dynamicModelsLoaded = false;
+    function fetchAndRenderLiveModels() {
+      fetch('/api/models')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.ok && Array.isArray(data.models) && data.models.length > 0) {
+            renderDynamicModelList(data.models);
+            dynamicModelsLoaded = true;
+          }
+        })
+        .catch(() => {});
+    }
+
+    function renderDynamicModelList(models) {
+      const container = document.getElementById('id-model-routing-list');
+      if (!container) return;
+
+      container.innerHTML = '';
+      models.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'model-item';
+        const modelName = m.name || m;
+        const sizeGb = m.size ? `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB` : 'Installed';
+        const isPrimary = modelName.includes('qwen2.5-coder:7b');
+        const isVector = modelName.includes('nomic-embed');
+
+        item.innerHTML = `
+          <div class="model-name">${modelName}</div>
+          <div class="model-role">${isPrimary ? 'Primary Coding' : (isVector ? 'Embeddings/RAG' : 'Local Inference')}</div>
+          <div class="model-stat">${sizeGb}</div>
+          <div class="model-badge">${isPrimary ? 'Primary' : (isVector ? 'Vector' : 'Online')}</div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function updateModelRoutingTable(data) {
       const models = Array.isArray(data.activeModels) ? data.activeModels : [];
       if (models.length === 0) return;
 
@@ -603,8 +692,8 @@
           badge.style.color = 'var(--status-green)';
           badge.style.borderColor = 'var(--status-green)';
         } else {
-          if (name === 'qwen2.5-coder:7b') badge.innerText = 'Primary';
-          else if (name === 'nomic-embed-text') badge.innerText = 'Vector';
+          if (name.includes('qwen2.5-coder:7b')) badge.innerText = 'Primary';
+          else if (name.includes('nomic-embed')) badge.innerText = 'Vector';
           else badge.innerText = 'Online';
           badge.style.backgroundColor = '';
           badge.style.color = '';
@@ -822,9 +911,11 @@
 
     function startTelemetryPolling(intervalMs = 3000) {
       seedChartsFromHistory();
+      fetchAndRenderLiveModels();
       pollTelemetry();
       setInterval(pollTelemetry, intervalMs);
       setInterval(renderLastSyncedIndicator, 1000);
+      setInterval(fetchAndRenderLiveModels, 30000); // refresh model list every 30s
     }
 
     // ---------------------------------------------------------------------------

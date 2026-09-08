@@ -1,6 +1,7 @@
 # Runtime-generated telemetry (written by telemetry-daemon.ps1 every cycle)
 telemetry.json
 history.json
+.telemetry-daemon.lock
 
 # Runtime-generated OpenClaw status cache (written by server.js's poller)
 openclaw-status.json

@@ -13,6 +13,9 @@
     $DashboardDir       = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
     $TelemetryFile      = Join-Path $DashboardDir "telemetry.json"
     $HistoryFile        = Join-Path $DashboardDir "history.json"
+    $LockFile           = Join-Path $DashboardDir ".telemetry-daemon.lock"
+    $LogsDir            = Join-Path $DashboardDir "logs"
+    $DaemonLogFile      = Join-Path $LogsDir "daemon.log"
     $Root               = "C:\tt-ai-stack"
     $LogFile            = Join-Path $Root "04_internal\logs\app.log"
     $OpenClawConfigPath = Join-Path $Root "openclaw.json"
@@ -29,8 +32,68 @@
     $HistoryMaxPoints = 720
 
     # ---------------------------------------------------------------------------
-    # Helpers
+    # Logging & Lockfile Helpers
     # ---------------------------------------------------------------------------
+
+    function Write-DaemonLog {
+        param(
+            [string]$Message,
+            [string]$Level = "INFO"
+        )
+        $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Message"
+        try {
+            if (-not (Test-Path $LogsDir)) {
+                New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
+            }
+            # Rotate if > 5MB
+            if (Test-Path $DaemonLogFile) {
+                $item = Get-Item $DaemonLogFile -ErrorAction SilentlyContinue
+                if ($null -ne $item -and $item.Length -gt 5MB) {
+                    $archive = Join-Path $LogsDir "daemon-$((Get-Date).ToString('yyyyMMdd-HHmmss')).log"
+                    Move-Item -Path $DaemonLogFile -Destination $archive -Force -ErrorAction SilentlyContinue
+                }
+            }
+            Add-Content -Path $DaemonLogFile -Value $line -Encoding utf8 -ErrorAction SilentlyContinue
+        } catch {
+            # Non-blocking if file writing fails
+        }
+    }
+
+    function Acquire-DaemonLock {
+        param([string]$Path)
+        $currentPid = $PID
+        if (Test-Path $Path) {
+            try {
+                $existingPid = (Get-Content $Path -Raw -ErrorAction SilentlyContinue).Trim()
+                if ($existingPid -match "^\d+$") {
+                    $proc = Get-Process -Id ([int]$existingPid) -ErrorAction SilentlyContinue
+                    if ($null -ne $proc) {
+                        Write-Host "[error] Telemetry daemon is already running under PID $existingPid." -ForegroundColor Red
+                        Write-DaemonLog -Message "Startup aborted: already running under PID $existingPid" -Level "ERROR"
+                        return $false
+                    }
+                }
+            } catch {}
+        }
+        try {
+            "$currentPid" | Out-File -FilePath $Path -Encoding ascii -Force
+            Write-DaemonLog -Message "Acquired lockfile with PID $currentPid" -Level "INFO"
+            return $true
+        } catch {
+            Write-Host "[error] Failed to create lockfile at $Path : $_" -ForegroundColor Red
+            return $false
+        }
+    }
+
+    function Release-DaemonLock {
+        param([string]$Path)
+        try {
+            if (Test-Path $Path) {
+                Remove-Item -Path $Path -Force -ErrorAction SilentlyContinue
+                Write-DaemonLog -Message "Released lockfile" -Level "INFO"
+            }
+        } catch {}
+    }
 
     function Get-HostCpuLoad {
         try {
@@ -124,30 +187,56 @@
     }
 
     function Get-ActiveOllamaModels {
-        param([bool]$OllamaOnline)
+        param(
+            [bool]$OllamaOnline,
+            [string]$ComputerName = "127.0.0.1",
+            [int]$Port = 11434
+        )
 
         $models = @()
         if (-not $OllamaOnline) { return $models }
 
+        # 1. First attempt fast HTTP query to Ollama's /api/ps endpoint
+        try {
+            $uri = "http://${ComputerName}:${Port}/api/ps"
+            $resp = Invoke-RestMethod -Uri $uri -TimeoutSec 3 -ErrorAction Stop
+            if ($null -ne $resp -and $null -ne $resp.models) {
+                foreach ($m in $resp.models) {
+                    $vramStr = if ($m.size_vram) { "$([Math]::Round($m.size_vram / 1GB, 1)) GB VRAM" } else { "CPU" }
+                    $sizeStr = if ($m.size) { "$([Math]::Round($m.size / 1GB, 1)) GB" } else { "" }
+                    $models += @{
+                        name  = $m.name
+                        size  = $sizeStr
+                        vram  = $vramStr
+                        until = if ($m.expires_at) { $m.expires_at } else { "Running" }
+                    }
+                }
+                if ($models.Count -gt 0) { return $models }
+            }
+        } catch {
+            Write-Verbose "Get-ActiveOllamaModels: HTTP /api/ps check failed: $_"
+        }
+
+        # 2. Fallback to CLI `ollama ps` if installed on PATH
         try {
             $output = ollama ps 2>$null
-            if ($null -eq $output -or $output.Count -le 1) { return $models }
-
-            for ($i = 1; $i -lt $output.Count; $i++) {
-                $line = $output[$i].Trim()
-                if ($line -match "^(\S+)\s+(\S+)\s+(\S+\s+[a-zA-Z]+)\s+(\S+\s+[a-zA-Z]+)\s+(.*)$") {
-                    $models += @{
-                        name  = $Matches[1]
-                        size  = $Matches[3]
-                        vram  = $Matches[4]
-                        until = $Matches[5]
-                    }
-                } elseif ($line -match "^(\S+)\s+(\S+)\s+(\S+\s+[a-zA-Z]+)\s+(.*)$") {
-                    $models += @{
-                        name  = $Matches[1]
-                        size  = $Matches[3]
-                        vram  = "CPU/GPU"
-                        until = $Matches[4]
+            if ($null -ne $output -and $output.Count -gt 1) {
+                for ($i = 1; $i -lt $output.Count; $i++) {
+                    $line = $output[$i].Trim()
+                    if ($line -match "^(\S+)\s+(\S+)\s+(\S+\s+[a-zA-Z]+)\s+(\S+\s+[a-zA-Z]+)\s+(.*)$") {
+                        $models += @{
+                            name  = $Matches[1]
+                            size  = $Matches[3]
+                            vram  = $Matches[4]
+                            until = $Matches[5]
+                        }
+                    } elseif ($line -match "^(\S+)\s+(\S+)\s+(\S+\s+[a-zA-Z]+)\s+(.*)$") {
+                        $models += @{
+                            name  = $Matches[1]
+                            size  = $Matches[3]
+                            vram  = "CPU/GPU"
+                            until = $Matches[4]
+                        }
                     }
                 }
             }
@@ -347,56 +436,67 @@
     Write-Host "Writing telemetry data to: $TelemetryFile" -ForegroundColor Cyan
     Write-Host "Runs in a loop. Press Ctrl+C to terminate." -ForegroundColor Yellow
 
-    while ($true) {
-        try {
-            $cpu = Get-HostCpuLoad
+    if (-not (Acquire-DaemonLock -Path $LockFile)) {
+        exit 1
+    }
 
-            $ollamaStatus   = Test-TcpPortOpen -Port $OllamaPortNumber
-            $openclawStatus = Test-TcpPortOpen -Port $OpenClawPortNumber
-            $ollamaOnline   = $ollamaStatus.online
-            $openclawOnline = $openclawStatus.online
+    try {
+        while ($true) {
+            try {
+                $cpu = Get-HostCpuLoad
 
-            # Real HTTP-level handshake against Ollama for latency
-            $ollamaLatencyMs = $ollamaStatus.latencyMs
-            if ($ollamaOnline) {
-                $handshake = Test-OllamaHandshake -Port $OllamaPortNumber -PingPath $OllamaPingPath
-                if ($handshake.ok) { $ollamaLatencyMs = $handshake.latencyMs }
-            }
+                $ollamaStatus   = Test-TcpPortOpen -Port $OllamaPortNumber
+                $openclawStatus = Test-TcpPortOpen -Port $OpenClawPortNumber
+                $ollamaOnline   = $ollamaStatus.online
+                $openclawOnline = $openclawStatus.online
 
-            $watchtowerStatus = Get-WatchtowerStatus
-            $activeModels     = Get-ActiveOllamaModels -OllamaOnline $ollamaOnline
-            $logs             = Get-AppLogTail -Path $LogFile -Tail $LogTailLines
-            $agentStats       = Get-AgentStats -BrainDir $BrainDir -Roles $AgentRoles -PoConversationId $PoConversationId
-            $engineStats      = Get-EngineStats -BrainDir $BrainDir -PoConversationId $PoConversationId -OpenClawConfigPath $OpenClawConfigPath
-
-            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-
-            $telemetry = @{
-                timestamp     = $timestamp
-                cpu           = $cpu
-                services      = @{
-                    ollama     = @{ online = $ollamaOnline; port = $OllamaPortNumber; latencyMs = $ollamaLatencyMs }
-                    openclaw   = @{ online = $openclawOnline; port = $OpenClawPortNumber; latencyMs = $openclawStatus.latencyMs }
-                    watchtower = $watchtowerStatus
+                # Real HTTP-level handshake against Ollama for latency
+                $ollamaLatencyMs = $ollamaStatus.latencyMs
+                if ($ollamaOnline) {
+                    $handshake = Test-OllamaHandshake -Port $OllamaPortNumber -PingPath $OllamaPingPath
+                    if ($handshake.ok) { $ollamaLatencyMs = $handshake.latencyMs }
                 }
-                activeModels  = $activeModels
-                logs          = $logs
-                agentStats    = $agentStats
-                engineStats   = $engineStats
+
+                $watchtowerStatus = Get-WatchtowerStatus
+                $activeModels     = Get-ActiveOllamaModels -OllamaOnline $ollamaOnline -Port $OllamaPortNumber
+                $logs             = Get-AppLogTail -Path $LogFile -Tail $LogTailLines
+                $agentStats       = Get-AgentStats -BrainDir $BrainDir -Roles $AgentRoles -PoConversationId $PoConversationId
+                $engineStats      = Get-EngineStats -BrainDir $BrainDir -PoConversationId $PoConversationId -OpenClawConfigPath $OpenClawConfigPath
+
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+                $telemetry = @{
+                    timestamp     = $timestamp
+                    cpu           = $cpu
+                    services      = @{
+                        ollama     = @{ online = $ollamaOnline; port = $OllamaPortNumber; latencyMs = $ollamaLatencyMs }
+                        openclaw   = @{ online = $openclawOnline; port = $OpenClawPortNumber; latencyMs = $openclawStatus.latencyMs }
+                        watchtower = $watchtowerStatus
+                    }
+                    activeModels  = $activeModels
+                    logs          = $logs
+                    agentStats    = $agentStats
+                    engineStats   = $engineStats
+                }
+
+                Write-TelemetryFile -Telemetry $telemetry -Path $TelemetryFile
+
+                Write-HistoryFile -Path $HistoryFile -MaxPoints $HistoryMaxPoints -NewPoint @{
+                    timestamp        = $timestamp
+                    cpu              = $cpu
+                    ollamaLatencyMs  = $ollamaLatencyMs
+                }
+
+                $statusMsg = "Synced. CPU: $($telemetry.cpu)% | Ollama: $ollamaOnline ($($ollamaLatencyMs)ms) | OpenClaw: $openclawOnline | Watchtower: $($watchtowerStatus.online)"
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] [telemetry] $statusMsg" -ForegroundColor Gray
+            } catch {
+                $errStr = "Telemetry cycle failed: $_"
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] [error] $errStr" -ForegroundColor Red
+                Write-DaemonLog -Message $errStr -Level "ERROR"
             }
 
-            Write-TelemetryFile -Telemetry $telemetry -Path $TelemetryFile
-
-            Write-HistoryFile -Path $HistoryFile -MaxPoints $HistoryMaxPoints -NewPoint @{
-                timestamp        = $timestamp
-                cpu              = $cpu
-                ollamaLatencyMs  = $ollamaLatencyMs
-            }
-
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] [telemetry] Synced. CPU: $($telemetry.cpu)% | Ollama: $ollamaOnline ($($ollamaLatencyMs)ms) | OpenClaw: $openclawOnline | Watchtower: $($watchtowerStatus.online)" -ForegroundColor Gray
-        } catch {
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] [error] Telemetry cycle failed: $_" -ForegroundColor Red
+            Start-Sleep -Seconds $PollIntervalSeconds
         }
-
-        Start-Sleep -Seconds $PollIntervalSeconds
+    } finally {
+        Release-DaemonLock -Path $LockFile
     }
