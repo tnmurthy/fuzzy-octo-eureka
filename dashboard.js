@@ -989,6 +989,18 @@
     }
 
     // ---------------------------------------------------------------------------
+    // Explicit Window Exports for HTML Inline Event Handlers
+    // ---------------------------------------------------------------------------
+    window.switchTab = switchTab;
+    window.selectAgent = selectAgent;
+    window.sendAgentMessage = sendAgentMessage;
+    window.handleAgentChatKey = handleAgentChatKey;
+    window.filterLogs = filterLogs;
+    window.handleTerminalCommand = handleTerminalCommand;
+    window.loadKanbanTasks = loadKanbanTasks;
+    window.showToast = showToast;
+
+    // ---------------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------------
     startTelemetryPolling();
