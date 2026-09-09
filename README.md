@@ -31,6 +31,16 @@ telemetry-daemon.ps1  --writes-->  telemetry.json, history.json
   - `GET /api/ping` — on-demand live Ollama handshake test (used by the "Test Handshake" button)
   - `GET /api/tasks` — live Markdown parser reading `TASKS.md` for the interactive Task Board
   - `POST /api/agent/chat` — interactive autonomous agent chat routing to local Ollama (`llama3.1:8b`) with personas (`po`, `tech`, `qa`, `infra`, `doc`)
+  - `GET /api/memory/invariants` — active DEC procedural rules (DEC-001, DEC-002, DEC-003, DEC-005)
+  - `GET /api/memory/search?q=<query>&tenant=<tenant>` — multi-tenant semantic & vector search
+  - `POST /api/memory/store` — ingest new client project requirements or specs
+  - `POST /api/team/dispatch` — Human-to-Team Dispatch channel with automatic memory vectorization
+- **`memory-engine.js`** — 4-tier cognitive memory model:
+  - **Tier 1: Working Memory** (ephemeral agent scratchpads and execution context).
+  - **Tier 2: Episodic & Semantic Memory** (multi-tenant vector archive, partitioned by ReBAC boundaries).
+  - **Tier 3: Procedural Invariants** (hard architectural rules: DEC-001 zero credentials, DEC-002 trigger idempotency, DEC-003 health orthogonality, DEC-005 evidence gates).
+  - **Tier 4: Operator Alignment Memory** (ingested human operator guidance from Dispatch).
+- **`drisyon-memory.json`** — persisted memory archive seeded from BOV projects (`08_drisyon_des`, `07_BBAT`, `01_Modular-NeuroClips`, `09_PEM`).
 - **`orchestration-for-local.md`** — comprehensive 5-layer AI architecture matrix and workforce orchestration guide.
 - **`index.html` / `dashboard.css` / `dashboard.js`** — the frontend. Polls
   `/api/telemetry` every 3s via `fetch()`, seeds its charts from
