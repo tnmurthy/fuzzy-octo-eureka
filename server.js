@@ -23,6 +23,10 @@ const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
 const HISTORY_FILE = path.join(DASHBOARD_DIR, 'history.json');
 const OPENCLAW_CACHE_FILE = path.join(DASHBOARD_DIR, 'openclaw-status.json');
+const DrisyonMemoryEngine = require('./memory-engine');
+const memory = new DrisyonMemoryEngine({
+  storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
+});
 
 const OLLAMA_HOST = '127.0.0.1';
 const OLLAMA_PORT = 11434;
@@ -426,6 +430,46 @@ const server = http.createServer((req, res) => {
   }
   if (req.url.startsWith('/api/openclaw')) {
     return sendJson(res, 200, openclawCache);
+  }
+  // ── Drisyon Brain & Multi-Tenant Memory API ──
+  if (req.url.startsWith('/api/memory/invariants')) {
+    return sendJson(res, 200, { ok: true, invariants: memory.proceduralInvariants });
+  }
+  if (req.url.startsWith('/api/memory/search')) {
+    const parsedUrl = new URL(req.url, 'http://localhost:8787');
+    const query = parsedUrl.searchParams.get('q') || '';
+    const tenantId = parsedUrl.searchParams.get('tenant') || 'tenant:drisyon_core';
+    const projectId = parsedUrl.searchParams.get('project') || null;
+    const results = memory.search(query, { tenantId, projectId, topK: 10 });
+    return sendJson(res, 200, { ok: true, count: results.length, memories: results });
+  }
+  if (req.url.startsWith('/api/memory/store') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const stored = memory.storeMemory(payload);
+        sendJson(res, 200, { ok: true, memory: stored });
+      } catch (e) {
+        sendJson(res, 400, { ok: false, error: e.message });
+      }
+    });
+    return;
+  }
+  if (req.url.startsWith('/api/team/dispatch') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const ingested = memory.ingestOperatorDispatch(payload);
+        sendJson(res, 200, { ok: true, message: 'Operator dispatch delivered and ingested into Drisyon Memory', record: ingested });
+      } catch (e) {
+        sendJson(res, 400, { ok: false, error: e.message });
+      }
+    });
+    return;
   }
   return serveStaticFile(req, res);
 });
