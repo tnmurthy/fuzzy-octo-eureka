@@ -1,8 +1,219 @@
 {
-  "updatedAt": "2026-09-09T15:54:39.488Z",
-  "episodicCount": 6,
-  "alignmentsCount": 1,
+  "updatedAt": "2026-09-16T03:57:14.970Z",
+  "episodicCount": 13,
+  "alignmentsCount": 2,
   "episodicMemory": [
+    {
+      "id": "mem_13fbfde699c8",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "all",
+      "category": "operator_directive",
+      "title": "Directive from Operator",
+      "vector": {
+        "undefined": 1,
+        "directive": 1,
+        "from": 1,
+        "operator": 1,
+        "dispatch": 1,
+        "human_in_loop": 1,
+        "normal": 1
+      },
+      "tags": [
+        "dispatch",
+        "human_in_loop",
+        "NORMAL"
+      ],
+      "metadata": {},
+      "createdAt": "2026-09-16T03:57:14.970Z"
+    },
+    {
+      "id": "mem_8f7a9b6b2e5a",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: test-pubkey-789",
+      "content": "Implement real-time project status notifications via Buzz relay",
+      "vector": {
+        "implement": 1,
+        "real-time": 1,
+        "project": 1,
+        "status": 1,
+        "notifications": 1,
+        "via": 1,
+        "buzz": 3,
+        "relay": 1,
+        "directive": 1,
+        "from": 1,
+        "test-pubkey-789": 2,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "test-pubkey-789"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "test-pubkey-789"
+      },
+      "createdAt": "2026-09-16T03:56:06.512Z"
+    },
+    {
+      "id": "mem_46d298589012",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: test-pubkey-123",
+      "content": "Analyze the dashboard structure and suggest improvements",
+      "vector": {
+        "analyze": 1,
+        "the": 1,
+        "dashboard": 1,
+        "structure": 1,
+        "and": 1,
+        "suggest": 1,
+        "improvements": 1,
+        "directive": 1,
+        "from": 1,
+        "buzz": 2,
+        "test-pubkey-123": 2,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "test-pubkey-123"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "test-pubkey-123"
+      },
+      "createdAt": "2026-09-16T03:53:10.508Z"
+    },
+    {
+      "id": "mem_15223072dbca",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: buzz-user",
+      "content": "Please create a new task in the backlog: implement user authentication for the dashboard",
+      "vector": {
+        "please": 1,
+        "create": 1,
+        "new": 1,
+        "task": 1,
+        "the": 2,
+        "backlog": 1,
+        "implement": 1,
+        "user": 1,
+        "authentication": 1,
+        "for": 1,
+        "dashboard": 1,
+        "directive": 1,
+        "from": 1,
+        "buzz": 2,
+        "buzz-user": 2,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "buzz-user"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "buzz-user"
+      },
+      "createdAt": "2026-09-16T03:51:44.788Z"
+    },
+    {
+      "id": "mem_25edabc92c6e",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: buzz",
+      "content": "Analyze the new module and write documentation",
+      "vector": {
+        "analyze": 1,
+        "the": 1,
+        "new": 1,
+        "module": 1,
+        "and": 1,
+        "write": 1,
+        "documentation": 1,
+        "directive": 1,
+        "from": 1,
+        "buzz": 4,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "buzz"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "buzz"
+      },
+      "createdAt": "2026-09-16T03:51:05.659Z"
+    },
+    {
+      "id": "mem_89d36ae4404e",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: buzz",
+      "content": "Deploy new feature to staging environment",
+      "vector": {
+        "deploy": 1,
+        "new": 1,
+        "feature": 1,
+        "staging": 1,
+        "environment": 1,
+        "directive": 1,
+        "from": 1,
+        "buzz": 4,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "buzz"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "buzz"
+      },
+      "createdAt": "2026-09-16T03:51:05.628Z"
+    },
+    {
+      "id": "mem_40ba48aad6c0",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: buzz",
+      "content": "Deploy new feature to staging",
+      "vector": {
+        "deploy": 1,
+        "new": 1,
+        "feature": 1,
+        "staging": 1,
+        "directive": 1,
+        "from": 1,
+        "buzz": 4,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "buzz"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "buzz"
+      },
+      "createdAt": "2026-09-16T03:51:00.626Z"
+    },
     {
       "id": "mem_09fda61b01e9",
       "tenantId": "tenant:drisyon_core",
@@ -297,6 +508,15 @@
     }
   ],
   "operatorAlignments": [
+    {
+      "id": "align_1789531034970",
+      "sender": "Operator",
+      "target": "Team",
+      "tenantId": "tenant:drisyon_core",
+      "priority": "NORMAL",
+      "timestamp": "2026-09-16T03:57:14.970Z",
+      "vector": {}
+    },
     {
       "id": "align_dsp_test_99",
       "sender": "Sriad (Operator)",

@@ -53,9 +53,6 @@
             <div class="status-row">
               <span>Docker Watchtower</span>
               <span class="status-badge"><span class="status-dot green" id="id-watchtower-dot"></span>Online</span>
-            </div>            <div class="status-row">
-              <span>Buzz Relay</span>
-              <span class="status-badge"><span class="status-dot green" id="id-buzz-dot"></span>Online</span>
             </div>
             <div class="status-row" style="margin-top:6px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.05);">
               <span style="color:var(--color-text-muted);">Last synced</span>
@@ -617,17 +614,6 @@
                     </div>
                   </div>
 
-                  <!-- Buzz Relay -->
-                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                      <strong style="color:#fff; font-size:0.9rem;">&#128029; Buzz Relay (Team / Agent Mesh)</strong>
-                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Nostr relay on localhost:3000 &mdash; channels, agents, git, media</div>
-                    </div>
-                    <div style="text-align:right;">
-                      <span id="id-buzz-status-badge" class="status-badge" style="font-size:0.7rem; font-weight:bold;">Checking...</span>
-                      <div id="id-buzz-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">&mdash;</div>
-                    </div>
-                  </div>
                   <!-- Watchtower -->
                   <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                     <div>
