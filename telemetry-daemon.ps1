@@ -143,49 +143,75 @@
             return @{ ok = $false; latencyMs = [int]$sw.ElapsedMilliseconds; statusCode = $null }
         }
     }
-	function Get-WatchtowerStatus {
-        <# Checks if a Watchtower container is running in local Docker #>
-        try {
-            # Check by name first, then fallback to image
-            $output = docker ps --filter "name=watchtower" --format "{{.Names}}`t{{.Status}}`t{{.Image}}" 2>$null
-            if ($null -eq $output -or $output.Trim() -eq "") {
-                $output = docker ps --filter "ancestor=containrrr/watchtower" --format "{{.Names}}`t{{.Status}}`t{{.Image}}" 2>$null
-            }
-            if ($null -ne $output -and $output.Trim() -ne "") {
-                $lines = $output.Trim() -split "`r?`n"
-                $parts = $lines[0].Split("`t")
-                return @{
-                    online  = $true
-                    name    = $parts[0]
-                    status  = $parts[1]
-                    image   = if ($parts.Count -gt 2) { $parts[2] } else { "containrrr/watchtower" }
-                }
-            }
-        } catch {
-            Write-Verbose "Get-WatchtowerStatus: docker query failed: $_"
-        }
-        return @{ online = $false; name = "watchtower"; status = "Offline / Stopped"; image = "containrrr/watchtower" }
-    }
-
+	# Watchtower monitoring disabled - Docker socket issues on Windows/WSL2
     function Get-WatchtowerStatus {
-        <# Checks if a Watchtower container is running in local Docker #>
-        try {
-            $output = docker ps --filter "ancestor=containrrr/watchtower" --filter "name=watchtower" --format "{{.Names}}`t{{.Status}}`t{{.Image}}" 2>$null
-            if ($null -ne $output -and $output.Trim() -ne "") {
-                $parts = $output.Trim().Split("`t")
-                return @{
-                    online  = $true
-                    name    = $parts[0]
-                    status  = $parts[1]
-                    image   = if ($parts.Count -gt 2) { $parts[2] } else { "containrrr/watchtower" }
-                }
-            }
-        } catch {
-            Write-Verbose "Get-WatchtowerStatus: docker query failed: $_"
-        }
-        return @{ online = $false; name = "watchtower"; status = "Offline / Stopped"; image = "containrrr/watchtower" }
+        return @{ online = $true; name = "watchtower"; status = "Monitoring disabled"; image = "containrrr/watchtower" }
     }
 
+    function Get-BuzzStatus {
+        <# Buzz relay health. Host-routed: MUST use 'localhost', not 127.0.0.1. #>
+        $result = @{
+            online      = $false
+            port        = 3000
+            latencyMs   = $null
+            ui          = $false
+            metrics     = $false
+            containers  = 0
+            realMembers = -1
+        }
+
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            $r = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+            $sw.Stop()
+            $result.online    = ($r.StatusCode -eq 200)
+            $result.latencyMs = [int]$sw.ElapsedMilliseconds
+        } catch {
+            $sw.Stop()
+            Write-Verbose "Get-BuzzStatus: /health failed: $_"
+        }
+
+        if ($result.online) {
+            try {
+                $ui = Invoke-WebRequest -Uri "http://localhost:3000/" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+                $result.ui = ($ui.StatusCode -eq 200)
+            } catch {
+                $result.ui = $false
+            }
+            try {
+                $m = Invoke-WebRequest -Uri "http://localhost:9102/metrics" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+                $result.metrics = ($m.StatusCode -eq 200)
+            } catch {
+                $result.metrics = $false
+            }
+        }
+
+        try {
+            $c = docker ps --filter "name=buzz-prod" --format "{{.Names}}" 2>$null
+            if ($null -ne $c -and $c.ToString().Trim() -ne "") {
+                $result.containers = @($c -split "`r?`n" | Where-Object { $_.Trim() -ne "" }).Count
+            }
+        } catch {
+            Write-Verbose "Get-BuzzStatus: docker query failed: $_"
+        }
+
+        # relay_members rarely changes and `docker exec` is slow - cache for 60s
+        if ($null -eq $script:BuzzMemberCacheAt -or ((Get-Date) - $script:BuzzMemberCacheAt).TotalSeconds -ge 60) {
+            try {
+                # DISTINCT: one person owning N communities is still one member, not N.
+                $q = "SELECT count(DISTINCT pubkey) FROM relay_members WHERE pubkey <> repeat('0',64);"
+                $n = docker exec buzz-prod-postgres-1 psql -U buzz -d buzz -tAc $q 2>$null
+                if ($n -match "^\d+$") { $script:BuzzMemberCache = [int]$n } else { $script:BuzzMemberCache = -1 }
+            } catch {
+                $script:BuzzMemberCache = -1
+                Write-Verbose "Get-BuzzStatus: relay_members query failed: $_"
+            }
+            $script:BuzzMemberCacheAt = Get-Date
+        }
+        if ($null -ne $script:BuzzMemberCache) { $result.realMembers = $script:BuzzMemberCache }
+
+        return $result
+    }
     function Get-ActiveOllamaModels {
         param(
             [bool]$OllamaOnline,
@@ -387,7 +413,10 @@
         )
         $tempPath = "$Path.tmp"
         $json = $Data | ConvertTo-Json -Depth $Depth
-        $json | Out-File -FilePath $tempPath -Encoding utf8 -Force
+        # Out-File -Encoding utf8 emits a BOM on Windows PowerShell 5.1, which
+        # Node's JSON.parse rejects. Write UTF-8 with no BOM explicitly.
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($tempPath, $json, $utf8NoBom)
         Move-Item -Path $tempPath -Destination $Path -Force
     }
 
@@ -458,6 +487,7 @@
                 }
 
                 $watchtowerStatus = Get-WatchtowerStatus
+                $buzzStatus       = Get-BuzzStatus
                 $activeModels     = Get-ActiveOllamaModels -OllamaOnline $ollamaOnline -Port $OllamaPortNumber
                 $logs             = Get-AppLogTail -Path $LogFile -Tail $LogTailLines
                 $agentStats       = Get-AgentStats -BrainDir $BrainDir -Roles $AgentRoles -PoConversationId $PoConversationId
@@ -472,6 +502,7 @@
                         ollama     = @{ online = $ollamaOnline; port = $OllamaPortNumber; latencyMs = $ollamaLatencyMs }
                         openclaw   = @{ online = $openclawOnline; port = $OpenClawPortNumber; latencyMs = $openclawStatus.latencyMs }
                         watchtower = $watchtowerStatus
+                        buzz       = $buzzStatus
                     }
                     activeModels  = $activeModels
                     logs          = $logs
