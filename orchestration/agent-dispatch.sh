@@ -21,6 +21,15 @@ RUNS_DIR="${AGENT_RUNS_DIR:-/c/tt-ai-stack/04_internal/agent-runs}"
 TIMEOUT_SECONDS="${AGENT_TIMEOUT:-3600}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# Headless `claude -p` cannot ask for permission, so a builder run gets a
+# narrow allow-list: edit files, git, the package and database tools, and the
+# lock. Pushing is denied outright -- a dispatched agent commits, a person
+# merges. Override with CLAUDE_ALLOWED_TOOLS for a different task shape.
+CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-Read Edit Write Glob Grep Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(supabase:*) Bash(node:*) Bash(ls:*) Bash(cat:*) Bash($HERE/db-lock.sh:*)}"
+CLAUDE_DENIED_TOOLS="${CLAUDE_DENIED_TOOLS:-Bash(git push:*) Bash(gh:*)}"
+# Lets a run pick a model the login can use; empty means the CLI's default.
+CODEX_MODEL="${CODEX_MODEL:-}"
+
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -eq 4 ] || usage
 
@@ -67,8 +76,10 @@ node "$HERE/runlog.mjs" "$runs" id="$run_id" agent="$agent" repo="$repo" \
 export AGENT_NAME="$agent"
 set +e
 case "$agent" in
-  claude) (cd "$worktree" && timeout "$TIMEOUT_SECONDS" claude -p "$prompt" --permission-mode acceptEdits) ;;
-  codex)  timeout "$TIMEOUT_SECONDS" codex exec -C "$worktree" -s workspace-write "$prompt" ;;
+  claude) (cd "$worktree" && timeout "$TIMEOUT_SECONDS" claude -p "$prompt" --permission-mode acceptEdits \
+             --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS") ;;
+  codex)  timeout "$TIMEOUT_SECONDS" codex exec -C "$worktree" -s workspace-write \
+             ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
   agy)    (cd "$worktree" && timeout "$TIMEOUT_SECONDS" agy --mode plan --disable-slash-commands \
              --print-timeout "${TIMEOUT_SECONDS}s" --prompt="$prompt") ;;
   hermes) timeout "$TIMEOUT_SECONDS" hermes --in "$worktree" -z "$prompt" ;;
