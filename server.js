@@ -290,7 +290,10 @@ const server = http.createServer((req, res) => {
     });
   }
   if (req.url.startsWith('/api/tasks')) {
-    const tasksFile = path.resolve(DASHBOARD_DIR, '../../04_internal/TASKS.md');
+    // The dashboard moved from 04_internal/dashboard to 01_projects/active, so a
+    // path relative to it broke the board. Anchored to the workspace root now,
+    // overridable for another layout.
+    const tasksFile = process.env.TASKS_FILE || path.resolve(DASHBOARD_DIR, '../../../04_internal/TASKS.md');
     fs.readFile(tasksFile, 'utf8', (err, data) => {
       if (err) {
         return sendJson(res, 200, { ok: false, error: 'TASKS.md not found', columns: { backlog: [], in_progress: [], done: [] } });
