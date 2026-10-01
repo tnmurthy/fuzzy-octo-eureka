@@ -46,6 +46,20 @@ if [ ! -d "$worktree" ]; then
   else
     git -C "$repo" worktree add -q -b "$branch" "$worktree"
   fi
+  # A new worktree has only tracked files. The gitignored ones a run needs --
+  # web/.env.local, say -- are listed one per line in the repo's
+  # .worktreeinclude and copied from the main checkout. Without this the first
+  # S9 run's e2e suite failed on a missing Supabase URL.
+  if [ -f "$repo/.worktreeinclude" ]; then
+    while IFS= read -r rel || [ -n "$rel" ]; do
+      rel="${rel%$'\r'}"
+      case "$rel" in ''|'#'*) continue ;; esac
+      if [ -f "$repo/$rel" ] && [ ! -e "$worktree/$rel" ]; then
+        mkdir -p "$(dirname "$worktree/$rel")"
+        cp "$repo/$rel" "$worktree/$rel"
+      fi
+    done < "$repo/.worktreeinclude"
+  fi
 fi
 
 # --- prompt: the task plus the rules every agent works under --------------------
