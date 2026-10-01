@@ -65,7 +65,8 @@
       kanban: 'id-nav-kanban',
       agents: 'id-nav-agents',
       infra: 'id-nav-infra',
-      logs: 'id-nav-logs'
+      logs: 'id-nav-logs',
+      runs: 'id-nav-runs'
     };
 
     let currentSelectedAgent = 'po';
@@ -90,6 +91,10 @@
 
       if (tabId === 'kanban') {
         loadKanbanTasks();
+      }
+
+      if (tabId === 'runs') {
+        loadAgentRuns();
       }
 
       if (tabId === 'dashboard') {
@@ -1028,6 +1033,86 @@
     // ---------------------------------------------------------------------------
     // Explicit Window Exports for HTML Inline Event Handlers
     // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
+    // Agent Runs: tasks dispatched by orchestration/agent-dispatch.sh
+    // ---------------------------------------------------------------------------
+    const RUNS_POLL_MS = 5000;
+
+    function formatDuration(seconds) {
+      if (typeof seconds !== 'number') return '—';
+      if (seconds < 60) return `${seconds}s`;
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+    }
+
+    // Built with textContent, never innerHTML: task text is whatever someone
+    // wrote in a prompt file and must not become markup.
+    function runCell(text, className) {
+      const td = document.createElement('td');
+      if (className) td.className = className;
+      td.textContent = text == null || text === '' ? '—' : String(text);
+      return td;
+    }
+
+    function renderAgentRuns(payload) {
+      const body = document.getElementById('runs-body');
+      const summary = document.getElementById('runs-summary');
+      if (!body) return;
+      body.replaceChildren();
+
+      const runs = Array.isArray(payload.runs) ? payload.runs : [];
+      if (!payload.ok || runs.length === 0) {
+        const tr = document.createElement('tr');
+        const td = runCell(payload.error || payload.note || 'No runs recorded yet.');
+        td.colSpan = 8;
+        tr.appendChild(td);
+        body.appendChild(tr);
+      }
+
+      for (const run of runs) {
+        const tr = document.createElement('tr');
+        const status = document.createElement('span');
+        status.className = `run-status ${run.status || ''}`;
+        status.textContent = run.status || 'unknown';
+        const statusCell = document.createElement('td');
+        statusCell.appendChild(status);
+        if (typeof run.exit_code === 'number' && run.exit_code !== 0) {
+          statusCell.append(` exit ${run.exit_code}`);
+        }
+
+        const started = run.started_at ? new Date(run.started_at).toLocaleString() : '';
+        tr.append(
+          runCell(run.agent),
+          runCell(run.branch, 'runs-mono'),
+          runCell(run.task, 'runs-task'),
+          statusCell,
+          runCell(started),
+          runCell(formatDuration(run.duration_s)),
+          runCell(run.commits_ahead),
+          runCell(run.id, 'runs-mono'),
+        );
+        tr.title = `${run.worktree || ''}\n${run.log || ''}`;
+        body.appendChild(tr);
+      }
+
+      if (summary) {
+        const active = runs.filter((r) => r.status === 'running').length;
+        summary.textContent = `${active} running · ${runs.length} shown`;
+      }
+    }
+
+    function loadAgentRuns() {
+      fetch('/api/runs')
+        .then((r) => r.json())
+        .then(renderAgentRuns)
+        .catch((err) => renderAgentRuns({ ok: false, error: `Could not load runs: ${err.message}` }));
+    }
+
+    setInterval(() => {
+      const tab = document.getElementById('runs');
+      if (tab && tab.classList.contains('active')) loadAgentRuns();
+    }, RUNS_POLL_MS);
+
     window.switchTab = switchTab;
     window.selectAgent = selectAgent;
     window.sendAgentMessage = sendAgentMessage;

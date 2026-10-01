@@ -23,6 +23,11 @@ const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
 const HISTORY_FILE = path.join(DASHBOARD_DIR, 'history.json');
 const OPENCLAW_CACHE_FILE = path.join(DASHBOARD_DIR, 'openclaw-status.json');
+// Written by orchestration/agent-dispatch.sh: one start and one end line per
+// task handed to Claude, Codex, Antigravity or Hermes.
+const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
+  path.resolve(DASHBOARD_DIR, '../../../04_internal/agent-runs/runs.jsonl');
+const { readRuns } = require('./runs-reader');
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
   storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
@@ -282,6 +287,9 @@ const server = http.createServer((req, res) => {
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
+  }
+  if (req.url.startsWith('/api/runs')) {
+    return sendJson(res, 200, readRuns(RUNS_FILE));
   }
   if (req.url.startsWith('/api/rebac/inspect')) {
     return sendJson(res, 200, {
