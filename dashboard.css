@@ -179,6 +179,8 @@ code {
 .status-dot.green { background-color: var(--status-green); box-shadow: 0 0 8px var(--status-green); }
 .status-dot.amber { background-color: var(--status-amber); box-shadow: 0 0 8px var(--status-amber); }
 .status-dot.red { background-color: var(--status-red); box-shadow: 0 0 8px var(--status-red); }
+/* Neutral: dormant / no data. Not red - dormant is not an error. */
+.status-dot.grey { background-color: var(--color-text-muted); box-shadow: none; }
 
 /* Main Panel */
 .main-panel {
@@ -1084,3 +1086,23 @@ canvas {
     transform: translateY(0);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Agent Runs tab
+   --------------------------------------------------------------------------- */
+.runs-table-wrap { overflow-x: auto; }
+.runs-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.runs-table th {
+  text-align: left; font-weight: 600; padding: 0.5rem 0.75rem;
+  color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.7rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.runs-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid rgba(255, 255, 255, 0.04); vertical-align: top; }
+.runs-table td.runs-task { max-width: 28rem; color: var(--color-text-muted); }
+.runs-table td.runs-mono { font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; }
+.run-status { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.run-status.running { color: var(--status-amber); background: var(--status-amber-glow); }
+.run-status.done { color: var(--status-green); background: var(--status-green-glow); }
+.run-status.failed, .run-status.timed_out { color: var(--status-red); background: var(--status-red-glow); }
+.run-status.stale { color: var(--color-text-muted); background: rgba(139, 155, 180, 0.15); }
+#runs-summary { color: var(--color-text-muted); font-size: 0.8rem; }

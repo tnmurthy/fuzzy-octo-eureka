@@ -49,17 +49,68 @@ telemetry-daemon.ps1  --writes-->  telemetry.json, history.json
 
 ## Running it
 
-```bash
-# from C:\tt-ai-stack\04_internal\dashboard
-node server.js
-```
-
-Then open `http://localhost:8787`. In a separate terminal, start the
-telemetry daemon:
+Installed as two NSSM services, `ArunachalaDashboard` (`node server.js`) and
+`ArunachalaTelemetry` (`telemetry-daemon.ps1`), both running from
+`C:\tt-ai-stack\01_projects\active\arunachala-dashboard`. After changing
+`server.js`, restart from an **elevated** PowerShell:
 
 ```powershell
-.\telemetry-daemon.ps1
+Restart-Service ArunachalaDashboard
 ```
+
+To run a second copy for testing without touching the service:
+
+```bash
+PORT=8799 node server.js
+```
+
+Then open `http://localhost:8787` (or the test port).
+
+## Orchestrating agents
+
+`orchestration/` hands tasks to the coding agents on this machine and records
+what each one did. The **Agent Runs** tab shows the record.
+
+```bash
+# one task, one agent, its own worktree beside the repo
+orchestration/agent-dispatch.sh codex  C:/tt-ai-stack/01_projects/active/bov chore/search-path task.md
+orchestration/agent-dispatch.sh agy    C:/tt-ai-stack/01_projects/active/bov review/0027      review.md
+```
+
+| Agent | Command it runs | Use it for |
+|---|---|---|
+| `claude` | `claude -p … --permission-mode acceptEdits` | Lead work, migrations, anything security-relevant |
+| `codex` | `codex exec -C <worktree> -s workspace-write` | A second builder on an independent task |
+| `agy` | `agy --mode plan --prompt=…` | Read-only review. Headless, it cannot ask for tool permissions: put the files to review into the prompt |
+| `hermes` | `hermes --in <worktree> -z …` | Local, offline, private: summaries, drafts, classification. Not security-relevant code |
+| `noop` | prints the prompt | Testing the script |
+
+Each run appends a start line and an end line to
+`C:\tt-ai-stack\04_internal\agent-runs\runs.jsonl` (override with
+`AGENT_RUNS_DIR`) and writes the agent's whole output to `<run-id>.log` beside
+it. `AGENT_TIMEOUT` (default 3600s) bounds a run. The dashboard reads the same
+file (`AGENT_RUNS_FILE` to override); a run with no end line after six hours
+shows as `stale`.
+
+Every prompt is prefixed with the rules: stay in the worktree, commit on the
+branch, never push to main, and wrap the shared local database in the lock.
+
+### The local database lock
+
+Every project's local Supabase stack is one shared database, so two agents
+resetting it or running suites against it at once break each other's runs.
+Wrap those commands:
+
+```bash
+orchestration/db-lock.sh supabase db reset
+orchestration/db-lock.sh npm test
+```
+
+The lock is a directory at `~/.agent-locks/supabase-local.lock`. A second caller
+waits (up to `DB_LOCK_WAIT`, 1800s) and prints who holds it; a lock older than
+`DB_LOCK_STALE` (3600s) is treated as abandoned and broken.
+
+Tests: `node --test runs-reader.test.js`.
 
 `telemetry.json` and `history.json` are runtime output — they're
 git-ignored so the daemon can write freely without dirtying the repo.

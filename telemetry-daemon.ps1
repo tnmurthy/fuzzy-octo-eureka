@@ -31,6 +31,9 @@
     $AgentRoles = @("po", "tech", "qa", "infra", "doc")
     $HistoryMaxPoints = 720
 
+    # Agent statistics (pure functions; tested by agent-stats.test.ps1)
+    . (Join-Path $DashboardDir "agent-stats.ps1")
+
     # ---------------------------------------------------------------------------
     # Logging & Lockfile Helpers
     # ---------------------------------------------------------------------------
@@ -285,77 +288,8 @@
         }
     }
 
-    function Get-RoleKeyFromFirstLine {
-        param([string]$FirstLine, [string]$ConversationId)
-
-        if ($ConversationId -eq $script:PoConversationId) { return "po" }
-        if ($FirstLine -match "tech_lead|Tech Lead")                       { return "tech" }
-        if ($FirstLine -match "qa_engineer|QA Engineer")                   { return "qa" }
-        if ($FirstLine -match "doc_specialist|Documentation Specialist")   { return "doc" }
-        if ($FirstLine -match "infra_expert|Infrastructure Specialist")    { return "infra" }
-        return ""
-    }
-
-    function Get-AgentStats {
-        param([string]$BrainDir, [string[]]$Roles, [string]$PoConversationId)
-
-        $stats = @{}
-        foreach ($r in $Roles) {
-            $stats[$r] = @{ assigned = 0; completed = 0; active = 0; tools = @{} }
-        }
-
-        if (-not (Test-Path $BrainDir)) { return $stats }
-
-        $folders = Get-ChildItem -Path $BrainDir -Directory -ErrorAction SilentlyContinue
-        foreach ($folder in $folders) {
-            $transcriptPath = Join-Path $folder.FullName ".system_generated\logs\transcript.jsonl"
-            if (-not (Test-Path $transcriptPath)) {
-                $transcriptPath = Join-Path $folder.FullName ".system_generated\logs\transcript_full.jsonl"
-            }
-            if (-not (Test-Path $transcriptPath)) { continue }
-
-            $firstLine = Get-Content $transcriptPath -Head 1 -ErrorAction SilentlyContinue
-            $roleKey = Get-RoleKeyFromFirstLine -FirstLine $firstLine -ConversationId $folder.Name
-            if ($roleKey -eq "") { continue }
-
-            try {
-                $lines = Get-Content $transcriptPath -ErrorAction SilentlyContinue
-            } catch {
-                Write-Verbose "Get-AgentStats: could not read $transcriptPath : $_"
-                continue
-            }
-
-            $assigned = 0
-            foreach ($line in $lines) {
-                if ($line -match '"type":"USER_INPUT"') { $assigned += 1 }
-                if ($line -match '"type":"PLANNER_RESPONSE"') {
-                    try {
-                        $obj = ConvertFrom-Json $line -ErrorAction SilentlyContinue
-                        foreach ($tc in $obj.tool_calls) {
-                            $tName = $tc.name
-                            if ($null -ne $tName) {
-                                $current = 0
-                                if ($stats[$roleKey].tools.ContainsKey($tName)) {
-                                    $current = $stats[$roleKey].tools[$tName]
-                                }
-                                $stats[$roleKey].tools[$tName] = $current + 1
-                            }
-                        }
-                    } catch {
-                        Write-Verbose "Get-AgentStats: malformed PLANNER_RESPONSE line skipped"
-                    }
-                }
-            }
-
-            $stats[$roleKey].assigned = $assigned
-            if ($assigned -gt 0) {
-                $stats[$roleKey].completed = $assigned - 1
-                $stats[$roleKey].active = 1
-            }
-        }
-
-        return $stats
-    }
+    # Get-RoleKeyFromFirstLine and Get-AgentStats live in agent-stats.ps1
+    # (dot-sourced above) so they can be tested outside this polling loop.
 
     function Get-EngineStats {
         param(

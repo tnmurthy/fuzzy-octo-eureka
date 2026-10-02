@@ -51,13 +51,30 @@
       }
     };
 
-    const MOCK_AGENT_STATS_FALLBACK = {
-      po:    { assigned: 4, active: 1, completed: 3, tools: { run_command: 8, replace_file_content: 15, view_file: 32 } },
-      tech:  { assigned: 2, active: 0, completed: 2, tools: { list_dir: 4, view_file: 9, replace_file_content: 6 } },
-      qa:    { assigned: 2, active: 0, completed: 2, tools: { run_command: 3, view_file: 5 } },
-      infra: { assigned: 2, active: 0, completed: 2, tools: { view_file: 4, replace_file_content: 2 } },
-      doc:   { assigned: 2, active: 0, completed: 2, tools: { view_file: 3, replace_file_content: 4 } }
+    // Session badge per agent status (computed by agent-stats.ps1). There is
+    // deliberately no mock fallback: invented numbers on a monitoring panel
+    // are worse than an honest "no telemetry".
+    const AGENT_STATUS_BADGE = {
+      active:  { dot: 'green', label: 'Active' },
+      idle:    { dot: 'amber', label: 'Idle' },
+      dormant: { dot: 'grey',  label: 'Dormant' },
+      none:    { dot: 'grey',  label: 'No transcripts' }
     };
+
+    function formatLastActive(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    function setAgentSessionBadge(status) {
+      const badge = AGENT_STATUS_BADGE[status] || { dot: 'grey', label: 'No telemetry' };
+      const dot = document.getElementById('id-agent-session-dot');
+      const label = document.getElementById('id-agent-session-label');
+      if (dot) dot.className = `status-dot ${badge.dot}`;
+      if (label) label.innerText = badge.label;
+    }
 
     const AGENT_INDEX_MAP = { po: 0, tech: 1, qa: 2, infra: 3, doc: 4 };
     const NAV_TAB_MAP = {
@@ -65,7 +82,8 @@
       kanban: 'id-nav-kanban',
       agents: 'id-nav-agents',
       infra: 'id-nav-infra',
-      logs: 'id-nav-logs'
+      logs: 'id-nav-logs',
+      runs: 'id-nav-runs'
     };
 
     let currentSelectedAgent = 'po';
@@ -90,6 +108,10 @@
 
       if (tabId === 'kanban') {
         loadKanbanTasks();
+      }
+
+      if (tabId === 'runs') {
+        loadAgentRuns();
       }
 
       if (tabId === 'dashboard') {
@@ -753,14 +775,29 @@
       const telemetrySection = document.getElementById('id-detail-telemetry');
       if (!telemetrySection) return;
 
-      const stats = (data.agentStats && data.agentStats[currentSelectedAgent])
-        || MOCK_AGENT_STATS_FALLBACK[currentSelectedAgent];
-      if (!stats) return;
-
+      const stats = data.agentStats && data.agentStats[currentSelectedAgent];
       telemetrySection.style.display = 'flex';
+      const lastActiveEl = document.getElementById('id-metric-lastactive');
+
+      if (!stats) {
+        setAgentSessionBadge(null);
+        ['id-metric-assigned', 'id-metric-active', 'id-metric-completed']
+          .forEach(id => { document.getElementById(id).innerText = '—'; });
+        if (lastActiveEl) lastActiveEl.innerText = 'No telemetry for this agent.';
+        const emptyTools = document.getElementById('id-tool-metrics-list');
+        if (emptyTools) emptyTools.innerHTML = '';
+        return;
+      }
+
+      setAgentSessionBadge(stats.status);
       document.getElementById('id-metric-assigned').innerText = stats.assigned || 0;
       document.getElementById('id-metric-active').innerText = stats.active || 0;
       document.getElementById('id-metric-completed').innerText = stats.completed || 0;
+      if (lastActiveEl) {
+        const when = formatLastActive(stats.lastActive);
+        const msgs = stats.messages ? ` · ${stats.messages} message${stats.messages === 1 ? '' : 's'}` : '';
+        lastActiveEl.innerText = when ? `Last active ${when}${msgs}` : 'Never active.';
+      }
 
       const toolsList = document.getElementById('id-tool-metrics-list');
       if (!toolsList) return;
@@ -1028,6 +1065,86 @@
     // ---------------------------------------------------------------------------
     // Explicit Window Exports for HTML Inline Event Handlers
     // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
+    // Agent Runs: tasks dispatched by orchestration/agent-dispatch.sh
+    // ---------------------------------------------------------------------------
+    const RUNS_POLL_MS = 5000;
+
+    function formatDuration(seconds) {
+      if (typeof seconds !== 'number') return '—';
+      if (seconds < 60) return `${seconds}s`;
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+    }
+
+    // Built with textContent, never innerHTML: task text is whatever someone
+    // wrote in a prompt file and must not become markup.
+    function runCell(text, className) {
+      const td = document.createElement('td');
+      if (className) td.className = className;
+      td.textContent = text == null || text === '' ? '—' : String(text);
+      return td;
+    }
+
+    function renderAgentRuns(payload) {
+      const body = document.getElementById('runs-body');
+      const summary = document.getElementById('runs-summary');
+      if (!body) return;
+      body.replaceChildren();
+
+      const runs = Array.isArray(payload.runs) ? payload.runs : [];
+      if (!payload.ok || runs.length === 0) {
+        const tr = document.createElement('tr');
+        const td = runCell(payload.error || payload.note || 'No runs recorded yet.');
+        td.colSpan = 8;
+        tr.appendChild(td);
+        body.appendChild(tr);
+      }
+
+      for (const run of runs) {
+        const tr = document.createElement('tr');
+        const status = document.createElement('span');
+        status.className = `run-status ${run.status || ''}`;
+        status.textContent = run.status || 'unknown';
+        const statusCell = document.createElement('td');
+        statusCell.appendChild(status);
+        if (typeof run.exit_code === 'number' && run.exit_code !== 0) {
+          statusCell.append(` exit ${run.exit_code}`);
+        }
+
+        const started = run.started_at ? new Date(run.started_at).toLocaleString() : '';
+        tr.append(
+          runCell(run.agent),
+          runCell(run.branch, 'runs-mono'),
+          runCell(run.task, 'runs-task'),
+          statusCell,
+          runCell(started),
+          runCell(formatDuration(run.duration_s)),
+          runCell(run.commits_ahead),
+          runCell(run.id, 'runs-mono'),
+        );
+        tr.title = `${run.worktree || ''}\n${run.log || ''}`;
+        body.appendChild(tr);
+      }
+
+      if (summary) {
+        const active = runs.filter((r) => r.status === 'running').length;
+        summary.textContent = `${active} running · ${runs.length} shown`;
+      }
+    }
+
+    function loadAgentRuns() {
+      fetch('/api/runs')
+        .then((r) => r.json())
+        .then(renderAgentRuns)
+        .catch((err) => renderAgentRuns({ ok: false, error: `Could not load runs: ${err.message}` }));
+    }
+
+    setInterval(() => {
+      const tab = document.getElementById('runs');
+      if (tab && tab.classList.contains('active')) loadAgentRuns();
+    }, RUNS_POLL_MS);
+
     window.switchTab = switchTab;
     window.selectAgent = selectAgent;
     window.sendAgentMessage = sendAgentMessage;
