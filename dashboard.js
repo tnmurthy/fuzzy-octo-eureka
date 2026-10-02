@@ -51,13 +51,30 @@
       }
     };
 
-    const MOCK_AGENT_STATS_FALLBACK = {
-      po:    { assigned: 4, active: 1, completed: 3, tools: { run_command: 8, replace_file_content: 15, view_file: 32 } },
-      tech:  { assigned: 2, active: 0, completed: 2, tools: { list_dir: 4, view_file: 9, replace_file_content: 6 } },
-      qa:    { assigned: 2, active: 0, completed: 2, tools: { run_command: 3, view_file: 5 } },
-      infra: { assigned: 2, active: 0, completed: 2, tools: { view_file: 4, replace_file_content: 2 } },
-      doc:   { assigned: 2, active: 0, completed: 2, tools: { view_file: 3, replace_file_content: 4 } }
+    // Session badge per agent status (computed by agent-stats.ps1). There is
+    // deliberately no mock fallback: invented numbers on a monitoring panel
+    // are worse than an honest "no telemetry".
+    const AGENT_STATUS_BADGE = {
+      active:  { dot: 'green', label: 'Active' },
+      idle:    { dot: 'amber', label: 'Idle' },
+      dormant: { dot: 'grey',  label: 'Dormant' },
+      none:    { dot: 'grey',  label: 'No transcripts' }
     };
+
+    function formatLastActive(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    function setAgentSessionBadge(status) {
+      const badge = AGENT_STATUS_BADGE[status] || { dot: 'grey', label: 'No telemetry' };
+      const dot = document.getElementById('id-agent-session-dot');
+      const label = document.getElementById('id-agent-session-label');
+      if (dot) dot.className = `status-dot ${badge.dot}`;
+      if (label) label.innerText = badge.label;
+    }
 
     const AGENT_INDEX_MAP = { po: 0, tech: 1, qa: 2, infra: 3, doc: 4 };
     const NAV_TAB_MAP = {
@@ -758,14 +775,29 @@
       const telemetrySection = document.getElementById('id-detail-telemetry');
       if (!telemetrySection) return;
 
-      const stats = (data.agentStats && data.agentStats[currentSelectedAgent])
-        || MOCK_AGENT_STATS_FALLBACK[currentSelectedAgent];
-      if (!stats) return;
-
+      const stats = data.agentStats && data.agentStats[currentSelectedAgent];
       telemetrySection.style.display = 'flex';
+      const lastActiveEl = document.getElementById('id-metric-lastactive');
+
+      if (!stats) {
+        setAgentSessionBadge(null);
+        ['id-metric-assigned', 'id-metric-active', 'id-metric-completed']
+          .forEach(id => { document.getElementById(id).innerText = '—'; });
+        if (lastActiveEl) lastActiveEl.innerText = 'No telemetry for this agent.';
+        const emptyTools = document.getElementById('id-tool-metrics-list');
+        if (emptyTools) emptyTools.innerHTML = '';
+        return;
+      }
+
+      setAgentSessionBadge(stats.status);
       document.getElementById('id-metric-assigned').innerText = stats.assigned || 0;
       document.getElementById('id-metric-active').innerText = stats.active || 0;
       document.getElementById('id-metric-completed').innerText = stats.completed || 0;
+      if (lastActiveEl) {
+        const when = formatLastActive(stats.lastActive);
+        const msgs = stats.messages ? ` · ${stats.messages} message${stats.messages === 1 ? '' : 's'}` : '';
+        lastActiveEl.innerText = when ? `Last active ${when}${msgs}` : 'Never active.';
+      }
 
       const toolsList = document.getElementById('id-tool-metrics-list');
       if (!toolsList) return;

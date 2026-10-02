@@ -396,22 +396,23 @@
                   <div id="id-detail-telemetry" style="background:rgba(0,176,255,0.06); padding:14px; border-radius:10px; border:1px solid rgba(0,176,255,0.2); display:flex; flex-direction:column; gap:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                       <span style="font-weight:600; font-size:0.8rem; color:var(--status-blue); text-transform:uppercase; letter-spacing:0.5px;">⚡ Session Telemetry</span>
-                      <span class="status-badge" style="font-size:0.7rem;"><span class="status-dot green"></span>Live Transcripts</span>
+                      <span class="status-badge" style="font-size:0.7rem;"><span id="id-agent-session-dot" class="status-dot grey"></span><span id="id-agent-session-label">Loading…</span></span>
                     </div>
                     <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
                       <div style="background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px; border:1px solid var(--border-color);">
-                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Assigned Tasks</div>
+                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Sessions</div>
                         <div id="id-metric-assigned" style="font-size:1.1rem; font-weight:700; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:2px;">0</div>
                       </div>
                       <div style="background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px; border:1px solid var(--border-color);">
-                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Active Subtasks</div>
+                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Active</div>
                         <div id="id-metric-active" style="font-size:1.1rem; font-weight:700; color:var(--status-blue); font-family:'JetBrains Mono', monospace; margin-top:2px;">0</div>
                       </div>
                       <div style="background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px; border:1px solid var(--border-color);">
-                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Completed Tasks</div>
+                        <div style="font-size:0.7rem; color:var(--color-text-muted);">Completed</div>
                         <div id="id-metric-completed" style="font-size:1.1rem; font-weight:700; color:var(--status-green); font-family:'JetBrains Mono', monospace; margin-top:2px;">0</div>
                       </div>
                     </div>
+                    <div id="id-metric-lastactive" style="font-size:0.7rem; color:var(--color-text-muted); margin-top:6px;"></div>
 
                     <!-- Tool Call Breakdown -->
                     <div style="margin-top:4px;">

@@ -179,6 +179,8 @@ code {
 .status-dot.green { background-color: var(--status-green); box-shadow: 0 0 8px var(--status-green); }
 .status-dot.amber { background-color: var(--status-amber); box-shadow: 0 0 8px var(--status-amber); }
 .status-dot.red { background-color: var(--status-red); box-shadow: 0 0 8px var(--status-red); }
+/* Neutral: dormant / no data. Not red - dormant is not an error. */
+.status-dot.grey { background-color: var(--color-text-muted); box-shadow: none; }
 
 /* Main Panel */
 .main-panel {

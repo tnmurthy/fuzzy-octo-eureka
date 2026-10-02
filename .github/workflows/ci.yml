@@ -34,3 +34,7 @@ jobs:
             exit 1
           }
           Write-Host "telemetry-daemon.ps1: no syntax errors."
+
+      - name: Agent stats tests
+        shell: pwsh
+        run: ./agent-stats.test.ps1
