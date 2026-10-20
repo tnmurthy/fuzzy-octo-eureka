@@ -42,6 +42,23 @@ All routes are unauthenticated unless noted. `GET` unless marked `POST`.
 | `/api/rebac/inspect` | Dumps the full ReBAC node/edge graph - no auth gate on the dump itself |
 | `POST /api/buzz/events` | **Unauthenticated-by-design webhook.** Accepts a NIP-01-shaped event, stores it in Drisyon memory, and forwards it to the same local Ollama chat used by `/api/agent/chat`. Meant to receive Buzz relay directives, but nothing currently verifies the sender - see Open items. |
 
+## Ollama - not a service, kept alive by a watchdog
+
+Every persona (`gemma3:4b`) and Hermes (`qwen2.5-coder:3b`) run on Ollama, so
+Ollama down = whole team down while the dashboard still looks healthy. Ollama
+is the user-level tray app (Startup-folder shortcut), not a service: it only
+runs while Sriad is logged on, because the models live in his profile.
+
+Scheduled task **`Arunachala Ollama Watchdog`** (current user, every 5 min and
+at logon) runs `ollama-watchdog.ps1`: if `127.0.0.1:11434/api/tags` doesn't
+answer, it starts `ollama app.exe` and logs to `logs\ollama-watchdog.log`.
+Note: starting the app can run a pending Ollama update first, so recovery can
+take ~1 min.
+
+`restart-arunachala.ps1` gives Cloudflared 15 s to stop, then kills it -
+`Restart-Service Cloudflared` alone hangs printing "Waiting for service ... to
+stop" while it drains connections.
+
 ## Encoding rules (both directions bite)
 
 - `telemetry.json` / `history.json` **must have no BOM**. Node's `JSON.parse`

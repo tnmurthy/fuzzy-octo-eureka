@@ -5,7 +5,19 @@ $ErrorActionPreference = 'Continue'
 
 Restart-Service ArunachalaTelemetry -Force
 Restart-Service ArunachalaDashboard -Force
-Restart-Service Cloudflared -Force
+# Cloudflared drains open connections on stop and can hang for minutes
+# (Restart-Service then prints "Waiting for service ... to stop" forever).
+# It is a plain service, not NSSM, so killing it after a grace period is safe.
+$CloudflaredStopGraceSeconds = 15
+Stop-Service Cloudflared -Force -NoWait
+$svc = Get-Service Cloudflared
+try { $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds($CloudflaredStopGraceSeconds)) }
+catch {
+    Write-Host "Cloudflared did not stop in $CloudflaredStopGraceSeconds s - killing it" -ForegroundColor Yellow
+    Stop-Process -Name cloudflared -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+}
+Start-Service Cloudflared
 Get-Service ArunachalaTelemetry, ArunachalaDashboard, Cloudflared | Format-Table Name, Status -AutoSize
 Start-Sleep -Seconds 15
 
@@ -21,11 +33,11 @@ if ($api -match '"buzz"') {
 
 foreach ($u in 'https://buzz.mytestbed.tech/', 'https://team.mytestbed.tech/') {
     try {
-        $r = Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+        $r = Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15 -MaximumRedirection 0 -ErrorAction Stop
         $code = $r.StatusCode
     } catch {
         $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 'ERR' }
     }
     Write-Host "  $u -> $code"
 }
-Write-Host '  expect: buzz 200 (relay NIP-11 JSON), team 404 (deliberately un-tunnelled)'
+Write-Host '  expect: buzz 200 (relay NIP-11 JSON), team 302 (redirect to Cloudflare Access login)'
