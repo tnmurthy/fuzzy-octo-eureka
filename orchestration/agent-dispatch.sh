@@ -30,6 +30,21 @@ CLAUDE_DENIED_TOOLS="${CLAUDE_DENIED_TOOLS:-Bash(git push:*) Bash(gh:*)}"
 # Lets a run pick a model the login can use; empty means the CLI's default.
 CODEX_MODEL="${CODEX_MODEL:-}"
 
+# Hermes Desktop puts only hermes.cmd on PATH. Bash cannot find a .cmd by bare
+# name, and cmd's %* cuts a multi-line prompt at the first newline, so use the
+# venv's real hermes.exe. HERMES_BIN overrides; the .venv copy is a fallback
+# for older installs.
+resolve_hermes() {
+  local h="${LOCALAPPDATA:-/c/Users/Sriad/AppData/Local}/hermes/hermes-agent"
+  local c
+  for c in "${HERMES_BIN:-}" "$(command -v hermes 2>/dev/null || true)" \
+           "$h/venv/Scripts/hermes.exe" "$h/.venv/Scripts/hermes.exe"; do
+    [ -n "$c" ] && [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  echo "hermes not found: set HERMES_BIN to Hermes's hermes.exe" >&2
+  return 1
+}
+
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -eq 4 ] || usage
 
@@ -37,6 +52,8 @@ agent="$1"; repo="$(cd "$2" && pwd)"; branch="$3"; prompt_file="$4"
 case "$agent" in claude|codex|agy|hermes|noop) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
 [ -f "$prompt_file" ] || { echo "no prompt file: $prompt_file" >&2; exit 2; }
 git -C "$repo" rev-parse --git-dir >/dev/null
+# Resolve before any worktree or run record exists, so a missing CLI fails fast.
+[ "$agent" = hermes ] && { HERMES="$(resolve_hermes)" || exit 2; }
 
 # --- worktree -----------------------------------------------------------------
 worktree="$(dirname "$repo")/$(basename "$repo")--${branch//\//-}"
@@ -96,7 +113,7 @@ case "$agent" in
              ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
   agy)    (cd "$worktree" && timeout "$TIMEOUT_SECONDS" agy --mode plan --disable-slash-commands \
              --print-timeout "${TIMEOUT_SECONDS}s" --prompt="$prompt") ;;
-  hermes) timeout "$TIMEOUT_SECONDS" hermes --in "$worktree" -z "$prompt" ;;
+  hermes) timeout "$TIMEOUT_SECONDS" "$HERMES" --in "$worktree" -z "$prompt" ;;
   noop)   printf '%s\n' "$prompt" ;;
 esac > "$log" 2>&1
 exit_code=$?
