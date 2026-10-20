@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Continue'
 
 Restart-Service ArunachalaTelemetry -Force
 Restart-Service ArunachalaDashboard -Force
+if (Get-Service ArunachalaBuzzBridge -ErrorAction SilentlyContinue) { Restart-Service ArunachalaBuzzBridge -Force }
 # Cloudflared drains open connections on stop and can hang for minutes
 # (Restart-Service then prints "Waiting for service ... to stop" forever).
 # It is a plain service, not NSSM, so killing it after a grace period is safe.
