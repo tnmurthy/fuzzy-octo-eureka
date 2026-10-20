@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team - Arunachala Operations Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    /* Org chart. Every status shown here comes from /api/telemetry or
+       /api/runs; nothing is hard-coded as online. Unknown stays "unknown". */
+    .team-page { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
+    .team-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+    .team-head h1 { font-size: 1.6rem; font-weight: 600; }
+    .team-head a { color: var(--status-blue); text-decoration: none; font-size: 0.85rem; }
+    .muted { color: var(--color-text-muted); font-size: 0.78rem; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .tier { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; position: relative; }
+    .tier-label { text-align: center; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); margin: 26px 0 10px; }
+    .connector { width: 2px; height: 26px; background: var(--border-color-glow); margin: 0 auto; }
+    .via { text-align: center; font-size: 0.72rem; color: var(--color-text-muted); margin: 4px 0; }
+
+    .node { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px 16px; min-width: 190px; flex: 0 1 220px; cursor: pointer; transition: var(--transition-smooth); text-align: left; color: inherit; font: inherit; }
+    .node:hover, .node:focus-visible { background: var(--bg-card-hover); border-color: var(--border-color-glow); outline: none; transform: translateY(-2px); }
+    .node.selected { border-color: var(--status-blue); box-shadow: 0 0 0 1px var(--status-blue-glow); }
+    .node.lead { flex-basis: 300px; }
+    .node .title { font-weight: 600; font-size: 0.95rem; }
+    .node .tool { margin-top: 6px; font-size: 0.75rem; color: var(--color-text-muted); }
+    .node .state { margin-top: 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; }
+
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-muted); flex: none; }
+    .dot.green { background: var(--status-green); box-shadow: 0 0 6px var(--status-green-glow); }
+    .dot.amber { background: var(--status-amber); }
+    .dot.red { background: var(--status-red); }
+
+    .infra { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .infra .node { flex: none; min-width: 0; }
+
+    .detail { margin-top: 30px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 20px; }
+    .detail h2 { font-size: 1.05rem; margin-bottom: 10px; }
+    .detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 0.82rem; }
+    .detail dt { color: var(--color-text-muted); }
+    .detail dd { overflow-wrap: anywhere; }
+    .err { color: var(--status-red); font-size: 0.8rem; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <main class="team-page">
+    <header class="team-head">
+      <div>
+        <h1>👥 Team</h1>
+        <div class="muted">Who directs whom, and which tool each one runs on. <span id="updated">Loading…</span></div>
+      </div>
+      <a href="/">← Operations dashboard</a>
+    </header>
+
+    <div class="tier"><div class="node lead" data-id="operator" tabindex="0" role="button">
+      <div class="title">👤 You - Operator</div>
+      <div class="tool">Directs the team</div>
+    </div></div>
+    <div class="via">via Buzz relay · dashboard dispatch</div>
+    <div class="connector"></div>
+    <div class="tier" id="tier-po"></div>
+
+    <div class="tier-label">Personas (prompts on one local model)</div>
+    <div class="tier" id="tier-roles"></div>
+
+    <div class="tier-label">Executors - do the actual code changes (Agent Runs)</div>
+    <div class="tier" id="tier-exec"></div>
+
+    <div class="tier-label">Shared infrastructure</div>
+    <div class="infra" id="tier-infra"></div>
+
+    <section class="detail" aria-live="polite">
+      <h2 id="detail-title">Select a box</h2>
+      <dl id="detail-body"></dl>
+    </section>
+    <div class="err" id="err" hidden></div>
+  </main>
+
+  <script>
+    const REFRESH_MS = 30000;
+    const ROLES = [
+      { id: 'tech',  icon: '⚙', title: 'Tech Lead',  owns: 'Code, refactors, architecture' },
+      { id: 'qa',    icon: '✓', title: 'QA',         owns: 'Testing, validation, pre-commit checks' },
+      { id: 'infra', icon: '⛁', title: 'Infra',      owns: 'Docker, Ollama, runtime health' },
+      { id: 'doc',   icon: '✎', title: 'Doc',        owns: 'Memory logs, changelogs, project state' }
+    ];
+    // Executors that orchestration/agent-dispatch.sh accepts.
+    const EXECUTORS = [
+      { id: 'claude', icon: '✳', title: 'Claude Code', mode: 'headless -p, git push denied' },
+      { id: 'codex',  icon: '◎', title: 'Codex',       mode: 'workspace-write, model override' },
+      { id: 'agy',    icon: '▲', title: 'Antigravity', mode: 'agy CLI' },
+      { id: 'hermes', icon: '🐍', title: 'Hermes',     mode: 'reasoning runner' }
+    ];
+    const details = {};
+
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function ago(iso) {
+      if (!iso) return 'never';
+      const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+      if (isNaN(mins)) return iso;
+      if (mins < 60) return mins + ' min ago';
+      if (mins < 1440) return Math.round(mins / 60) + ' h ago';
+      return Math.round(mins / 1440) + ' d ago';
+    }
+
+    function node(id, title, tool, dotClass, stateText, extra) {
+      const b = el('div', 'node' + (extra || ''));
+      b.dataset.id = id; b.tabIndex = 0; b.setAttribute('role', 'button');
+      b.append(el('div', 'title', title), el('div', 'tool', tool));
+      const s = el('div', 'state'); s.append(el('span', 'dot ' + dotClass), el('span', '', stateText));
+      b.append(s);
+      return b;
+    }
+
+    function svcState(svc) {
+      if (!svc) return ['', 'unknown'];
+      return svc.online ? ['green', 'online'] : ['red', 'offline'];
+    }
+
+    function roleState(stats) {
+      if (!stats || !stats.status || stats.status === 'none') return ['', 'no activity recorded'];
+      if (stats.active > 0) return ['green', stats.active + ' active'];
+      return ['amber', stats.status + ' · last ' + ago(stats.lastActive)];
+    }
+
+    function summariseRuns(runs) {
+      const by = {};
+      runs.forEach(r => {
+        const a = by[r.agent] || (by[r.agent] = { total: 0, statuses: {}, last: null });
+        a.total++;
+        a.statuses[r.status] = (a.statuses[r.status] || 0) + 1;
+        if (!a.last || r.started_at > a.last.started_at) a.last = r;
+      });
+      return by;
+    }
+
+    function execState(sum) {
+      if (!sum) return ['', 'no runs recorded'];
+      if (sum.statuses.running) return ['green', sum.statuses.running + ' running'];
+      const last = sum.last;
+      const cls = last.status === 'done' ? 'green' : last.status === 'failed' ? 'red' : 'amber';
+      return [cls, 'last ' + last.status + ' · ' + ago(last.started_at)];
+    }
+
+    function render(tel, runs) {
+      const svc = tel.services || {};
+      const roles = tel.agentStats || {};
+      const ollama = svcState(svc.ollama);
+
+      const po = document.getElementById('tier-po'); po.replaceChildren();
+      const poState = roleState(roles.po);
+      po.append(node('po', '◆ Arunachala Ramana - PO', '🦙 Ollama · gemma3:4b (' + ollama[1] + ')', poState[0], poState[1], ' lead'));
+      details.po = [['Role', 'Product Owner - scopes work, directs specialists'], ['Model', 'Ollama gemma3:4b'], ['Model host', ollama[1]], ['Activity', poState[1]]];
+
+      const rt = document.getElementById('tier-roles'); rt.replaceChildren();
+      ROLES.forEach(r => {
+        const st = roleState(roles[r.id]);
+        rt.append(node(r.id, r.icon + ' ' + r.title, '🦙 gemma3:4b', st[0], st[1]));
+        const s = roles[r.id] || {};
+        details[r.id] = [['Owns', r.owns], ['Model', 'Ollama gemma3:4b (persona prompt)'], ['Conversations', String(s.conversations || 0)], ['Completed', String(s.completed || 0)], ['Last active', ago(s.lastActive)]];
+      });
+
+      const sums = summariseRuns(runs);
+      const et = document.getElementById('tier-exec'); et.replaceChildren();
+      EXECUTORS.forEach(x => {
+        const st = execState(sums[x.id]);
+        et.append(node(x.id, x.icon + ' ' + x.title, x.mode, st[0], st[1]));
+        const s = sums[x.id];
+        details[x.id] = s
+          ? [['Runs', String(s.total)], ['By status', Object.entries(s.statuses).map(e => e.join(': ')).join(', ')], ['Last task', (s.last.task || '').slice(0, 160)], ['Last branch', s.last.branch || '-'], ['Last started', ago(s.last.started_at)]]
+          : [['Runs', 'none recorded in agent-runs'], ['Mode', x.mode]];
+      });
+
+      const hermes = (tel.engineStats || {}).hermes || {};
+      const infra = [
+        ['ollama', '🦙 Ollama', 'Local models · :11434', svcState(svc.ollama)],
+        ['openclaw', '🦁 OpenClaw', 'MCP router / gateway · :18789', svcState(svc.openclaw)],
+        ['buzz', '🐝 Buzz relay', 'Operator directives · :3000', svcState(svc.buzz)],
+        ['hermes-engine', '🐍 Hermes engine', hermes.tracesCount != null ? hermes.tracesCount + ' traces' : 'no data', ['', 'traces only - not a liveness check']]
+      ];
+      const it = document.getElementById('tier-infra'); it.replaceChildren();
+      infra.forEach(([id, title, tool, st]) => {
+        it.append(node(id, title, tool, st[0], st[1]));
+        const s = svc[id] || {};
+        details[id] = [['Status', st[1]], ['Port', s.port != null ? String(s.port) : '-'], ['Latency', s.latencyMs != null ? s.latencyMs + ' ms' : '-']];
+      });
+      details.operator = [['Channels', 'Buzz relay (buzz.mytestbed.tech), dashboard dispatch'], ['Access', 'Cloudflare Access - owner email only']];
+
+      document.getElementById('updated').textContent = 'Telemetry ' + (tel.timestamp || 'time unknown') + ' · refreshes every 30 s';
+    }
+
+    function select(id) {
+      document.querySelectorAll('.node').forEach(n => n.classList.toggle('selected', n.dataset.id === id));
+      const n = document.querySelector('.node[data-id="' + id + '"] .title');
+      document.getElementById('detail-title').textContent = n ? n.textContent : id;
+      const dl = document.getElementById('detail-body'); dl.replaceChildren();
+      (details[id] || [['', 'No details']]).forEach(([k, v]) => dl.append(el('dt', '', k), el('dd', 'mono', v)));
+    }
+
+    document.addEventListener('click', e => { const n = e.target.closest('.node'); if (n) select(n.dataset.id); });
+    document.addEventListener('keydown', e => {
+      const n = e.target.closest && e.target.closest('.node');
+      if (n && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(n.dataset.id); }
+    });
+
+    async function load() {
+      const errBox = document.getElementById('err');
+      try {
+        const [tel, runs] = await Promise.all([
+          fetch('/api/telemetry').then(r => r.json()),
+          fetch('/api/runs').then(r => r.json()).catch(() => ({ runs: [] }))
+        ]);
+        render(tel, (runs && runs.runs) || []);
+        errBox.hidden = true;
+        const sel = document.querySelector('.node.selected');
+        if (sel) select(sel.dataset.id);
+      } catch (e) {
+        errBox.textContent = 'Could not load telemetry: ' + e.message;
+        errBox.hidden = false;
+      }
+    }
+    load();
+    setInterval(load, REFRESH_MS);
+  </script>
+</body>
+</html>
