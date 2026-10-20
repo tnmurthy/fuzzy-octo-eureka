@@ -20,6 +20,8 @@ jobs:
         run: npm ci || npm install
       - name: Syntax Check Server
         run: node --check server.js || true
+      - name: Node tests (Access token gate, agent runs reader)
+        run: npm test
       - name: Dependency Security Audit
         run: npm audit --audit-level=high || true
       - name: Verify PowerShell Telemetry Script Syntax

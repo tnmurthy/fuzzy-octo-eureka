@@ -19,6 +19,19 @@ const { execFile } = require('child_process');
 const ReBACEngine = require('./rebac-engine');
 
 const PORT = process.env.PORT || 8787;
+// Loopback only: the Cloudflare tunnel and every local caller (telemetry,
+// OpenClaw) connect via 127.0.0.1, so nothing on the LAN needs this port.
+const HOST = process.env.HOST || '127.0.0.1';
+
+// Second lock behind Cloudflare Access (see access-auth.js). The AUD tag and
+// team domain identify the "Arunachala Dashboard" Access app; neither is secret.
+const { createAccessGate } = require('./access-auth');
+const accessGate = createAccessGate({
+  teamDomain: process.env.ACCESS_TEAM_DOMAIN || 'crimson-shape-5caa.cloudflareaccess.com',
+  aud: process.env.ACCESS_AUD || 'a1267517591dc2a4da23dba816a1a929d96cc4ff12c926ac17e9303255d6c8bd',
+  publicHostnames: (process.env.PUBLIC_HOSTNAMES || 'team.mytestbed.tech').split(','),
+  allowedEmails: (process.env.ACCESS_ALLOWED_EMAILS || '').split(',').filter(Boolean),
+});
 const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
 const HISTORY_FILE = path.join(DASHBOARD_DIR, 'history.json');
@@ -281,7 +294,7 @@ fs.readFile(OPENCLAW_CACHE_FILE, 'utf8', (err, data) => {
 pollOpenclawStatus();
 setInterval(pollOpenclawStatus, OPENCLAW_POLL_INTERVAL_MS);
 
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
   if (req.url.startsWith('/api/telemetry')) {
     return serveJsonFile(res, TELEMETRY_FILE, {});
   }
@@ -577,9 +590,20 @@ const server = http.createServer((req, res) => {
   }
   // ── END Buzz Integration ──
   return serveStaticFile(req, res);
+}
+
+const server = http.createServer(async (req, res) => {
+  if (accessGate.requiresAccess(req)) {
+    const verdict = await accessGate.verifyRequest(req);
+    if (!verdict.ok) {
+      console.error(`Access denied ${req.method} ${req.url}: ${verdict.reason}`);
+      return sendJson(res, 403, { ok: false, error: 'Cloudflare Access login required' });
+    }
+  }
+  return handleRequest(req, res);
 });
 
-server.listen(PORT, () => {
-  console.log(`Arunachala dashboard server running at http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Arunachala dashboard server running at http://${HOST}:${PORT}`);
   console.log(`Serving files from: ${DASHBOARD_DIR}`);
 });

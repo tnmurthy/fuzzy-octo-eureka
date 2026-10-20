@@ -152,9 +152,32 @@ A config change needs `Restart-Service Cloudflared -Force` (elevated).
 | Hostname | Origin | Note |
 |---|---|---|
 | `buzz.mytestbed.tech` | `http://127.0.0.1:3000` | Buzz relay, TLS at the edge, `wss://` works |
-| `team.mytestbed.tech` | `http://127.0.0.1:8787` | Removed 2026-09-13, restored 2026-10-20 **behind Cloudflare Access** app `Arunachala Dashboard` (`82cd560e-410a-4441-a300-f311a09640e1`, allow = owner email only, 24h session). Access is the only auth - never keep this ingress rule if that app is deleted or its policy widened. |
+| `team.mytestbed.tech` | `http://127.0.0.1:8787` | Removed 2026-09-13, restored 2026-10-20 **behind Cloudflare Access** app `Arunachala Dashboard` (`82cd560e-410a-4441-a300-f311a09640e1`, allow = owner email only, 24h session). |
 
-`server.js` has **no authentication of any kind** - the lone
+### Origin auth - `access-auth.js`
+
+Two locks since 2026-10-20:
+
+1. **Edge:** the Cloudflare Access app above. No login, no request.
+2. **Origin:** `server.js` checks the Access JWT itself on every request that
+   came through the tunnel (Host `team.mytestbed.tech` **or** any
+   `cf-connecting-ip` header). RS256 against the team JWKS
+   (`crimson-shape-5caa.cloudflareaccess.com/cdn-cgi/access/certs`, cached 1h,
+   unknown `kid` refetch at most once a minute), plus `aud`, `iss`, `exp`,
+   `nbf`. Fails closed (403) - including when certs can't be fetched.
+
+Local requests (Host localhost/127.0.0.1, no Cloudflare headers) skip the
+check, so the telemetry daemon, OpenClaw (`127.0.0.1:8787/v1`) and local
+browsing are unaffected. The server binds **127.0.0.1 only** (`HOST` env to
+override), so the LAN cannot reach the port directly.
+
+Config (env overrides, defaults in `server.js`; none are secrets):
+`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` (the Access app's AUD tag), `PUBLIC_HOSTNAMES`,
+`ACCESS_ALLOWED_EMAILS` (optional extra allow-list). **If the Access app is
+recreated, its AUD changes** - update `ACCESS_AUD` or every tunnelled request
+gets 403. Tests: `npm test`.
+
+Before 2026-10-20 `server.js` had **no authentication of any kind** - the lone
 `rebac.canAccess('user:sriad', ...)` asserts the caller is you, and only gates
 `/api/ping` (see ReBAC section above). While it was tunnelled,
 `POST /api/agent/chat`, `POST /api/team/dispatch` and `POST /api/memory/store`
