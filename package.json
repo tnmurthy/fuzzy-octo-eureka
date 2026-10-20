@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test access-auth.test.js runs-reader.test.js"
+    "test": "node --test access-auth.test.js runs-reader.test.js buzz-bridge/buzz-protocol.test.js buzz-bridge/handler.test.js buzz-bridge/router.test.js buzz-bridge/typesafe-client.test.js"
   },
   "engines": {
     "node": ">=18"
