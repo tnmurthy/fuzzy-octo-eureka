@@ -35,6 +35,21 @@ hard-coded. Templates: `.env.example` (read by `server.js` and
 telemetry brain dir resolve to the system profile. `BUZZ_OPERATORS` has no
 default: an empty value stops the bridge at startup.
 
+## Shared team context - `team-store/` + `supabase/`
+
+Optional: on only when `.env` has all of `SUPABASE_URL`,
+`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_EMAIL`, `SUPABASE_PASSWORD`, `TEAM_ID`
+(partial config logs what is missing and stays off). Each person signs in as
+their own Supabase user; RLS in `supabase/migrations/` scopes them to their
+team - never put a service_role key in `.env`.
+
+- Runs: `runs.jsonl` stays the source of truth and acts as an outbox; every
+  30 s new or changed runs upsert into `agent_runs` (repo name only, no local
+  paths). State in `logs/run-sync-state.json`; offline = retried next tick.
+- `GET /api/runs?scope=team` reads the team's runs; falls back to local.
+- Memory and tasks: schema ready, sync not built yet.
+- Schema checks: `bash supabase/tests/run-local.sh` (Docker).
+
 ## API surface (server.js)
 
 All routes are unauthenticated unless noted. `GET` unless marked `POST`.

@@ -48,6 +48,14 @@ const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
 // the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
 const { readRuns } = require('./runs-reader');
+// Shared team context in Supabase; null (local files only) unless .env has
+// the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
+const teamStore = require('./team-store').createTeamStore(process.env, {
+  readRuns,
+  runsFile: RUNS_FILE,
+  stateFile: path.join(DASHBOARD_DIR, 'logs', 'run-sync-state.json'),
+});
+if (teamStore) teamStore.start();
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
   storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
@@ -316,6 +324,13 @@ function handleRequest(req, res) {
     return serveJsonFile(res, HISTORY_FILE, []);
   }
   if (req.url.startsWith('/api/runs')) {
+    // ?scope=team: every teammate's runs from Supabase; local file if that fails.
+    if (teamStore && /[?&]scope=team(&|$)/.test(req.url)) {
+      teamStore.teamRuns()
+        .then((body) => sendJson(res, 200, body))
+        .catch((err) => sendJson(res, 200, { ...readRuns(RUNS_FILE), source: 'local', note: `team runs unavailable: ${err.message}` }));
+      return;
+    }
     return sendJson(res, 200, readRuns(RUNS_FILE));
   }
   if (req.url.startsWith('/api/rebac/inspect')) {
