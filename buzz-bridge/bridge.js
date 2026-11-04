@@ -28,13 +28,13 @@ try { process.loadEnvFile(ENV_FILE); } catch { /* no .env: rely on the environme
 // Buzz desktop, and NIP-42 needs the ws(s) URL in the AUTH relay tag.
 const RELAY_URL = (process.env.BRIDGE_RELAY_URL || 'wss://buzz.mytestbed.tech').replace(/^http/, 'ws');
 const BOT_NAME = process.env.BUZZ_BOT_NAME || 'Arunachala Team';
-// The only people the bot obeys: the relay owner identity (see CLAUDE.md) and
-// the operator's Buzz desktop identity, which until 2026-10-20 doubled as the
-// relay's signing key.
-const OPERATORS = (process.env.BUZZ_OPERATORS || [
-  '768ee3b1eccb49856271187b66d3095b70bb23d3fa883a63183c5b7f3c5235cd',
-  'bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84',
-].join(',')).split(',');
+// The only people the bot obeys: the owner of this install (their Buzz
+// pubkeys, hex). No default - each teammate's bridge obeys only them.
+const OPERATORS = (process.env.BUZZ_OPERATORS || '').split(',').map(s => s.trim()).filter(Boolean);
+if (!OPERATORS.length) {
+  console.error('BUZZ_OPERATORS is empty in buzz-bridge/.env - set your Buzz pubkey(s); the bot obeys no one without it.');
+  process.exit(1);
+}
 const CHANNELS = (process.env.BUZZ_BOT_CHANNELS || '').split(',').filter(Boolean);
 const DASHBOARD = process.env.DASHBOARD_URL || 'http://127.0.0.1:8787';
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(__dirname, '../..');

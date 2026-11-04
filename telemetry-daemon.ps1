@@ -16,10 +16,20 @@
     $LockFile           = Join-Path $DashboardDir ".telemetry-daemon.lock"
     $LogsDir            = Join-Path $DashboardDir "logs"
     $DaemonLogFile      = Join-Path $LogsDir "daemon.log"
-    $Root               = "C:\tt-ai-stack"
+    # Per-person values come from .env next to this script (same file server.js
+    # reads), so each teammate's install points at their own folders.
+    $EnvValues = @{}
+    $EnvFile = Join-Path $DashboardDir ".env"
+    if (Test-Path $EnvFile) {
+        foreach ($line in Get-Content $EnvFile) {
+            if ($line -match '^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$') { $EnvValues[$Matches[1]] = $Matches[2].Trim('"') }
+        }
+    }
+    $OperatorHome       = if ($EnvValues['OPERATOR_HOME']) { $EnvValues['OPERATOR_HOME'] } else { $env:USERPROFILE }
+    $Root               = if ($EnvValues['STACK_ROOT']) { $EnvValues['STACK_ROOT'] } else { (Resolve-Path (Join-Path $DashboardDir "..\..\..")).Path }
     $LogFile            = Join-Path $Root "04_internal\logs\app.log"
     $OpenClawConfigPath = Join-Path $Root "openclaw.json"
-    $BrainDir           = "C:\Users\Sriad\.gemini\antigravity-cli\brain"
+    $BrainDir           = Join-Path $OperatorHome ".gemini\antigravity-cli\brain"
     $PoConversationId   = "f0257578-d67b-4f4a-8fa4-04812d19e5ad"
     $PollIntervalSeconds = 5
     $LogTailLines        = 15

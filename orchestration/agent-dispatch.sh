@@ -17,7 +17,7 @@
 # `noop` echoes the prompt; it exists to exercise this script.
 set -euo pipefail
 
-RUNS_DIR="${AGENT_RUNS_DIR:-C:/tt-ai-stack/04_internal/agent-runs}"
+RUNS_DIR="${AGENT_RUNS_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)/04_internal/agent-runs}"
 TIMEOUT_SECONDS="${AGENT_TIMEOUT:-3600}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -35,7 +35,7 @@ CODEX_MODEL="${CODEX_MODEL:-}"
 # venv's real hermes.exe. HERMES_BIN overrides; the .venv copy is a fallback
 # for older installs.
 resolve_hermes() {
-  local h="${LOCALAPPDATA:-/c/Users/Sriad/AppData/Local}/hermes/hermes-agent"
+  local h="${LOCALAPPDATA:-$HOME/AppData/Local}/hermes/hermes-agent"
   local c
   for c in "${HERMES_BIN:-}" "$(command -v hermes 2>/dev/null || true)" \
            "$h/venv/Scripts/hermes.exe" "$h/.venv/Scripts/hermes.exe"; do

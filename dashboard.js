@@ -89,6 +89,12 @@
     let currentSelectedAgent = 'po';
     let telemetryLive = false;
     let lastTelemetryData = null;
+    // Who this install belongs to (server .env OPERATOR_NAME), for greetings.
+    let operatorName = 'Operator';
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(cfg => { if (cfg && cfg.operatorName) operatorName = cfg.operatorName; })
+      .catch(() => {});
 
     // ---------------------------------------------------------------------------
     // Tab switching
@@ -241,7 +247,7 @@
       if (chatMessages) {
         chatMessages.innerHTML = `
           <div class="chat-bubble agent">
-            <strong>${profile.title}:</strong> Greetings Sriad. I am ready. What task or directive would you like to assign?
+            <strong>${profile.title}:</strong> Greetings ${operatorName}. I am ready. What task or directive would you like to assign?
           </div>
         `;
       }
