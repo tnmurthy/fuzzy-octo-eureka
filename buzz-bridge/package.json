@@ -6,7 +6,7 @@
   "main": "bridge.js",
   "scripts": {
     "start": "node bridge.js",
-    "test": "node --test buzz-protocol.test.js handler.test.js router.test.js typesafe-client.test.js"
+    "test": "node --test buzz-protocol.test.js handler.test.js router.test.js typesafe-client.test.js local-router-client.test.js"
   },
   "engines": {
     "node": ">=22"

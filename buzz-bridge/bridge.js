@@ -17,6 +17,7 @@ const { npubEncode } = require('nostr-tools/nip19');
 const { channelFilter, shouldHandle, replyTemplate, stripMentions } = require('./buzz-protocol');
 const { createHandler } = require('./handler');
 const { createTypeSafeClient } = require('./typesafe-client');
+const { createLocalRouterClient } = require('./local-router-client');
 
 const ENV_FILE = path.join(__dirname, '.env');
 try { process.loadEnvFile(ENV_FILE); } catch { /* no .env: rely on the environment */ }
@@ -81,12 +82,27 @@ function listRepos() {
     .map(d => d.name);
 }
 
+// Routing brain: local Ollama by default (free, private, no API key); set
+// BUZZ_ROUTER=typesafe (with TYPESAFE_API_KEY) to use the cloud router
+// instead. Either way, persona replies (handler.js's 'persona' action) and
+// the fallback-on-error path always go through the local Ollama personas
+// via dashboard.chat - only the routing judgment (what kind of message is
+// this, which persona/repo/executor fits) changes client.
+const ROUTER_MODE = process.env.BUZZ_ROUTER || (process.env.TYPESAFE_API_KEY ? 'typesafe' : 'local');
+const router = ROUTER_MODE === 'local'
+  ? createLocalRouterClient({
+      host: process.env.LOCAL_ROUTER_HOST,
+      port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
+      model: process.env.LOCAL_ROUTER_MODEL,
+    })
+  : createTypeSafeClient({
+      apiKey: process.env.TYPESAFE_API_KEY,
+      ledgerFile: LEDGER_FILE,
+      dailyCap: Number(process.env.TYPESAFE_DAILY_CAP) || undefined,
+    });
+
 const handle = createHandler({
-  typesafe: createTypeSafeClient({
-    apiKey: process.env.TYPESAFE_API_KEY,
-    ledgerFile: LEDGER_FILE,
-    dailyCap: Number(process.env.TYPESAFE_DAILY_CAP) || undefined,
-  }),
+  typesafe: router,
   dashboard,
   repos: listRepos,
 });
@@ -166,6 +182,6 @@ function connect(startedAt, attempt = 0) {
   ws.addEventListener('error', (e) => console.error(`Relay connection error: ${e.message || 'unknown'}`));
 }
 
-if (!process.env.TYPESAFE_API_KEY) console.error('TYPESAFE_API_KEY is not set - every message will fall back to the PO');
-console.log(`Operators: ${OPERATORS.map(p => p.slice(0, 8)).join(', ')} | repos: ${listRepos().join(', ')}`);
+if (ROUTER_MODE === 'typesafe' && !process.env.TYPESAFE_API_KEY) console.error('TYPESAFE_API_KEY is not set - every message will fall back to the PO');
+console.log(`Router: ${ROUTER_MODE}${ROUTER_MODE === 'local' ? ` (${process.env.LOCAL_ROUTER_MODEL || 'gemma3:4b'} via Ollama)` : ''} | Operators: ${OPERATORS.map(p => p.slice(0, 8)).join(', ')} | repos: ${listRepos().join(', ')}`);
 connect(now());
