@@ -23,6 +23,18 @@ Both services run as Administrator. An unelevated shell sees blank
 `Win32_Process.CommandLine` for them, so any filter on command line silently
 returns nothing - do not conclude from that that they are not running.
 
+All three services run as **LocalSystem** (a service logon as the user fails:
+Microsoft account with Windows Hello-only sign-in).
+
+## Per-person config (.env)
+
+Each teammate runs the same code with their own values, so nothing personal is
+hard-coded. Templates: `.env.example` (read by `server.js` and
+`telemetry-daemon.ps1`) and `buzz-bridge/.env.example` (read by `bridge.js`).
+`OPERATOR_HOME` is required under LocalSystem - without it, agent runs and the
+telemetry brain dir resolve to the system profile. `BUZZ_OPERATORS` has no
+default: an empty value stops the bridge at startup.
+
 ## API surface (server.js)
 
 All routes are unauthenticated unless noted. `GET` unless marked `POST`.

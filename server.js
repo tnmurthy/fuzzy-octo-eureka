@@ -18,6 +18,10 @@ const path = require('path');
 const { execFile } = require('child_process');
 const ReBACEngine = require('./rebac-engine');
 
+// Per-person settings (paths, name) live in .env next to this file, so each
+// teammate runs the same code with their own values. See .env.example.
+try { process.loadEnvFile(path.join(__dirname, '.env')); } catch { /* no .env: defaults */ }
+
 const PORT = process.env.PORT || 8787;
 // Loopback only: the Cloudflare tunnel and every local caller (telemetry,
 // OpenClaw) connect via 127.0.0.1, so nothing on the LAN needs this port.
@@ -64,9 +68,13 @@ const CLOUD_PROVIDERS = new Set(['google', 'openai', 'anthropic']);
 // server.js runs as an NSSM/Windows service under LocalSystem, whose PATH
 // doesn't include the user's npm global bin dir — the openclaw shim has to
 // be addressed by full path rather than relying on PATH resolution.
-const OPENCLAW_BIN = 'C:\\Users\\Sriad\\AppData\\Roaming\\npm\\openclaw.cmd';
-const OPENCLAW_HOME = 'C:\\Users\\Sriad';
-// LocalSystem's own $HOME/$USERPROFILE isn't Sriad's profile, so point the
+// The person this install belongs to. Under LocalSystem os.homedir() is the
+// system profile, so the install script writes OPERATOR_HOME into .env.
+const OPENCLAW_HOME = process.env.OPERATOR_HOME || require('os').homedir();
+const OPERATOR_NAME = process.env.OPERATOR_NAME || 'Operator';
+const OPENCLAW_BIN = process.env.OPENCLAW_BIN ||
+  path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm', 'openclaw.cmd');
+// LocalSystem's own $HOME/$USERPROFILE isn't the operator's profile, so point the
 // CLI at the real config/state explicitly rather than letting it resolve
 // (and silently operate on) the wrong home directory.
 const OPENCLAW_ENV = Object.assign({}, process.env, {
@@ -301,6 +309,9 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/telemetry')) {
     return serveJsonFile(res, TELEMETRY_FILE, {});
   }
+  if (req.url.startsWith('/api/config')) {
+    return sendJson(res, 200, { operatorName: OPERATOR_NAME });
+  }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
   }
@@ -430,7 +441,7 @@ function handleRequest(req, res) {
         });
 
         ollamaReq.on('error', (e) => {
-          sendJson(res, 200, { ok: true, reply: `[Offline fallback response]: Hello Sriad! I am Arunachala Ramana. Received: "${userMessage}". Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.` });
+          sendJson(res, 200, { ok: true, reply: `[Offline fallback response]: Hello ${OPERATOR_NAME}! I am Arunachala Ramana. Received: "${userMessage}". Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.` });
         });
 
         ollamaReq.write(ollamaReqData);
@@ -564,7 +575,7 @@ function handleRequest(req, res) {
             // node's install dir, so agent-dispatch.sh's bare `node` calls
             // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
             // process.execPath always knows exactly where this node is.
-            // The agent CLIs (claude via npm, codex) live in Sriad's profile.
+            // The agent CLIs (claude via npm, codex) live in the operator's profile.
             PATH: [
               path.dirname(process.execPath),
               OPENCLAW_HOME + '\\AppData\\Roaming\\npm',
@@ -580,7 +591,7 @@ function handleRequest(req, res) {
             GIT_CONFIG_KEY_0: 'safe.directory',
             GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
             // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
-            // logins in Sriad's profile, not LocalSystem's.
+            // logins in the operator's profile, not LocalSystem's.
             USERPROFILE: OPENCLAW_HOME,
             HOME: OPENCLAW_HOME,
             APPDATA: OPENCLAW_HOME + '\\AppData\\Roaming',
