@@ -541,6 +541,7 @@ function handleRequest(req, res) {
         return sendJson(res, 400, { ok: false, error: 'task text is required' });
       }
       const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
+      const runId = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
       const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
       fs.mkdirSync(tmpDir, { recursive: true });
@@ -551,19 +552,34 @@ function handleRequest(req, res) {
       const bashBin = process.env.DISPATCH_BASH_BIN || 'C:\\Program Files\\Git\\bin\\bash.exe';
       const child = require('child_process').spawn(
         bashBin,
-        [scriptPath, agent, repoPath, safeBranch, promptFile],
+        [scriptPath, agent, repoPath, safeBranch, promptFile, runId],
         {
           cwd: DASHBOARD_DIR,
           windowsHide: true,
           detached: true,
           stdio: 'ignore',
-          env: Object.assign({}, process.env, { AGENT_RUNS_DIR: path.dirname(RUNS_FILE) }),
+          env: Object.assign({}, process.env, {
+            AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
+            // Service runs under LocalSystem, whose PATH may not include
+            // node's install dir, so agent-dispatch.sh's bare `node` calls
+            // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
+            // process.execPath always knows exactly where this node is.
+            PATH: `${path.dirname(process.execPath)};${process.env.PATH || ''}`,
+            // LocalSystem does not own the repos, so git's dubious-ownership
+            // check kills the script's first git call (set -e, stdio ignored:
+            // silent). safe.directory is honoured from command-line config,
+            // which GIT_CONFIG_COUNT/KEY/VALUE is; scoped to the projects dir
+            // (repos and their sibling worktrees), not '*'.
+            GIT_CONFIG_COUNT: '1',
+            GIT_CONFIG_KEY_0: 'safe.directory',
+            GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
+          }),
         }
       );
       child.unref();
       child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
 
-      sendJson(res, 202, { ok: true, agent, repo, branch: safeBranch, note: 'started; poll /api/runs for completion' });
+      sendJson(res, 202, { ok: true, runId, agent, repo, branch: safeBranch, note: 'started; poll /api/runs for completion' });
     });
     return;
   }

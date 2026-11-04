@@ -87,6 +87,43 @@ test('dispatch is described but not run yet, and flags confirmation', async () =
   assert.match(reply, /not enabled yet/i);
 });
 
+test('a non-risky dispatch actually triggers and registers the run for a reply later', async () => {
+  const triggered = [];
+  const registered = [];
+  const deps = {
+    typesafe: { systemOne: async () => ({ answers: { ...baseAnswers, route: choice('dispatch'), executor: choice('codex'), repo: choice('bov'), risky: noul(0.01) } }) },
+    dashboard: { telemetry: async () => telemetry, runs: async () => runs, chat: async () => '' },
+    repos: () => ['bov'],
+    dispatch: {
+      trigger: async (args) => { triggered.push(args); return { runId: 'abc123' }; },
+      registerPending: (runId) => registered.push(runId),
+    },
+  };
+  const handle = createHandler(deps);
+  const reply = await handle({ text: 'fix the lint in bov', thread: [] });
+  assert.deepEqual(triggered, [{ agent: 'codex', repo: 'bov', task: 'fix the lint in bov' }]);
+  assert.deepEqual(registered, ['abc123']);
+  assert.match(reply, /Dispatched codex in bov \(run abc123\)/);
+});
+
+test('without a dispatch dep, even a non-risky dispatch only describes', async () => {
+  const { handle } = setup({ answers: { ...baseAnswers, route: choice('dispatch'), executor: choice('codex'), repo: choice('bov'), risky: noul(0.01) } });
+  const reply = await handle({ text: 'fix the lint in bov', thread: [] });
+  assert.match(reply, /It looks risky|confirm/i);
+});
+
+test('a dispatch trigger failure is reported, not thrown', async () => {
+  const deps = {
+    typesafe: { systemOne: async () => ({ answers: { ...baseAnswers, route: choice('dispatch'), executor: choice('codex'), repo: choice('bov'), risky: noul(0.01) } }) },
+    dashboard: { telemetry: async () => telemetry, runs: async () => runs, chat: async () => '' },
+    repos: () => ['bov'],
+    dispatch: { trigger: async () => { throw new Error('n8n unreachable'); }, registerPending: () => {} },
+  };
+  const handle = createHandler(deps);
+  const reply = await handle({ text: 'fix the lint in bov', thread: [] });
+  assert.match(reply, /Could not dispatch: n8n unreachable/);
+});
+
 test('when TypeSafe is unavailable the PO answers instead of failing silently', async () => {
   const { handle, chats } = setup({ typesafeError: 'TypeSafe daily cap of 200 calls reached' });
   const reply = await handle({ text: 'what should we do next?', thread: [] });
