@@ -14,6 +14,7 @@ grant usage on schema auth to authenticated, anon;
 grant execute on function auth.uid() to authenticated, anon;
 
 \i /migrations/20261104000000_arunachala_team_context.sql
+\i /migrations/20261104000100_arunachala_revoke_trigger_fn_execute.sql
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
