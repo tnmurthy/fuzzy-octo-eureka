@@ -14,7 +14,7 @@ const path = require('path');
 const { generateSecretKey, getPublicKey, finalizeEvent } = require('nostr-tools/pure');
 const { makeAuthEvent } = require('nostr-tools/nip42');
 const { npubEncode } = require('nostr-tools/nip19');
-const { channelFilter, shouldHandle, replyTemplate, stripMentions } = require('./buzz-protocol');
+const { channelFilter, shouldHandle, shouldLogSkip, replyTemplate, stripMentions } = require('./buzz-protocol');
 const { createHandler } = require('./handler');
 const { createTypeSafeClient } = require('./typesafe-client');
 const { createLocalRouterClient } = require('./local-router-client');
@@ -238,8 +238,7 @@ function connect(startedAt, attempt = 0) {
 
     const verdict = shouldHandle(event, { botPubkey: BOT_PUBKEY, operators: OPERATORS, startedAt });
     if (!verdict.ok) {
-      // The channel subscription sees every message; only log the interesting skips.
-      if (!['bot not mentioned', 'own message'].includes(verdict.reason)) {
+      if (shouldLogSkip(event, verdict, { operators: OPERATORS })) {
         console.log(`Skipped ${event.id.slice(0, 8)}: ${verdict.reason}`);
       }
       return;

@@ -1,7 +1,7 @@
 // node --test buzz-bridge/buzz-protocol.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldHandle, replyTemplate, stripMentions, channelFilter } = require('./buzz-protocol');
+const { shouldHandle, shouldLogSkip, replyTemplate, stripMentions, channelFilter } = require('./buzz-protocol');
 
 const BOT = 'b'.repeat(64);
 const OPERATOR = 'a'.repeat(64);
@@ -83,4 +83,21 @@ test('a reply to an edit threads under the edited message', () => {
 test('mention text is stripped before routing', () => {
   assert.equal(stripMentions('@Team Bot is ollama up?', 'Team Bot'), 'is ollama up?');
   assert.equal(stripMentions('nostr:npub1abcdef0123 what ran today', 'Team Bot'), 'what ran today');
+});
+
+test('logs an operator message that forgot to mention the bot, so silence is diagnosable', () => {
+  const event = msg({ tags: [['h', 'chan-1']] });
+  assert.equal(shouldLogSkip(event, shouldHandle(event, ctx), ctx), true);
+});
+
+test('stays quiet about other people chatting without a mention, and about its own messages', () => {
+  const chatter = msg({ pubkey: 'c'.repeat(64), tags: [['h', 'chan-1']] });
+  assert.equal(shouldLogSkip(chatter, shouldHandle(chatter, ctx), ctx), false);
+  const own = msg({ pubkey: BOT });
+  assert.equal(shouldLogSkip(own, shouldHandle(own, ctx), ctx), false);
+});
+
+test('logs other skip reasons as before', () => {
+  const stranger = msg({ pubkey: 'c'.repeat(64) });
+  assert.equal(shouldLogSkip(stranger, shouldHandle(stranger, ctx), ctx), true);
 });

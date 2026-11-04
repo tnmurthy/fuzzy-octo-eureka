@@ -39,6 +39,15 @@ function shouldHandle(event, { botPubkey, operators, startedAt }) {
   return { ok: true };
 }
 
+// The channel subscription sees every message, so most skips are noise. An
+// operator message without a real mention (name typed, not picked from the
+// @-popup) is not: logging it is the only trace of why the bot stayed quiet.
+function shouldLogSkip(event, verdict, { operators }) {
+  if (verdict.reason === 'own message') return false;
+  if (verdict.reason === 'bot not mentioned') return operators.includes(event.pubkey);
+  return true;
+}
+
 // The root of the thread `event` belongs to: its root marker, else the
 // target of its reply marker (a direct reply to a root), else none.
 function threadRoot(event) {
@@ -70,4 +79,4 @@ function stripMentions(text, botName) {
     .trim();
 }
 
-module.exports = { channelFilter, shouldHandle, replyTemplate, stripMentions, threadRoot, KIND_CHANNEL_MESSAGE, KIND_EDIT };
+module.exports = { channelFilter, shouldHandle, shouldLogSkip, replyTemplate, stripMentions, threadRoot, KIND_CHANNEL_MESSAGE, KIND_EDIT };
