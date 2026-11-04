@@ -71,7 +71,7 @@ function createTeamStore(env, { readRuns, runsFile, stateFile, log = console.err
     },
     syncOnce,
     async teamRuns() {
-      const runs = await rest.select('agent_runs', {
+      const runs = await rest.select('arunachala_agent_runs', {
         team_id: `eq.${teamId}`, order: 'started_at.desc', limit: String(TEAM_RUNS_LIMIT),
       });
       return { ok: true, source: 'team', runs };
