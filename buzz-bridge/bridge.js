@@ -19,6 +19,7 @@ const { createHandler } = require('./handler');
 const { createTypeSafeClient } = require('./typesafe-client');
 const { createLocalRouterClient } = require('./local-router-client');
 const { createFallbackRouterClient } = require('./router-fallback');
+const { createPendingStore } = require('./pending-store');
 
 const ENV_FILE = path.join(__dirname, '.env');
 try { process.loadEnvFile(ENV_FILE); } catch { /* no .env: rely on the environment */ }
@@ -83,6 +84,59 @@ function listRepos() {
     .map(d => d.name);
 }
 
+// Dispatch: a non-risky 'dispatch' decision (handler.js) calls n8n's webhook,
+// which runs orchestration/agent-dispatch.sh via /api/dispatch/run and polls
+// /api/runs for completion. n8n responds to the webhook immediately with the
+// run id (so the operator gets an ack without waiting for the run), then -
+// once the run finishes - POSTs to this process's own /notify listener with
+// {runId, text}, which is published back into the original thread. The
+// event that triggered a run is kept in logs/pending-dispatch.json
+// (pending-store.js), so a bridge restart mid-run still gets the reply.
+const N8N_DISPATCH_WEBHOOK_URL = process.env.N8N_DISPATCH_WEBHOOK_URL || 'http://127.0.0.1:5678/webhook/buzz-dispatch';
+const NOTIFY_PORT = Number(process.env.BRIDGE_NOTIFY_PORT) || 3100;
+const DISPATCH_TRIGGER_TIMEOUT_MS = 15000;
+const pendingDispatch = createPendingStore({ file: path.resolve(__dirname, '../logs/pending-dispatch.json') });
+let currentPublish = null;
+let activeEvent = null; // the event currently being handled, for registerPending to key off
+
+const dispatch = {
+  trigger: async ({ agent, repo, task }) => {
+    const res = await fetch(N8N_DISPATCH_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent, repo, task }),
+      signal: AbortSignal.timeout(DISPATCH_TRIGGER_TIMEOUT_MS),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.runId) throw new Error(body.error || `n8n webhook HTTP ${res.status}`);
+    return { runId: body.runId };
+  },
+  registerPending: (runId) => pendingDispatch.set(runId, activeEvent),
+};
+
+function startNotifyServer() {
+  require('http').createServer((req, res) => {
+    if (req.method !== 'POST' || req.url.split('?')[0] !== '/notify') {
+      res.writeHead(404); return res.end();
+    }
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      let payload;
+      try { payload = JSON.parse(body || '{}'); } catch { payload = {}; }
+      const { runId, text } = payload;
+      const event = pendingDispatch.take(runId);
+      if (!event) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: false, error: `no pending dispatch for run ${runId}` }));
+      }
+      if (currentPublish) currentPublish(replyTemplate(event, text || `Run ${runId} finished.`, now()));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+  }).listen(NOTIFY_PORT, '127.0.0.1', () => console.log(`Notify listener on 127.0.0.1:${NOTIFY_PORT}/notify`));
+}
+
 // Routing brain: local Ollama by default (free, private, no API key); set
 // BUZZ_ROUTER=typesafe (with TYPESAFE_API_KEY) to use the cloud router
 // instead. Either way, persona replies (handler.js's 'persona' action) and
@@ -131,6 +185,7 @@ const router = ROUTER_MODE === 'local'
 const handle = createHandler({
   typesafe: router,
   dashboard,
+  dispatch,
   repos: listRepos,
 });
 
@@ -145,6 +200,7 @@ function connect(startedAt, attempt = 0) {
     send(['EVENT', event]);
     return event;
   };
+  currentPublish = publish;
 
   ws.addEventListener('open', () => console.log(`Connected to ${RELAY_URL} as ${npubEncode(BOT_PUBKEY)}`));
 
@@ -192,11 +248,14 @@ function connect(startedAt, attempt = 0) {
     const text = stripMentions(event.content, BOT_NAME);
     console.log(`Operator: ${text}`);
     let reply;
+    activeEvent = event;
     try {
       reply = await handle({ text, thread: [], log: (d) => console.log(`Decision: ${JSON.stringify(d)}`) });
     } catch (err) {
       console.error(`Handler failed: ${err.message}`);
       reply = `Sorry - that failed: ${err.message}`;
+    } finally {
+      activeEvent = null;
     }
     if (reply) publish(replyTemplate(event, reply, now()));
   });
@@ -211,4 +270,5 @@ function connect(startedAt, attempt = 0) {
 
 if (ROUTER_MODE === 'typesafe' && !process.env.TYPESAFE_API_KEY) console.error('TYPESAFE_API_KEY is not set - every message will fall back to the PO');
 console.log(`Router: ${ROUTER_MODE}${ROUTER_MODE === 'local' ? ` (${LOCAL_ROUTER_MODEL} -> ${LOCAL_ROUTER_FALLBACK_MODEL} via Ollama)` : ''} | Operators: ${OPERATORS.map(p => p.slice(0, 8)).join(', ')} | repos: ${listRepos().join(', ')}`);
+startNotifyServer();
 connect(now());

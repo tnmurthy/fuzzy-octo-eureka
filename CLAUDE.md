@@ -132,8 +132,17 @@ up?` in mytestbed `#general`. Its own folder and `package.json` because it needs
   in one call (route, persona, executor, repo, status topic, risky, clear);
   `decide()` is plain policy over them. Status answers are built from
   `/api/telemetry` + `/api/runs` with no model call; persona answers go to
-  `/api/agent/chat` (Ollama). Dispatch and add-task are **described, not
-  executed** yet.
+  `/api/agent/chat` (Ollama). Add-task and risky dispatches are **described,
+  not executed** yet.
+- Dispatch (non-risky): n8n webhook `buzz-dispatch` -> `POST /api/dispatch/run`
+  -> `orchestration/agent-dispatch.sh` (detached, stdio ignored: failures are
+  silent, check `04_internal/agent-runs/runs.jsonl`) -> n8n polls `/api/runs`
+  -> bridge `127.0.0.1:3100/notify` replies in the thread. Pending events
+  persist in `logs/pending-dispatch.json` (6h TTL). Under LocalSystem the
+  spawn env passes `safe.directory` via `GIT_CONFIG_COUNT` (git's ownership
+  check) and points `USERPROFILE`/`HOME`/`APPDATA`/`LOCALAPPDATA`/`PATH` at
+  Sriad's profile so the agent CLIs find their logins. Files the agents
+  rewrite there become SYSTEM-owned; Sriad keeps inherited full control.
 - Spend: `TYPESAFE_DAILY_CAP` (default 200) counted from
   `logs/typesafe-ledger.jsonl`, one line per call. If TypeSafe fails or the
   cap is hit, the PO persona answers instead.

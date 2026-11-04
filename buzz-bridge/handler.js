@@ -1,9 +1,12 @@
 // handler.js - turns one operator message into one reply (or none).
 //
-// TypeSafe decides what kind of message it is; code does the rest. Status
-// answers are built from dashboard data with no model call. Persona answers
-// go to the local Ollama personas via the dashboard. Dispatch is described
-// but not executed until step 2 adds confirmation and the run hand-off.
+// TypeSafe/local router decides what kind of message it is; code does the
+// rest. Status answers are built from dashboard data with no model call.
+// Persona answers go to the local Ollama personas via the dashboard. A
+// non-risky dispatch is handed to deps.dispatch.trigger (n8n, which runs
+// orchestration/agent-dispatch.sh and reports back asynchronously via
+// bridge.js's /notify listener). A risky dispatch is still only described -
+// it needs the operator's explicit confirmation, which isn't built yet.
 
 const { buildRequest, decide } = require('./router');
 
@@ -44,13 +47,13 @@ function formatStatus(telemetry, runs, topic, nowMs = Date.now()) {
 }
 
 function describeDispatch(d) {
-  const confirm = d.needsConfirm ? ' It looks risky, so it will need your confirmation.' : '';
-  return `I would hand this to ${d.executor} in ${d.repo}.${confirm} Running agents from Buzz is not enabled yet.`;
+  return `I would hand this to ${d.executor} in ${d.repo}. It looks risky, so it will need your confirmation. Running risky agents from Buzz is not enabled yet.`;
 }
 
 /**
  * @param {{ typesafe: { systemOne: Function },
  *           dashboard: { telemetry: Function, runs: Function, chat: Function },
+ *           dispatch?: { trigger: Function, registerPending: Function },
  *           repos: () => string[] }} deps
  */
 function createHandler(deps) {
@@ -79,8 +82,16 @@ function createHandler(deps) {
       }
       case 'persona':
         return deps.dashboard.chat(decision.persona, text);
-      case 'dispatch':
-        return describeDispatch(decision);
+      case 'dispatch': {
+        if (decision.needsConfirm || !deps.dispatch) return describeDispatch(decision);
+        try {
+          const { runId } = await deps.dispatch.trigger({ agent: decision.executor, repo: decision.repo, task: text });
+          deps.dispatch.registerPending(runId);
+          return `Dispatched ${decision.executor} in ${decision.repo} (run ${runId}). I will reply here when it finishes.`;
+        } catch (err) {
+          return `Could not dispatch: ${err.message}`;
+        }
+      }
       case 'add_task':
         return 'I would add this to the task board. Adding tasks from Buzz is not enabled yet.';
       default:

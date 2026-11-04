@@ -46,9 +46,13 @@ resolve_hermes() {
 }
 
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
-[ $# -eq 4 ] || usage
+[ $# -eq 4 ] || [ $# -eq 5 ] || usage
 
 agent="$1"; repo="$(cd "$2" && pwd)"; branch="$3"; prompt_file="$4"
+# Optional 5th arg: a caller-supplied run id, so a caller (server.js's
+# /api/dispatch/run, and n8n/bridge.js polling for it) knows the id up
+# front instead of having to scrape it from this script's stdout.
+run_id_override="${5:-}"
 case "$agent" in claude|codex|agy|hermes|noop) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
 [ -f "$prompt_file" ] || { echo "no prompt file: $prompt_file" >&2; exit 2; }
 # This git build's -C does not accept a posix (/c/...) path - it needs the
@@ -100,7 +104,7 @@ prompt="$rules"$'\n'"$(cat "$prompt_file")"
 
 # --- run ------------------------------------------------------------------------
 mkdir -p "$RUNS_DIR"
-run_id="$(date +%Y%m%d-%H%M%S)-$agent-$RANDOM"
+run_id="${run_id_override:-$(date +%Y%m%d-%H%M%S)-$agent-$RANDOM}"
 log="$RUNS_DIR/$run_id.log"
 runs="$RUNS_DIR/runs.jsonl"
 base="$(git -C "$(native "$worktree")" rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main)"
