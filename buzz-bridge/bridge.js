@@ -18,6 +18,7 @@ const { channelFilter, shouldHandle, replyTemplate, stripMentions } = require('.
 const { createHandler } = require('./handler');
 const { createTypeSafeClient } = require('./typesafe-client');
 const { createLocalRouterClient } = require('./local-router-client');
+const { createFallbackRouterClient } = require('./router-fallback');
 
 const ENV_FILE = path.join(__dirname, '.env');
 try { process.loadEnvFile(ENV_FILE); } catch { /* no .env: rely on the environment */ }
@@ -88,13 +89,39 @@ function listRepos() {
 // the fallback-on-error path always go through the local Ollama personas
 // via dashboard.chat - only the routing judgment (what kind of message is
 // this, which persona/repo/executor fits) changes client.
+//
+// 'local' is itself a fallback chain, not one model: the primary model gets
+// a short budget (LOCAL_ROUTER_TIMEOUT_MS, default 25s) so a slow/stuck
+// request degrades to a faster, smaller model (LOCAL_ROUTER_FALLBACK_MODEL,
+// default qwen2.5-coder:3b) instead of making the operator wait out a long
+// single timeout. If every local stage fails, handler.js's own catch still
+// falls back one more level, to a plain PO persona chat reply.
 const ROUTER_MODE = process.env.BUZZ_ROUTER || (process.env.TYPESAFE_API_KEY ? 'typesafe' : 'local');
+const LOCAL_ROUTER_MODEL = process.env.LOCAL_ROUTER_MODEL || 'gemma3:4b';
+const LOCAL_ROUTER_FALLBACK_MODEL = process.env.LOCAL_ROUTER_FALLBACK_MODEL || 'qwen2.5-coder:3b';
+const LOCAL_ROUTER_TIMEOUT_MS = Number(process.env.LOCAL_ROUTER_TIMEOUT_MS) || 25000;
+const LOCAL_ROUTER_FALLBACK_TIMEOUT_MS = Number(process.env.LOCAL_ROUTER_FALLBACK_TIMEOUT_MS) || 20000;
 const router = ROUTER_MODE === 'local'
-  ? createLocalRouterClient({
-      host: process.env.LOCAL_ROUTER_HOST,
-      port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
-      model: process.env.LOCAL_ROUTER_MODEL,
-    })
+  ? createFallbackRouterClient([
+      {
+        label: LOCAL_ROUTER_MODEL,
+        client: createLocalRouterClient({
+          host: process.env.LOCAL_ROUTER_HOST,
+          port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
+          model: LOCAL_ROUTER_MODEL,
+          timeoutMs: LOCAL_ROUTER_TIMEOUT_MS,
+        }),
+      },
+      {
+        label: LOCAL_ROUTER_FALLBACK_MODEL,
+        client: createLocalRouterClient({
+          host: process.env.LOCAL_ROUTER_HOST,
+          port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
+          model: LOCAL_ROUTER_FALLBACK_MODEL,
+          timeoutMs: LOCAL_ROUTER_FALLBACK_TIMEOUT_MS,
+        }),
+      },
+    ])
   : createTypeSafeClient({
       apiKey: process.env.TYPESAFE_API_KEY,
       ledgerFile: LEDGER_FILE,
@@ -183,5 +210,5 @@ function connect(startedAt, attempt = 0) {
 }
 
 if (ROUTER_MODE === 'typesafe' && !process.env.TYPESAFE_API_KEY) console.error('TYPESAFE_API_KEY is not set - every message will fall back to the PO');
-console.log(`Router: ${ROUTER_MODE}${ROUTER_MODE === 'local' ? ` (${process.env.LOCAL_ROUTER_MODEL || 'gemma3:4b'} via Ollama)` : ''} | Operators: ${OPERATORS.map(p => p.slice(0, 8)).join(', ')} | repos: ${listRepos().join(', ')}`);
+console.log(`Router: ${ROUTER_MODE}${ROUTER_MODE === 'local' ? ` (${LOCAL_ROUTER_MODEL} -> ${LOCAL_ROUTER_FALLBACK_MODEL} via Ollama)` : ''} | Operators: ${OPERATORS.map(p => p.slice(0, 8)).join(', ')} | repos: ${listRepos().join(', ')}`);
 connect(now());

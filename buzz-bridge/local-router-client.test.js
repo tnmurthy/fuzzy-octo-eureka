@@ -79,6 +79,21 @@ test('rejects a choice the question did not list', async () => {
   await assert.rejects(c.systemOne(req), /unlisted option/);
 });
 
+test('a non-route field with an unlisted choice degrades to a zero-confidence default instead of failing', async () => {
+  const req2 = {
+    state: {},
+    questions: {
+      ...req.questions,
+      persona: { type: 'choice', instructions: 'z', criteria: { po: 'p', tech: 't' } },
+    },
+  };
+  const fetch = fakeFetch(200, ollamaReply('{"route": "status", "risky": false, "persona": "infra"}'));
+  const c = createLocalRouterClient({ fetch });
+  const res = await c.systemOne(req2);
+  assert.equal(res.answers.persona.choice, 'po');
+  assert.equal(res.answers.persona.confidence, 0);
+});
+
 test('rejects a response missing a question', async () => {
   const fetch = fakeFetch(200, ollamaReply('{"route": "status"}'));
   const c = createLocalRouterClient({ fetch });

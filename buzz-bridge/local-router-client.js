@@ -107,7 +107,20 @@ function normalizeAnswers(raw, questions) {
     } else {
       const coerced = coerceChoice(a);
       if (!coerced) throw new Error(`"${key}" missing a usable choice value`);
-      if (!(coerced.choice in q.criteria)) throw new Error(`"${key}" chose an unlisted option: ${coerced.choice}`);
+      if (!(coerced.choice in q.criteria)) {
+        // A smaller/off-domain model (e.g. a coder-tuned fallback) sometimes
+        // answers one field with an option that belongs to a different
+        // question (persona/executor are easy to mix up). The routing
+        // decision ("route") must be one of its real options or decide()
+        // can't act at all, so that one still fails loudly. Every other
+        // field only feeds a secondary choice downstream (router.js already
+        // falls back below its confidence threshold), so substitute the
+        // first listed option at zero confidence instead of discarding the
+        // whole response over one mismatched field.
+        if (key === 'route') throw new Error(`"${key}" chose an unlisted option: ${coerced.choice}`);
+        answers[key] = { choice: Object.keys(q.criteria)[0], confidence: 0 };
+        continue;
+      }
       answers[key] = coerced;
     }
   }
