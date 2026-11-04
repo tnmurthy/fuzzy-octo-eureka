@@ -40,6 +40,9 @@ const OPENCLAW_CACHE_FILE = path.join(DASHBOARD_DIR, 'openclaw-status.json');
 // task handed to Claude, Codex, Antigravity or Hermes.
 const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
   path.resolve(DASHBOARD_DIR, '../../../04_internal/agent-runs/runs.jsonl');
+// Same default buzz-bridge/bridge.js uses for listRepos(): the parent of
+// the active-projects folder this dashboard lives in.
+const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
 const { readRuns } = require('./runs-reader');
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
@@ -502,6 +505,65 @@ function handleRequest(req, res) {
       } catch (e) {
         sendJson(res, 400, { ok: false, error: e.message });
       }
+    });
+    return;
+  }
+  // ── Agent dispatch: hands one task to one coding agent via
+  // orchestration/agent-dispatch.sh, which does the real work (worktree,
+  // allowed-tools, run logging into RUNS_FILE). This route only spawns it
+  // and returns the run id immediately — the caller (n8n) polls /api/runs
+  // for completion, same format readRuns() already understands. Script
+  // runs under git-bash explicitly: server.js is an NSSM/LocalSystem
+  // service, so PATH has no bash.
+  if (req.url.startsWith('/api/dispatch/run') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      let payload;
+      try {
+        payload = JSON.parse(body || '{}');
+      } catch (e) {
+        return sendJson(res, 400, { ok: false, error: `bad JSON: ${e.message}` });
+      }
+      const { agent, repo, branch, task } = payload;
+      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop']);
+      if (!allowedAgents.has(agent)) {
+        return sendJson(res, 400, { ok: false, error: `unknown agent: ${agent}` });
+      }
+      if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
+        return sendJson(res, 400, { ok: false, error: 'repo must be a plain directory name' });
+      }
+      const repoPath = path.resolve(PROJECTS_DIR, repo);
+      if (!repoPath.startsWith(PROJECTS_DIR) || !fs.existsSync(path.join(repoPath, '.git'))) {
+        return sendJson(res, 400, { ok: false, error: `not a known repo: ${repo}` });
+      }
+      if (typeof task !== 'string' || !task.trim()) {
+        return sendJson(res, 400, { ok: false, error: 'task text is required' });
+      }
+      const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
+
+      const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
+      fs.writeFileSync(promptFile, task, 'utf8');
+
+      const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
+      const bashBin = process.env.DISPATCH_BASH_BIN || 'C:\\Program Files\\Git\\bin\\bash.exe';
+      const child = require('child_process').spawn(
+        bashBin,
+        [scriptPath, agent, repoPath, safeBranch, promptFile],
+        {
+          cwd: DASHBOARD_DIR,
+          windowsHide: true,
+          detached: true,
+          stdio: 'ignore',
+          env: Object.assign({}, process.env, { AGENT_RUNS_DIR: path.dirname(RUNS_FILE) }),
+        }
+      );
+      child.unref();
+      child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
+
+      sendJson(res, 202, { ok: true, agent, repo, branch: safeBranch, note: 'started; poll /api/runs for completion' });
     });
     return;
   }

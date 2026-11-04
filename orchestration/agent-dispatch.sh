@@ -17,7 +17,7 @@
 # `noop` echoes the prompt; it exists to exercise this script.
 set -euo pipefail
 
-RUNS_DIR="${AGENT_RUNS_DIR:-/c/tt-ai-stack/04_internal/agent-runs}"
+RUNS_DIR="${AGENT_RUNS_DIR:-C:/tt-ai-stack/04_internal/agent-runs}"
 TIMEOUT_SECONDS="${AGENT_TIMEOUT:-3600}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -51,17 +51,23 @@ usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 agent="$1"; repo="$(cd "$2" && pwd)"; branch="$3"; prompt_file="$4"
 case "$agent" in claude|codex|agy|hermes|noop) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
 [ -f "$prompt_file" ] || { echo "no prompt file: $prompt_file" >&2; exit 2; }
-git -C "$repo" rev-parse --git-dir >/dev/null
+# This git build's -C does not accept a posix (/c/...) path - it needs the
+# native C:\... form, or it fails with "cannot change to ...: No such file
+# or directory" even though the directory exists. Every other git call in
+# this script passes a plain positional path (cd's into it, or git itself
+# resolved it), which works fine either way; only -C needs this.
+native() { cygpath -w "$1" 2>/dev/null || printf '%s' "$1"; }
+git -C "$(native "$repo")" rev-parse --git-dir >/dev/null
 # Resolve before any worktree or run record exists, so a missing CLI fails fast.
 [ "$agent" = hermes ] && { HERMES="$(resolve_hermes)" || exit 2; }
 
 # --- worktree -----------------------------------------------------------------
 worktree="$(dirname "$repo")/$(basename "$repo")--${branch//\//-}"
 if [ ! -d "$worktree" ]; then
-  if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
-    git -C "$repo" worktree add -q "$worktree" "$branch"
+  if git -C "$(native "$repo")" show-ref --verify --quiet "refs/heads/$branch"; then
+    git -C "$(native "$repo")" worktree add -q "$(native "$worktree")" "$branch"
   else
-    git -C "$repo" worktree add -q -b "$branch" "$worktree"
+    git -C "$(native "$repo")" worktree add -q -b "$branch" "$(native "$worktree")"
   fi
   # A new worktree has only tracked files. The gitignored ones a run needs --
   # web/.env.local, say -- are listed one per line in the repo's
@@ -97,10 +103,10 @@ mkdir -p "$RUNS_DIR"
 run_id="$(date +%Y%m%d-%H%M%S)-$agent-$RANDOM"
 log="$RUNS_DIR/$run_id.log"
 runs="$RUNS_DIR/runs.jsonl"
-base="$(git -C "$worktree" rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main)"
+base="$(git -C "$(native "$worktree")" rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main)"
 started=$(date +%s)
 
-node "$HERE/runlog.mjs" "$runs" id="$run_id" agent="$agent" repo="$repo" \
+node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$repo" \
   branch="$branch" worktree="$worktree" log="$log" status=running \
   task="$(head -c 160 "$prompt_file" | tr '\r\n' '  ')" started_at="$(date -Iseconds)"
 
@@ -119,14 +125,14 @@ esac > "$log" 2>&1
 exit_code=$?
 set -e
 
-commits="$(git -C "$worktree" rev-list --count "$base..HEAD" 2>/dev/null || echo 0)"
+commits="$(git -C "$(native "$worktree")" rev-list --count "$base..HEAD" 2>/dev/null || echo 0)"
 status=done
 [ "$exit_code" -eq 0 ] || status=failed
 [ "$exit_code" -eq 124 ] && status=timed_out
 
-node "$HERE/runlog.mjs" "$runs" id="$run_id" status="$status" \
+node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" status="$status" \
   exit_code:="$exit_code" duration_s:="$(( $(date +%s) - started ))" \
-  commits_ahead:="$commits" head="$(git -C "$worktree" rev-parse --short HEAD)" \
+  commits_ahead:="$commits" head="$(git -C "$(native "$worktree")" rev-parse --short HEAD)" \
   finished_at="$(date -Iseconds)"
 
 echo "$run_id $status (exit $exit_code) log: $log"
