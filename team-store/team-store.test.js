@@ -79,9 +79,9 @@ const session = { getToken: async () => ({ token: 'tok', userId: 'user-1' }) };
 test('upsert posts rows with merge-duplicates and the user token', async () => {
   const fetch = fakeFetch([{ status: 201, json: null }]);
   const rest = createRest({ url: URL, key: KEY, session, fetch });
-  await rest.upsert('agent_runs', [{ id: 'r1' }], 'id');
+  await rest.upsert('arunachala_agent_runs', [{ id: 'r1' }], 'id');
   const c = fetch.calls[0];
-  assert.equal(c.url, `${URL}/rest/v1/agent_runs?on_conflict=id`);
+  assert.equal(c.url, `${URL}/rest/v1/arunachala_agent_runs?on_conflict=id`);
   assert.equal(c.init.method, 'POST');
   assert.equal(c.init.headers.Authorization, 'Bearer tok');
   assert.equal(c.init.headers.apikey, KEY);
@@ -92,15 +92,15 @@ test('upsert posts rows with merge-duplicates and the user token', async () => {
 test('select builds a query string and returns rows', async () => {
   const fetch = fakeFetch([{ status: 200, json: [{ id: 'r1' }] }]);
   const rest = createRest({ url: URL, key: KEY, session, fetch });
-  const rows = await rest.select('agent_runs', { team_id: `eq.${TEAM}`, order: 'started_at.desc', limit: '50' });
+  const rows = await rest.select('arunachala_agent_runs', { team_id: `eq.${TEAM}`, order: 'started_at.desc', limit: '50' });
   assert.deepEqual(rows, [{ id: 'r1' }]);
-  assert.equal(fetch.calls[0].url, `${URL}/rest/v1/agent_runs?team_id=eq.${TEAM}&order=started_at.desc&limit=50`);
+  assert.equal(fetch.calls[0].url, `${URL}/rest/v1/arunachala_agent_runs?team_id=eq.${TEAM}&order=started_at.desc&limit=50`);
 });
 
 test('a failed request throws with the status, not the token', async () => {
   const fetch = fakeFetch([{ status: 403, json: { message: 'new row violates row-level security' } }]);
   const rest = createRest({ url: URL, key: KEY, session, fetch });
-  await assert.rejects(rest.upsert('agent_runs', [{ id: 'r1' }], 'id'), (err) => {
+  await assert.rejects(rest.upsert('arunachala_agent_runs', [{ id: 'r1' }], 'id'), (err) => {
     assert.match(err.message, /agent_runs 403/);
     assert.doesNotMatch(err.message, /tok/);
     return true;
@@ -149,7 +149,7 @@ test('syncRuns uploads pending rows and returns the new state', async () => {
   const sent = [];
   const rest = { upsert: async (table, rows, key) => { sent.push({ table, rows, key }); } };
   const state = await syncRuns({ runs: [run({ id: 'a' })], state: {}, rest, teamId: TEAM });
-  assert.equal(sent[0].table, 'agent_runs');
+  assert.equal(sent[0].table, 'arunachala_agent_runs');
   assert.equal(sent[0].key, 'id');
   assert.ok(state.a);
 });
@@ -200,7 +200,7 @@ test('syncOnce signs in, uploads, and saves state so a restart does not resend',
   const fetch = fakeFetch([tokenReply('t1'), { status: 201, json: null }]);
   const deps = { readRuns: () => ({ runs: [run({ id: 'a' })] }), runsFile: 'x', stateFile, log: () => {}, fetch };
   await createTeamStore(fullEnv, deps).syncOnce();
-  assert.equal(fetch.calls[1].url, `${URL}/rest/v1/agent_runs?on_conflict=id`);
+  assert.equal(fetch.calls[1].url, `${URL}/rest/v1/arunachala_agent_runs?on_conflict=id`);
   assert.ok(JSON.parse(fsx.readFileSync(stateFile, 'utf8')).a);
   const again = fakeFetch([]); // a fresh process with the saved state sends nothing
   await createTeamStore(fullEnv, { ...deps, fetch: again }).syncOnce();

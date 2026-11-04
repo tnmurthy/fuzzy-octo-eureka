@@ -41,10 +41,12 @@ Optional: on only when `.env` has all of `SUPABASE_URL`,
 `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_EMAIL`, `SUPABASE_PASSWORD`, `TEAM_ID`
 (partial config logs what is missing and stays off). Each person signs in as
 their own Supabase user; RLS in `supabase/migrations/` scopes them to their
-team - never put a service_role key in `.env`.
+team - never put a service_role key in `.env`. Tables live in the shared
+**Talia** Supabase project (`onsmkbwqucvbzggugmmn`, other apps share it), so
+every object is prefixed `arunachala_`.
 
 - Runs: `runs.jsonl` stays the source of truth and acts as an outbox; every
-  30 s new or changed runs upsert into `agent_runs` (repo name only, no local
+  30 s new or changed runs upsert into `arunachala_agent_runs` (repo name only, no local
   paths). State in `logs/run-sync-state.json`; offline = retried next tick.
 - `GET /api/runs?scope=team` reads the team's runs; falls back to local.
 - Memory and tasks: schema ready, sync not built yet.

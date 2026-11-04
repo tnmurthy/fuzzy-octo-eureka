@@ -1,4 +1,4 @@
-// run-sync.js - copies this machine's agent runs into the team's agent_runs
+// run-sync.js - copies this machine's agent runs into the team's arunachala_agent_runs
 // table. runs.jsonl stays the source of truth and works as an outbox: a run
 // is uploaded when it is new or its status changed since the last upload, and
 // an offline attempt leaves the state untouched so the next one retries.
@@ -49,7 +49,7 @@ function pendingRows(runs, state, teamId) {
 async function syncRuns({ runs, state, rest, teamId }) {
   const { rows, next } = pendingRows(runs, state, teamId);
   if (!rows.length) return state;
-  await rest.upsert('agent_runs', rows, 'id');
+  await rest.upsert('arunachala_agent_runs', rows, 'id');
   return next;
 }
 
