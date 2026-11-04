@@ -564,7 +564,13 @@ function handleRequest(req, res) {
             // node's install dir, so agent-dispatch.sh's bare `node` calls
             // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
             // process.execPath always knows exactly where this node is.
-            PATH: `${path.dirname(process.execPath)};${process.env.PATH || ''}`,
+            // The agent CLIs (claude via npm, codex) live in Sriad's profile.
+            PATH: [
+              path.dirname(process.execPath),
+              OPENCLAW_HOME + '\\AppData\\Roaming\\npm',
+              OPENCLAW_HOME + '\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin',
+              process.env.PATH || '',
+            ].join(';'),
             // LocalSystem does not own the repos, so git's dubious-ownership
             // check kills the script's first git call (set -e, stdio ignored:
             // silent). safe.directory is honoured from command-line config,
@@ -573,6 +579,12 @@ function handleRequest(req, res) {
             GIT_CONFIG_COUNT: '1',
             GIT_CONFIG_KEY_0: 'safe.directory',
             GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
+            // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
+            // logins in Sriad's profile, not LocalSystem's.
+            USERPROFILE: OPENCLAW_HOME,
+            HOME: OPENCLAW_HOME,
+            APPDATA: OPENCLAW_HOME + '\\AppData\\Roaming',
+            LOCALAPPDATA: OPENCLAW_HOME + '\\AppData\\Local',
           }),
         }
       );
