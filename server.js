@@ -76,6 +76,21 @@ const embedder = process.env.MEMORY_EMBEDDINGS === 'false' ? null : createEmbedd
   cacheFile: path.join(DASHBOARD_DIR, 'logs', 'embeddings-cache.json'),
   onCall: (call) => recordAiCall(AI_CALLS_FILE, call),
 });
+const { buildDispatchPrompt, withTimeout } = require('./dispatch-context');
+const DISPATCH_CONTEXT_TIMEOUT_MS = 4000;
+const DISPATCH_CONTEXT_TOP_K = 3;
+// Memories for a dispatch: team-wide when team sync is on, scoped to this repo
+// plus global/all entries (another repo's client notes stay out).
+function dispatchMemories(repo, task) {
+  if (process.env.DISPATCH_MEMORY_CONTEXT === 'false') return Promise.resolve([]);
+  const entries = teamStore
+    ? teamStore.teamMemories().catch(() => memory.episodicMemory)
+    : Promise.resolve(memory.episodicMemory);
+  const lookup = entries
+    .then((list) => searchMemory(list, task, { projectId: repo, topK: DISPATCH_CONTEXT_TOP_K }))
+    .then((out) => out.results);
+  return withTimeout(lookup, DISPATCH_CONTEXT_TIMEOUT_MS, []);
+}
 function searchMemory(entries, query, options) {
   if (!embedder) return Promise.resolve({ ranker: 'keywords', results: memory.searchEntries(entries, query, options) });
   return semanticSearch({ engine: memory, embedder, entries, query, options });
@@ -431,33 +446,54 @@ function handleTasks(req, res) {
 // local ledger or, with ?scope=team, the team's; plus advice on cutting it.
 const { summarizeCalls, paidCallsSince, autoStats, advice, fromTeamRow } = require('./team-store/costs');
 const MAX_COST_DAYS = 90;
-function handleCosts(req, res) {
-  const url = new URL(req.url, 'http://localhost');
-  const days = Math.min(MAX_COST_DAYS, Math.max(1, Number(url.searchParams.get('days')) || 7));
+function computeCosts(days, wantTeam) {
   const auto = autoStats(readRuns(RUNS_FILE, 1000).runs || []);
   const midnight = new Date(new Date().toISOString().slice(0, 10)).getTime();
-  const respond = (source, calls, limits, note) => {
+  const build = (source, calls, limits, note) => {
     const summary = summarizeCalls(calls, { days });
     const paidCallsToday = paidCallsSince(calls, midnight);
-    sendJson(res, 200, {
+    return {
       ok: true, source, days, summary, auto, limits, paidCallsToday,
       advice: advice({ summary, auto, limits, paidCallsToday, localFirstEnabled: process.env.DISPATCH_LOCAL_FIRST === 'true' }),
       ...(note ? { note } : {}),
-    });
+    };
   };
-  const local = (note) => respond('local', readCalls(AI_CALLS_FILE), null, note);
-  if (teamStore && url.searchParams.get('scope') === 'team') {
-    Promise.all([teamStore.teamCalls(days), teamStore.teamLimits()])
-      .then(([rows, limits]) => respond('team', rows.map(fromTeamRow), limits))
-      .catch((err) => local(`team costs unavailable: ${err.message}`));
-    return;
-  }
-  return local();
+  const local = (note) => build('local', readCalls(AI_CALLS_FILE), null, note);
+  if (!teamStore || !wantTeam) return Promise.resolve(local());
+  return Promise.all([teamStore.teamCalls(days), teamStore.teamLimits()])
+    .then(([rows, limits]) => build('team', rows.map(fromTeamRow), limits))
+    .catch((err) => local(`team costs unavailable: ${err.message}`));
+}
+
+function handleCosts(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const days = Math.min(MAX_COST_DAYS, Math.max(1, Number(url.searchParams.get('days')) || 7));
+  computeCosts(days, url.searchParams.get('scope') === 'team')
+    .then((body) => sendJson(res, 200, body))
+    .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
+}
+
+// Weekly digest text for Buzz (the bridge posts it Monday 09:00 IST): the
+// team's view when team sync is on, else this machine's.
+const { buildDigest } = require('./digest');
+const DIGEST_DAYS = 7;
+function handleDigest(req, res) {
+  const since = Date.now() - DIGEST_DAYS * 24 * 60 * 60 * 1000;
+  const recent = (runs) => runs.filter((r) => Date.parse(r.started_at) >= since);
+  const runsP = teamStore
+    ? teamStore.teamRuns().then((b) => b.runs).catch(() => readRuns(RUNS_FILE, 1000).runs || [])
+    : Promise.resolve(readRuns(RUNS_FILE, 1000).runs || []);
+  Promise.all([computeCosts(DIGEST_DAYS, true), runsP])
+    .then(([costs, runs]) => sendJson(res, 200, { ok: true, text: buildDigest({ costs, runs: recent(runs) }) }))
+    .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
 }
 
 function handleRequest(req, res) {
   if (req.url.startsWith('/api/telemetry')) {
     return serveJsonFile(res, TELEMETRY_FILE, {});
+  }
+  if (req.url.startsWith('/api/digest')) {
+    return handleDigest(req, res);
   }
   if (req.url.startsWith('/api/costs')) {
     return handleCosts(req, res);
@@ -681,57 +717,61 @@ function handleRequest(req, res) {
       const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
       const runId = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
-      fs.mkdirSync(tmpDir, { recursive: true });
-      const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
-      fs.writeFileSync(promptFile, task, 'utf8');
+      // Team context for the agent: the most relevant memories for this repo,
+      // looked up within DISPATCH_CONTEXT_TIMEOUT_MS; no context on any failure.
+      dispatchMemories(repo, task).then((memories) => {
+        const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
+        fs.mkdirSync(tmpDir, { recursive: true });
+        const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
+        fs.writeFileSync(promptFile, buildDispatchPrompt(task, memories), 'utf8');
 
-      const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
-      const bashBin = process.env.DISPATCH_BASH_BIN || 'C:\\Program Files\\Git\\bin\\bash.exe';
-      const child = require('child_process').spawn(
-        bashBin,
-        [scriptPath, agent, repoPath, safeBranch, promptFile, runId],
-        {
-          cwd: DASHBOARD_DIR,
-          windowsHide: true,
-          detached: true,
-          stdio: 'ignore',
-          env: Object.assign({}, process.env, {
-            AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
-            // claude runs record their real tokens and cost in the same ledger.
-            AI_CALLS_FILE,
-            // Service runs under LocalSystem, whose PATH may not include
-            // node's install dir, so agent-dispatch.sh's bare `node` calls
-            // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
-            // process.execPath always knows exactly where this node is.
-            // The agent CLIs (claude via npm, codex) live in the operator's profile.
-            PATH: [
-              path.dirname(process.execPath),
-              OPENCLAW_HOME + '\\AppData\\Roaming\\npm',
-              OPENCLAW_HOME + '\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin',
-              process.env.PATH || '',
-            ].join(';'),
-            // LocalSystem does not own the repos, so git's dubious-ownership
-            // check kills the script's first git call (set -e, stdio ignored:
-            // silent). safe.directory is honoured from command-line config,
-            // which GIT_CONFIG_COUNT/KEY/VALUE is; scoped to the projects dir
-            // (repos and their sibling worktrees), not '*'.
-            GIT_CONFIG_COUNT: '1',
-            GIT_CONFIG_KEY_0: 'safe.directory',
-            GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
-            // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
-            // logins in the operator's profile, not LocalSystem's.
-            USERPROFILE: OPENCLAW_HOME,
-            HOME: OPENCLAW_HOME,
-            APPDATA: OPENCLAW_HOME + '\\AppData\\Roaming',
-            LOCALAPPDATA: OPENCLAW_HOME + '\\AppData\\Local',
-          }),
-        }
-      );
-      child.unref();
-      child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
+        const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
+        const bashBin = process.env.DISPATCH_BASH_BIN || 'C:\\Program Files\\Git\\bin\\bash.exe';
+        const child = require('child_process').spawn(
+          bashBin,
+          [scriptPath, agent, repoPath, safeBranch, promptFile, runId],
+          {
+            cwd: DASHBOARD_DIR,
+            windowsHide: true,
+            detached: true,
+            stdio: 'ignore',
+            env: Object.assign({}, process.env, {
+              AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
+              // claude runs record their real tokens and cost in the same ledger.
+              AI_CALLS_FILE,
+              // Service runs under LocalSystem, whose PATH may not include
+              // node's install dir, so agent-dispatch.sh's bare `node` calls
+              // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
+              // process.execPath always knows exactly where this node is.
+              // The agent CLIs (claude via npm, codex) live in the operator's profile.
+              PATH: [
+                path.dirname(process.execPath),
+                OPENCLAW_HOME + '\\AppData\\Roaming\\npm',
+                OPENCLAW_HOME + '\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin',
+                process.env.PATH || '',
+              ].join(';'),
+              // LocalSystem does not own the repos, so git's dubious-ownership
+              // check kills the script's first git call (set -e, stdio ignored:
+              // silent). safe.directory is honoured from command-line config,
+              // which GIT_CONFIG_COUNT/KEY/VALUE is; scoped to the projects dir
+              // (repos and their sibling worktrees), not '*'.
+              GIT_CONFIG_COUNT: '1',
+              GIT_CONFIG_KEY_0: 'safe.directory',
+              GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
+              // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
+              // logins in the operator's profile, not LocalSystem's.
+              USERPROFILE: OPENCLAW_HOME,
+              HOME: OPENCLAW_HOME,
+              APPDATA: OPENCLAW_HOME + '\\AppData\\Roaming',
+              LOCALAPPDATA: OPENCLAW_HOME + '\\AppData\\Local',
+            }),
+          }
+        );
+        child.unref();
+        child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
 
-      sendJson(res, 202, { ok: true, runId, agent, repo, branch: safeBranch, note: 'started; poll /api/runs for completion' });
+        sendJson(res, 202, { ok: true, runId, agent, repo, branch: safeBranch, note: 'started; poll /api/runs for completion' });
+      }).catch((err) => sendJson(res, 500, { ok: false, error: `dispatch failed: ${err.message}` }));
     });
     return;
   }

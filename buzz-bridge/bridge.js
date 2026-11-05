@@ -277,5 +277,34 @@ function connect(startedAt, attempt = 0) {
 
 if (ROUTER_MODE === 'typesafe' && !process.env.TYPESAFE_API_KEY) console.error('TYPESAFE_API_KEY is not set - every message will fall back to the PO');
 console.log(`Router: ${ROUTER_MODE}${ROUTER_MODE === 'local' ? ` (${LOCAL_ROUTER_MODEL} -> ${LOCAL_ROUTER_FALLBACK_MODEL} via Ollama)` : ''} | Operators: ${OPERATORS.map(p => p.slice(0, 8)).join(', ')} | repos: ${listRepos().join(', ')}`);
+
+// Weekly digest: one bridge per team posts /api/digest to its channels
+// (BUZZ_DIGEST=true - off by default, or every teammate's bot would post the
+// same team digest). Checked hourly; posts Monday 09:00 IST unless
+// BUZZ_DIGEST_WEEKDAY (0-6, 0 = Sunday) / BUZZ_DIGEST_HOUR say otherwise.
+const { isDigestDue } = require('../digest');
+const DIGEST_STATE_FILE = path.resolve(__dirname, '../logs/digest-state.json');
+const DIGEST_CHECK_MS = 60 * 60 * 1000;
+const digestSchedule = {
+  weekday: Number(process.env.BUZZ_DIGEST_WEEKDAY ?? 1),
+  hour: Number(process.env.BUZZ_DIGEST_HOUR ?? 9),
+};
+
+async function postDigestIfDue() {
+  if (!currentPublish || !CHANNELS.length) return;
+  let state = {};
+  try { state = JSON.parse(fs.readFileSync(DIGEST_STATE_FILE, 'utf8')); } catch { /* never posted */ }
+  if (!isDigestDue(Date.now(), state.lastPosted, digestSchedule)) return;
+  try {
+    const { text } = await getJson('/api/digest', 30000);
+    for (const ch of CHANNELS) currentPublish({ kind: 9, created_at: now(), content: text, tags: [['h', ch]] });
+    fs.writeFileSync(DIGEST_STATE_FILE, JSON.stringify({ lastPosted: new Date().toISOString() }));
+    console.log('Posted the weekly digest');
+  } catch (err) {
+    console.error(`Weekly digest failed: ${err.message}`); // retried next hour
+  }
+}
+
 startNotifyServer();
 connect(now());
+if (process.env.BUZZ_DIGEST === 'true') setInterval(postDigestIfDue, DIGEST_CHECK_MS);
