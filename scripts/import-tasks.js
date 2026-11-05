@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* use the environment */ }
+require('../load-env').loadEnv(ROOT);
 const { parseTasksMd } = require('../tasks-md');
 const { createTeamStore } = require('../team-store');
 const { validateNewTask } = require('../team-store/tasks');

@@ -20,7 +20,9 @@ const ReBACEngine = require('./rebac-engine');
 
 // Per-person settings (paths, name) live in .env next to this file, so each
 // teammate runs the same code with their own values. See .env.example.
-try { process.loadEnvFile(path.join(__dirname, '.env')); } catch { /* no .env: defaults */ }
+// Secrets (e.g. SUPABASE_PASSWORD) can live in a separate file named by
+// SECRETS_ENV_FILE, so they stay in the secrets folder (load-env.js).
+require('./load-env').loadEnv(__dirname);
 
 const PORT = process.env.PORT || 8787;
 // Loopback only: the Cloudflare tunnel and every local caller (telemetry,

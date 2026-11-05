@@ -33,7 +33,9 @@ hard-coded. Templates: `.env.example` (read by `server.js` and
 `telemetry-daemon.ps1`) and `buzz-bridge/.env.example` (read by `bridge.js`).
 `OPERATOR_HOME` is required under LocalSystem - without it, agent runs and the
 telemetry brain dir resolve to the system profile. `BUZZ_OPERATORS` has no
-default: an empty value stops the bridge at startup.
+default: an empty value stops the bridge at startup. Secrets can stay in
+`04_internal\secrets`: `.env` names the file in `SECRETS_ENV_FILE`
+(`load-env.js`; `.env` wins on a clash; a missing file is logged by path).
 
 New teammate: `SETUP.md` (admin steps + teammate steps) and
 `install-teammate.ps1` (`-DryRun` first; elevated to install). The n8n
