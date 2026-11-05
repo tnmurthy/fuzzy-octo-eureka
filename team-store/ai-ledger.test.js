@@ -103,3 +103,10 @@ test('sends at most one batch per sync', async () => {
   assert.deepEqual(sent, [500]);
   assert.equal(state.sent, 500);
 });
+
+test('a paid call carries its cost to the team table; bad values become 0', () => {
+  assert.equal(toCallRow(call({ provider: 'anthropic', cost_usd: 0.4213 }), TEAM).cost_usd, 0.4213);
+  assert.equal(toCallRow(call(), TEAM).cost_usd, 0);
+  assert.equal(toCallRow(call({ cost_usd: -1 }), TEAM).cost_usd, 0);
+  assert.equal(toCallRow(call({ cost_usd: 'x' }), TEAM).cost_usd, 0);
+});
