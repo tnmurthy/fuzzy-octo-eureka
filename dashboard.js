@@ -83,7 +83,8 @@
       agents: 'id-nav-agents',
       infra: 'id-nav-infra',
       logs: 'id-nav-logs',
-      runs: 'id-nav-runs'
+      runs: 'id-nav-runs',
+      costs: 'id-nav-costs'
     };
 
     let currentSelectedAgent = 'po';
@@ -118,6 +119,10 @@
 
       if (tabId === 'runs') {
         loadAgentRuns();
+      }
+
+      if (tabId === 'costs') {
+        loadCosts();
       }
 
       if (tabId === 'dashboard') {
@@ -1151,6 +1156,77 @@
       if (tab && tab.classList.contains('active')) loadAgentRuns();
     }, RUNS_POLL_MS);
 
+    // ---------------------------------------------------------------------------
+    // Costs tab: GET /api/costs (team scope when team sync is on). Values from
+    // the ledger go in with textContent, never innerHTML.
+    // ---------------------------------------------------------------------------
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const fmtInt = (n) => Number(n || 0).toLocaleString();
+
+    function fillCostRows(tbodyId, groups, key) {
+      const body = document.getElementById(tbodyId);
+      if (!body) return;
+      body.replaceChildren();
+      if (!groups.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'No calls in this period.';
+        tr.append(td);
+        body.append(tr);
+        return;
+      }
+      for (const g of groups) {
+        const tr = document.createElement('tr');
+        for (const v of [g[key], fmtInt(g.calls), fmtInt(g.tokens), g.costUsd.toFixed(4)]) {
+          const td = document.createElement('td');
+          td.textContent = v;
+          tr.append(td);
+        }
+        body.append(tr);
+      }
+    }
+
+    function renderCosts(data) {
+      if (!data || !data.ok) {
+        setText('costs-source', (data && data.error) || 'Could not load costs.');
+        return;
+      }
+      const t = data.summary.totals;
+      setText('costs-paid', fmtInt(t.paidCalls));
+      setText('costs-local', fmtInt(t.localCalls));
+      setText('costs-tokens', fmtInt(t.inputTokens + t.outputTokens));
+      setText('costs-usd', `$${t.costUsd.toFixed(2)}`);
+      const scope = data.source === 'team' ? 'Whole team' : 'This machine';
+      setText('costs-source', `${scope}, last ${data.days} day(s)${data.note ? ` - ${data.note}` : ''}`);
+      const list = document.getElementById('costs-advice');
+      if (list) {
+        list.replaceChildren(...data.advice.map((text) => {
+          const li = document.createElement('li');
+          li.textContent = text;
+          return li;
+        }));
+      }
+      const a = data.auto;
+      setText('costs-auto', a.autoRuns
+        ? `Local-first: ${a.autoRuns} auto run(s), ${Math.round((a.localShare || 0) * 100)}% stayed local, ${a.escalated} escalated to claude.`
+        : 'Local-first: no auto runs yet.');
+      setText('costs-limits', data.limits
+        ? `Daily caps on paid calls: ${data.limits.member_daily_calls} per person, ${data.limits.team_daily_calls} per team. Used today: ${data.paidCallsToday}.`
+        : '');
+      fillCostRows('costs-by-purpose', data.summary.byPurpose, 'purpose');
+      fillCostRows('costs-by-model', data.summary.byModel, 'model');
+    }
+
+    function loadCosts() {
+      const days = (document.getElementById('costs-days') || {}).value || '7';
+      fetch(`/api/costs?days=${encodeURIComponent(days)}&scope=team`)
+        .then((r) => r.json())
+        .then(renderCosts)
+        .catch((err) => renderCosts({ ok: false, error: `Could not load costs: ${err.message}` }));
+    }
+
+    window.loadCosts = loadCosts;
     window.switchTab = switchTab;
     window.selectAgent = selectAgent;
     window.sendAgentMessage = sendAgentMessage;

@@ -33,6 +33,7 @@
               <li class="nav-item" onclick="switchTab('infra')"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
               <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
               <li class="nav-item" onclick="switchTab('runs')"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
+              <li class="nav-item" onclick="switchTab('costs')"><span class="nav-link" id="id-nav-costs">💰 Costs</span></li>
               <li class="nav-item" onclick="location.href='/team.html'"><span class="nav-link" id="id-nav-team">🗂️ Team (Org Chart)</span></li>
             </ul>
           </nav>
@@ -727,6 +728,60 @@
                   <tbody id="runs-body">
                     <tr><td colspan="8">Loading…</td></tr>
                   </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- ==================== COSTS TAB ==================== -->
+          <div id="costs" class="tab-content">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>AI Costs</h2>
+                <p>Every model call - local and paid - from the AI call ledger, with what to change to spend less.</p>
+              </div>
+              <label class="costs-days">Last
+                <select id="costs-days" onchange="loadCosts()">
+                  <option value="1">1 day</option>
+                  <option value="7" selected>7 days</option>
+                  <option value="30">30 days</option>
+                </select>
+              </label>
+            </section>
+            <section class="cost-tiles">
+              <div class="card cost-tile"><span class="cost-tile-label">Paid calls</span><span class="cost-tile-value" id="costs-paid">-</span></div>
+              <div class="card cost-tile"><span class="cost-tile-label">Local calls (free)</span><span class="cost-tile-value" id="costs-local">-</span></div>
+              <div class="card cost-tile"><span class="cost-tile-label">Tokens</span><span class="cost-tile-value" id="costs-tokens">-</span></div>
+              <div class="card cost-tile"><span class="cost-tile-label">Cost (USD)</span><span class="cost-tile-value" id="costs-usd">-</span></div>
+            </section>
+            <section class="card">
+              <div class="card-header">
+                <div class="card-title"><span class="card-title-icon">💡</span><h3>What to change</h3></div>
+                <span id="costs-source" class="card-subtitle"></span>
+              </div>
+              <ul id="costs-advice" class="costs-advice"><li>Loading…</li></ul>
+              <p id="costs-auto" class="costs-line"></p>
+              <p id="costs-limits" class="costs-line"></p>
+            </section>
+            <section class="card">
+              <div class="card-header">
+                <div class="card-title"><span class="card-title-icon">🧾</span><h3>By purpose</h3></div>
+              </div>
+              <div class="runs-table-wrap">
+                <table class="runs-table">
+                  <thead><tr><th>Purpose</th><th>Calls</th><th>Tokens</th><th>Cost (USD)</th></tr></thead>
+                  <tbody id="costs-by-purpose"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="card">
+              <div class="card-header">
+                <div class="card-title"><span class="card-title-icon">🏷️</span><h3>By model</h3></div>
+              </div>
+              <div class="runs-table-wrap">
+                <table class="runs-table">
+                  <thead><tr><th>Model</th><th>Calls</th><th>Tokens</th><th>Cost (USD)</th></tr></thead>
+                  <tbody id="costs-by-model"></tbody>
                 </table>
               </div>
             </section>

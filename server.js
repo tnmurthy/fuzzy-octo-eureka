@@ -103,7 +103,7 @@ const PERSONA_MAX_TOKENS = Number(process.env.PERSONA_MAX_TOKENS) || 400;
 // Every model call goes in logs/ai-calls.jsonl (the bridge appends its router
 // calls to the same file); team-store syncs it to Supabase when configured.
 const AI_CALLS_FILE = path.join(DASHBOARD_DIR, 'logs', 'ai-calls.jsonl');
-const { recordAiCall, ollamaUsage } = require('./team-store/ai-ledger');
+const { recordAiCall, readCalls, ollamaUsage } = require('./team-store/ai-ledger');
 function recordPersonaCall(purpose, ollamaBody, ok = true) {
   recordAiCall(AI_CALLS_FILE, { provider: 'ollama', model: PERSONA_MODEL, purpose, ok, ...ollamaUsage(ollamaBody) });
 }
@@ -427,9 +427,40 @@ function handleTasks(req, res) {
   return sendJson(res, 405, { ok: false, error: 'use GET, POST /api/tasks or PATCH /api/tasks/<id>' });
 }
 
+// Costs tab: what the AI cost in the last ?days (1-90, default 7), from the
+// local ledger or, with ?scope=team, the team's; plus advice on cutting it.
+const { summarizeCalls, paidCallsSince, autoStats, advice, fromTeamRow } = require('./team-store/costs');
+const MAX_COST_DAYS = 90;
+function handleCosts(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const days = Math.min(MAX_COST_DAYS, Math.max(1, Number(url.searchParams.get('days')) || 7));
+  const auto = autoStats(readRuns(RUNS_FILE, 1000).runs || []);
+  const midnight = new Date(new Date().toISOString().slice(0, 10)).getTime();
+  const respond = (source, calls, limits, note) => {
+    const summary = summarizeCalls(calls, { days });
+    const paidCallsToday = paidCallsSince(calls, midnight);
+    sendJson(res, 200, {
+      ok: true, source, days, summary, auto, limits, paidCallsToday,
+      advice: advice({ summary, auto, limits, paidCallsToday, localFirstEnabled: process.env.DISPATCH_LOCAL_FIRST === 'true' }),
+      ...(note ? { note } : {}),
+    });
+  };
+  const local = (note) => respond('local', readCalls(AI_CALLS_FILE), null, note);
+  if (teamStore && url.searchParams.get('scope') === 'team') {
+    Promise.all([teamStore.teamCalls(days), teamStore.teamLimits()])
+      .then(([rows, limits]) => respond('team', rows.map(fromTeamRow), limits))
+      .catch((err) => local(`team costs unavailable: ${err.message}`));
+    return;
+  }
+  return local();
+}
+
 function handleRequest(req, res) {
   if (req.url.startsWith('/api/telemetry')) {
     return serveJsonFile(res, TELEMETRY_FILE, {});
+  }
+  if (req.url.startsWith('/api/costs')) {
+    return handleCosts(req, res);
   }
   if (req.url.startsWith('/api/config')) {
     return sendJson(res, 200, { operatorName: OPERATOR_NAME, personaModel: PERSONA_MODEL });
