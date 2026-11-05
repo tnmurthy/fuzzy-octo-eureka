@@ -79,6 +79,13 @@ every object is prefixed `arunachala_`.
 - Costs: `GET /api/costs?days=7[&scope=team]` and the dashboard's Costs tab -
   paid vs local calls, tokens, cost by purpose and model, auto-run local
   share, caps, and advice (`team-store/costs.js`, pure + tested).
+- Dispatch context: `/api/dispatch/run` adds the top 3 memories for the repo
+  (plus global/all) to the prompt after the task, capped at 1500 chars,
+  looked up within 4 s (`dispatch-context.js`; `DISPATCH_MEMORY_CONTEXT=false`
+  turns it off).
+- Weekly digest: `GET /api/digest` text; the bridge posts it to its channels
+  Monday 09:00 IST when `BUZZ_DIGEST=true` (one bridge per team; state in
+  `logs/digest-state.json`; `digest.js`).
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)
