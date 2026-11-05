@@ -3,6 +3,11 @@
 
 const REQUEST_TIMEOUT_MS = 15000;
 
+function withQuery(table, query) {
+  const qs = Object.entries(query).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+  return qs ? `${table}?${qs}` : table;
+}
+
 function createRest({ url, key, session, fetch = globalThis.fetch }) {
   async function request(table, path, init) {
     const { token } = await session.getToken();
@@ -40,8 +45,25 @@ function createRest({ url, key, session, fetch = globalThis.fetch }) {
       });
     },
     async select(table, query = {}) {
-      const qs = Object.entries(query).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-      const res = await request(table, qs ? `${table}?${qs}` : table, { method: 'GET' });
+      const res = await request(table, withQuery(table, query), { method: 'GET' });
+      return res.json();
+    },
+    async insert(table, rows) {
+      const res = await request(table, table, {
+        method: 'POST',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify(rows),
+      });
+      return res.json();
+    },
+    // filter: PostgREST operators, e.g. { id: 'eq.<uuid>' }. Returns the rows
+    // changed - empty when RLS hid the row or nothing matched.
+    async update(table, filter, patch) {
+      const res = await request(table, withQuery(table, filter), {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify(patch),
+      });
       return res.json();
     },
   };

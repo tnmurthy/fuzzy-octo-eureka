@@ -1,0 +1,275 @@
+{
+  "name": "buzz-dispatch",
+  "nodes": [
+    {
+      "id": "webhook1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "path": "buzz-dispatch",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "trigger1",
+      "name": "Trigger Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/api/dispatch/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"agent\": $json.body.agent, \"repo\": $json.body.repo, \"task\": $json.body.task } }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "respond1",
+      "name": "Respond with runId",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        80,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"runId\": $json.runId, \"ok\": $json.ok } }}"
+      }
+    },
+    {
+      "id": "wait1",
+      "name": "Wait before checking",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        0
+      ],
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "checkrun1",
+      "name": "Check run status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8787/api/runs",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "code1",
+      "name": "Find this run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const runId = $('Trigger Dispatch').first().json.runId;\nconst runs = $input.first().json.runs || [];\nconst run = runs.find(r => r.id === runId);\nconst done = !!run && run.status !== 'running';\nreturn [{ json: { runId, done, run: run || null } }];"
+      }
+    },
+    {
+      "id": "if1",
+      "name": "Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "setmsg1",
+      "name": "Build notify text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1280,
+        -120
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "text",
+              "type": "string",
+              "value": "={{ 'Run ' + $json.runId + ' ' + $json.run.status + ($json.run.head ? ' at ' + $json.run.head : '') + ($json.run.commits_ahead ? ' (' + $json.run.commits_ahead + ' commit(s))' : '') + '.' }}"
+            },
+            {
+              "id": "a2",
+              "name": "runId",
+              "type": "string",
+              "value": "={{ $json.runId }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "notify1",
+      "name": "Notify bridge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3100/notify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"runId\": $json.runId, \"text\": $json.text } }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Trigger Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Respond with runId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond with runId": {
+      "main": [
+        [
+          {
+            "node": "Wait before checking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait before checking": {
+      "main": [
+        [
+          {
+            "node": "Check run status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check run status": {
+      "main": [
+        [
+          {
+            "node": "Find this run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find this run": {
+      "main": [
+        [
+          {
+            "node": "Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done?": {
+      "main": [
+        [
+          {
+            "node": "Build notify text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait before checking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build notify text": {
+      "main": [
+        [
+          {
+            "node": "Notify bridge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

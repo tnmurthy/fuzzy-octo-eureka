@@ -5,7 +5,7 @@
 
 const path = require('path');
 
-const AGENTS = new Set(['claude', 'codex', 'agy', 'hermes', 'noop']);
+const AGENTS = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto']);
 // Dispatcher wording -> the table's allowed statuses. 'stale' is the reader's
 // own label for a run that lost its end line; the row stays 'running'.
 const STATUS = { running: 'running', stale: 'running', done: 'done', failed: 'failed', timed_out: 'timeout' };
@@ -27,6 +27,7 @@ function toRow(run, teamId) {
     head: run.head || null,
     started_at: run.started_at || null,
     finished_at: run.finished_at || null,
+    escalated: typeof run.escalated === 'boolean' ? run.escalated : null,
   };
 }
 

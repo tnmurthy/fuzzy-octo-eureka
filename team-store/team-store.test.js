@@ -226,3 +226,28 @@ test('insertIgnoringDuplicates posts with ignore-duplicates on the given key', a
   assert.equal(c.url, `${URL}/rest/v1/arunachala_ai_calls?on_conflict=client_id`);
   assert.match(c.init.headers.Prefer, /resolution=ignore-duplicates/);
 });
+
+test('insert returns the created rows', async () => {
+  const fetch = fakeFetch([{ status: 201, json: [{ id: 'u1', title: 'x' }] }]);
+  const rest = createRest({ url: URL, key: KEY, session, fetch });
+  assert.deepEqual(await rest.insert('arunachala_tasks', [{ title: 'x' }]), [{ id: 'u1', title: 'x' }]);
+  assert.equal(fetch.calls[0].url, `${URL}/rest/v1/arunachala_tasks`);
+  assert.match(fetch.calls[0].init.headers.Prefer, /return=representation/);
+});
+
+test('update patches rows matching the filter and returns them', async () => {
+  const fetch = fakeFetch([{ status: 200, json: [{ id: 'u1', status: 'done' }] }]);
+  const rest = createRest({ url: URL, key: KEY, session, fetch });
+  const rows = await rest.update('arunachala_tasks', { id: 'eq.u1' }, { status: 'done' });
+  assert.deepEqual(rows, [{ id: 'u1', status: 'done' }]);
+  assert.equal(fetch.calls[0].url, `${URL}/rest/v1/arunachala_tasks?id=eq.u1`);
+  assert.equal(fetch.calls[0].init.method, 'PATCH');
+  assert.deepEqual(fetch.calls[0].body, { status: 'done' });
+});
+
+test('an auto run syncs with whether it escalated to claude', () => {
+  const row = toRow(run({ agent: 'auto', escalated: false }), TEAM);
+  assert.equal(row.agent, 'auto');
+  assert.equal(row.escalated, false);
+  assert.equal(toRow(run(), TEAM).escalated, null);
+});
