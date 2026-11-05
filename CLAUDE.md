@@ -76,6 +76,9 @@ every object is prefixed `arunachala_`.
   (measured 64k -> 39k context tokens). `--output-format json` output goes to
   `<runId>.claude.json`; `claude-usage.mjs` writes tokens + `cost_usd` to the
   AI ledger (provider `anthropic`, purpose `dispatch`) and prints the result.
+- Costs: `GET /api/costs?days=7[&scope=team]` and the dashboard's Costs tab -
+  paid vs local calls, tokens, cost by purpose and model, auto-run local
+  share, caps, and advice (`team-store/costs.js`, pure + tested).
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)

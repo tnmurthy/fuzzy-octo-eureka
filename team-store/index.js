@@ -19,6 +19,7 @@ const RUNS_SYNC_LIMIT = 1000;
 const TEAM_RUNS_LIMIT = 50;
 const TEAM_MEMORY_LIMIT = 500;
 const TEAM_TASKS_LIMIT = 300;
+const TEAM_CALLS_LIMIT = 10000;
 const REQUIRED = ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_EMAIL', 'SUPABASE_PASSWORD', 'TEAM_ID'];
 
 function readState(file) {
@@ -129,6 +130,18 @@ function createTeamStore(env, {
     async createTask(task) {
       const [row] = await rest.insert('arunachala_tasks', [{ ...task, team_id: teamId }]);
       return row;
+    },
+    // The team's AI calls in the last `days` days, for the Costs tab.
+    async teamCalls(days) {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      return rest.select('arunachala_ai_calls', {
+        team_id: `eq.${teamId}`, created_at: `gte.${since}`, order: 'created_at.asc', limit: String(TEAM_CALLS_LIMIT),
+        select: 'owner,provider,model,purpose,ok,input_tokens,output_tokens,cost_usd,created_at',
+      });
+    },
+    async teamLimits() {
+      const rows = await rest.select('arunachala_ai_limits', { team_id: `eq.${teamId}` });
+      return rows[0] || null;
     },
     // Resolves to the moved row, or null when no visible task has that id.
     async moveTask(id, status) {
