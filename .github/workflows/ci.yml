@@ -24,18 +24,24 @@ jobs:
         run: npm test
       - name: Dependency Security Audit
         run: npm audit --audit-level=high || true
-      - name: Verify PowerShell Telemetry Script Syntax
+      - name: Verify PowerShell Script Syntax
         shell: pwsh
         run: |
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path ./telemetry-daemon.ps1), [ref]$null, [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Host "::error::$_" }
-            exit 1
+          foreach ($script in './telemetry-daemon.ps1', './install-teammate.ps1') {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script), [ref]$null, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Host "::error::${script}: $_" }
+              exit 1
+            }
+            if (Select-String -Path $script -Pattern '[^\x00-\x7F]' -Quiet) {
+              Write-Host "::error::${script}: non-ASCII characters break Windows PowerShell 5.1"
+              exit 1
+            }
+            Write-Host "${script}: no syntax errors, ASCII only."
           }
-          Write-Host "telemetry-daemon.ps1: no syntax errors."
 
       - name: Agent stats tests
         shell: pwsh
