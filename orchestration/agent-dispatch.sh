@@ -3,7 +3,7 @@
 #
 #   orchestration/agent-dispatch.sh <agent> <repo> <branch> <prompt-file>
 #
-#   agent   claude | codex | agy | hermes | noop
+#   agent   claude | codex | agy | hermes | noop | auto
 #   repo    path to the git repository the task is in
 #   branch  the branch the agent works on; a worktree is made for it beside
 #           the repo as <repo>--<branch-with-slashes-as-dashes>
@@ -15,6 +15,14 @@
 # agy runs in plan mode: review only. Headless, it cannot ask for tool
 # permissions, so put the files it should review into the prompt itself.
 # `noop` echoes the prompt; it exists to exercise this script.
+#
+# `auto` tries the local agent first and escalates to claude only when it has
+# to: LOCAL_AGENT (default hermes, a local model) works the task, then the
+# repo's tests decide - the one-line command in <repo>/.arunachala-test, else
+# `npm test` when package.json has a test script. Tests pass: done, no
+# frontier tokens spent. Tests fail, the local agent fails, or the repo has no
+# tests to check it with: the worktree is reset to where it started and claude
+# takes over. The run's end line records escalated:=true|false.
 set -euo pipefail
 
 RUNS_DIR="${AGENT_RUNS_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)/04_internal/agent-runs}"
@@ -53,7 +61,7 @@ agent="$1"; repo="$(cd "$2" && pwd)"; branch="$3"; prompt_file="$4"
 # /api/dispatch/run, and n8n/bridge.js polling for it) knows the id up
 # front instead of having to scrape it from this script's stdout.
 run_id_override="${5:-}"
-case "$agent" in claude|codex|agy|hermes|noop) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
+case "$agent" in claude|codex|agy|hermes|noop|auto) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
 [ -f "$prompt_file" ] || { echo "no prompt file: $prompt_file" >&2; exit 2; }
 # This git build's -C does not accept a posix (/c/...) path - it needs the
 # native C:\... form, or it fails with "cannot change to ...: No such file
@@ -63,7 +71,11 @@ case "$agent" in claude|codex|agy|hermes|noop) ;; *) echo "unknown agent: $agent
 native() { cygpath -w "$1" 2>/dev/null || printf '%s' "$1"; }
 git -C "$(native "$repo")" rev-parse --git-dir >/dev/null
 # Resolve before any worktree or run record exists, so a missing CLI fails fast.
-[ "$agent" = hermes ] && { HERMES="$(resolve_hermes)" || exit 2; }
+LOCAL_AGENT="${LOCAL_AGENT:-hermes}"
+LOCAL_TIMEOUT_SECONDS="${LOCAL_TIMEOUT:-900}"
+TEST_TIMEOUT_SECONDS="${TEST_TIMEOUT:-900}"
+{ [ "$agent" = hermes ] || { [ "$agent" = auto ] && [ "$LOCAL_AGENT" = hermes ]; }; } \
+  && { HERMES="$(resolve_hermes)" || exit 2; }
 
 # --- worktree -----------------------------------------------------------------
 worktree="$(dirname "$repo")/$(basename "$repo")--${branch//\//-}"
@@ -115,17 +127,69 @@ node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$r
   task="$(head -c 160 "$prompt_file" | tr '\r\n' '  ')" started_at="$(date -Iseconds)"
 
 export AGENT_NAME="$agent"
+
+# One agent, one attempt, in the worktree; output to stdout.
+run_agent() {
+  local who="$1" limit="$2"
+  case "$who" in
+    claude) (cd "$worktree" && timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
+               --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS") ;;
+    codex)  timeout "$limit" codex exec -C "$worktree" -s workspace-write \
+               ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
+    agy)    (cd "$worktree" && timeout "$limit" agy --mode plan --disable-slash-commands \
+               --print-timeout "${limit}s" --prompt="$prompt") ;;
+    hermes) timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt" ;;
+    noop)   printf '%s\n' "$prompt" ;;
+    *)      echo "unknown agent: $who"; return 2 ;;
+  esac
+}
+
+# The repo's own check for `auto`: .arunachala-test, else an npm test script.
+test_command() {
+  if [ -f "$worktree/.arunachala-test" ]; then
+    head -n 1 "$worktree/.arunachala-test" | tr -d '\r'
+  elif [ -f "$worktree/package.json" ] && node -e "process.exit(require(process.argv[1]).scripts?.test ? 0 : 1)" \
+         "$(native "$worktree/package.json")" 2>/dev/null; then
+    echo "npm test"
+  fi
+}
+
+run_auto() {
+  local start_sha tests rc
+  start_sha="$(git -C "$(native "$worktree")" rev-parse HEAD)"
+  tests="$(test_command)"
+  escalated=true
+  if [ -z "$tests" ]; then
+    echo "== auto: no tests to check a local attempt with - going straight to claude"
+  else
+    echo "== auto: local attempt with $LOCAL_AGENT (tests: $tests)"
+    run_agent "$LOCAL_AGENT" "$LOCAL_TIMEOUT_SECONDS"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      echo "== auto: $LOCAL_AGENT finished - running tests"
+      (cd "$worktree" && timeout "$TEST_TIMEOUT_SECONDS" bash -c "$tests"); rc=$?
+      if [ "$rc" -eq 0 ]; then
+        echo "== auto: tests pass - no escalation"
+        escalated=false
+        return 0
+      fi
+      echo "== auto: tests failed (exit $rc) - escalating to claude"
+    else
+      echo "== auto: $LOCAL_AGENT failed (exit $rc) - escalating to claude"
+    fi
+    # Throw away the local attempt; gitignored files (.env copies) survive.
+    git -C "$(native "$worktree")" reset -q --hard "$start_sha"
+    git -C "$(native "$worktree")" clean -q -fd
+  fi
+  run_agent claude "$TIMEOUT_SECONDS"
+}
+
+escalated=""
 set +e
-case "$agent" in
-  claude) (cd "$worktree" && timeout "$TIMEOUT_SECONDS" claude -p "$prompt" --permission-mode acceptEdits \
-             --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS") ;;
-  codex)  timeout "$TIMEOUT_SECONDS" codex exec -C "$worktree" -s workspace-write \
-             ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
-  agy)    (cd "$worktree" && timeout "$TIMEOUT_SECONDS" agy --mode plan --disable-slash-commands \
-             --print-timeout "${TIMEOUT_SECONDS}s" --prompt="$prompt") ;;
-  hermes) timeout "$TIMEOUT_SECONDS" "$HERMES" --in "$worktree" -z "$prompt" ;;
-  noop)   printf '%s\n' "$prompt" ;;
-esac > "$log" 2>&1
+if [ "$agent" = auto ]; then
+  run_auto > "$log" 2>&1   # same shell, so escalated= stands
+else
+  run_agent "$agent" "$TIMEOUT_SECONDS" > "$log" 2>&1
+fi
 exit_code=$?
 set -e
 
@@ -137,7 +201,7 @@ status=done
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" status="$status" \
   exit_code:="$exit_code" duration_s:="$(( $(date +%s) - started ))" \
   commits_ahead:="$commits" head="$(git -C "$(native "$worktree")" rev-parse --short HEAD)" \
-  finished_at="$(date -Iseconds)"
+  finished_at="$(date -Iseconds)" ${escalated:+escalated:="$escalated"}
 
 echo "$run_id $status (exit $exit_code) log: $log"
 exit "$exit_code"

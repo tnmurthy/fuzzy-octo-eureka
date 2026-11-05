@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test access-auth.test.js runs-reader.test.js buzz-bridge/buzz-protocol.test.js buzz-bridge/handler.test.js buzz-bridge/router.test.js buzz-bridge/typesafe-client.test.js buzz-bridge/local-router-client.test.js buzz-bridge/router-fallback.test.js buzz-bridge/pending-store.test.js team-store/team-store.test.js team-store/ai-ledger.test.js team-store/memory-tasks.test.js"
+    "test": "node --test access-auth.test.js runs-reader.test.js buzz-bridge/buzz-protocol.test.js buzz-bridge/handler.test.js buzz-bridge/router.test.js buzz-bridge/typesafe-client.test.js buzz-bridge/local-router-client.test.js buzz-bridge/router-fallback.test.js buzz-bridge/pending-store.test.js team-store/team-store.test.js team-store/ai-ledger.test.js team-store/memory-tasks.test.js orchestration/agent-dispatch.test.js embeddings.test.js"
   },
   "engines": {
     "node": ">=18"

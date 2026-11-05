@@ -67,6 +67,29 @@ if (teamStore) teamStore.start();
 const { parseTasksMd } = require('./tasks-md');
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 
+// Memory search by meaning: local nomic-embed-text embeddings, cached on
+// disk; keyword scoring when Ollama is down or MEMORY_EMBEDDINGS=false.
+const { createEmbedder } = require('./embeddings');
+const { semanticSearch, docText } = require('./memory-search');
+const embedder = process.env.MEMORY_EMBEDDINGS === 'false' ? null : createEmbedder({
+  model: process.env.EMBED_MODEL || 'nomic-embed-text',
+  cacheFile: path.join(DASHBOARD_DIR, 'logs', 'embeddings-cache.json'),
+  onCall: (call) => recordAiCall(AI_CALLS_FILE, call),
+});
+function searchMemory(entries, query, options) {
+  if (!embedder) return Promise.resolve({ ranker: 'keywords', results: memory.searchEntries(entries, query, options) });
+  return semanticSearch({ engine: memory, embedder, entries, query, options });
+}
+// Warm the cache for local memories in the background, so the first
+// search does not pay for embedding every entry.
+const EMBED_WARMUP_DELAY_MS = 15000;
+if (embedder) {
+  setTimeout(() => {
+    embedder.embedDocuments(memory.episodicMemory.map(docText))
+      .catch((err) => console.error(`embedding warm-up skipped: ${err.message}`));
+  }, EMBED_WARMUP_DELAY_MS);
+}
+
 const OLLAMA_HOST = '127.0.0.1';
 const OLLAMA_PORT = 11434;
 // Persona chat model. gemma3:4b answers at ~6.5 tok/s on this CPU-only box;
@@ -541,23 +564,25 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/memory/search')) {
     const parsedUrl = new URL(req.url, 'http://localhost:8787');
     const query = parsedUrl.searchParams.get('q') || '';
-    const tenantId = parsedUrl.searchParams.get('tenant') || 'tenant:drisyon_core';
-    const projectId = parsedUrl.searchParams.get('project') || null;
-    if (teamStore && parsedUrl.searchParams.get('scope') === 'team') {
-      // Every teammate's memory, ranked with the same scoring as local search.
-      teamStore.teamMemories()
-        .then((entries) => {
-          const results = memory.searchEntries(entries, query, { tenantId, projectId, topK: 10 });
-          sendJson(res, 200, { ok: true, source: 'team', count: results.length, memories: results });
-        })
-        .catch((err) => {
-          const results = memory.search(query, { tenantId, projectId, topK: 10 });
-          sendJson(res, 200, { ok: true, source: 'local', note: `team memory unavailable: ${err.message}`, count: results.length, memories: results });
-        });
-      return;
-    }
-    const results = memory.search(query, { tenantId, projectId, topK: 10 });
-    return sendJson(res, 200, { ok: true, count: results.length, memories: results });
+    const options = {
+      tenantId: parsedUrl.searchParams.get('tenant') || 'tenant:drisyon_core',
+      projectId: parsedUrl.searchParams.get('project') || null,
+      topK: 10,
+    };
+    const wantTeam = teamStore && parsedUrl.searchParams.get('scope') === 'team';
+    // ?scope=team: every teammate's memory (local if the team store fails).
+    const source = wantTeam
+      ? teamStore.teamMemories().then((entries) => ({ source: 'team', entries }))
+        .catch((err) => ({ source: 'local', entries: memory.episodicMemory, note: `team memory unavailable: ${err.message}` }))
+      : Promise.resolve({ source: 'local', entries: memory.episodicMemory });
+    source
+      .then(({ source: from, entries, note }) => searchMemory(entries, query, options)
+        .then((out) => sendJson(res, 200, {
+          ok: true, source: from, ranker: out.ranker, count: out.results.length, memories: out.results,
+          ...((note || out.note) ? { note: [note, out.note].filter(Boolean).join('; ') } : {}),
+        })))
+      .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
+    return;
   }
   if (req.url.startsWith('/api/memory/store') && req.method === 'POST') {
     let body = '';
@@ -604,8 +629,11 @@ function handleRequest(req, res) {
       } catch (e) {
         return sendJson(res, 400, { ok: false, error: `bad JSON: ${e.message}` });
       }
-      const { agent, repo, branch, task } = payload;
-      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop']);
+      const { repo, branch, task } = payload;
+      // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
+      // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
+      const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
+      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto']);
       if (!allowedAgents.has(agent)) {
         return sendJson(res, 400, { ok: false, error: `unknown agent: ${agent}` });
       }

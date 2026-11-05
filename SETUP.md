@@ -1,145 +1,128 @@
-# Arunachala Dashboard — Team Setup (Centralized Model)
+# Arunachala - Team Setup
 
-This describes Option 2: the heavy infrastructure (n8n, Ollama, Buzz relay) runs
-once on a shared host. Each teammate only runs a thin client that points at it.
-One admin maintains the shared box; everyone else's setup is minutes, not hours.
+Every teammate runs their **own** install on their own Windows machine, with
+their own keys and logins. What the team shares lives in one place: the
+`arunachala_*` tables in the Talia Supabase project (agent runs, AI call
+ledger, memory, task board) and the mytestbed Buzz relay.
 
-## Roles
+| Runs on each laptop (yours) | Shared by the team |
+|---|---|
+| Dashboard, Buzz bridge, telemetry (3 Windows services) | Supabase `arunachala_*` tables, row-level security per team |
+| Ollama + local models (routing, personas, embeddings) | Buzz relay `buzz.mytestbed.tech`, channels |
+| n8n with the `buzz-dispatch` workflow | |
+| Your own Claude / Codex logins and API keys | Daily caps on paid AI calls (per person + team) |
 
-- **Admin (one person)** — runs the shared stack: n8n, Ollama, Buzz relay,
-  the dashboard server, agent-dispatch. Owns credentials, uptime, updates.
-- **Teammate** — clones this repo, points their local `buzz-bridge` config at
-  the admin's shared URLs, talks to Buzz from their own machine.
+Nobody holds a Supabase service key: each person signs in as themselves, and
+the database only lets them read their team's rows and write their own.
 
 ---
 
-## Part A — Admin: stand up the shared stack
+## Part A - Admin, once per new teammate (about 10 minutes)
 
-Do this once, on whichever machine/server will host the shared services.
-Needs to be reachable by every teammate's machine (same LAN, VPN, or a
-tunnel like Cloudflare Tunnel / Tailscale if remote).
+1. **Supabase user.** Talia project → Authentication → Add user → their
+   email + a temporary password, tick *Auto confirm*.
+2. **Team membership.** SQL editor (replace the three values):
+
+   ```sql
+   insert into public.arunachala_team_members (team_id, user_id, display_name, buzz_pubkey, role)
+   select 'fc4a173d-e64a-4324-b26f-4ef786427e26', id, 'Ravi', '<their 64-hex Buzz pubkey>', 'member'
+   from auth.users where email = 'ravi@example.com';
+   ```
+
+3. **Buzz relay.** Add their Buzz identity, then their bot's once it exists
+   (the bridge prints its npub on first start):
+
+   ```powershell
+   docker exec buzz-prod-relay-1 buzz-admin add-member --pubkey <hex> --role member
+   ```
+
+4. **Send them** (none of these are secrets): Supabase URL
+   `https://onsmkbwqucvbzggugmmn.supabase.co`, the publishable key
+   (`sb_publishable_...`), `TEAM_ID`, and the Buzz channel id(s).
+
+---
+
+## Part B - Teammate (30-60 minutes, mostly downloads)
 
 ### 1. Prerequisites
-- Docker Desktop (or Docker Engine) running
-- Node.js 18+
-- git-bash on Windows (or just bash on Linux/Mac) — `agent-dispatch.sh` needs a
-  real bash, not PowerShell/cmd
-- Ollama installed: https://ollama.com
 
-### 2. Clone and configure
-```bash
-git clone <this-repo-url>
-cd arunachala-dashboard
-cp .env.example .env        # fill in real values, never commit this file
+Windows 11, 12 GB RAM or more (16 recommended). In PowerShell:
+
+```powershell
+winget install OpenJS.NodeJS.LTS Git.Git NSSM.NSSM Docker.DockerDesktop Ollama.Ollama
 ```
 
-Key values in `.env` (admin-only, do not share these literal values):
-- `PORT` — dashboard server port (default 8787)
-- `AGENT_RUNS_FILE` — where run history is recorded (default `logs/runs.jsonl`)
-- Buzz relay token/identity
-- n8n basic-auth / owner credentials (set on first n8n login, not in `.env`)
+Sign in to the agent CLIs you will dispatch to (`claude`, `codex`) as yourself.
 
-### 3. Start Ollama and pull models
-```bash
-ollama serve &
-ollama pull gemma3:4b
-ollama pull qwen3.5
+### 2. Get the code and check
+
+```powershell
+git clone https://github.com/tnmurthy/fuzzy-octo-eureka.git C:\tt-ai-stack\01_projects\active\arunachala-dashboard
+cd C:\tt-ai-stack\01_projects\active\arunachala-dashboard
+powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 -DryRun
 ```
-Confirm it's reachable from other machines if hosting remotely — bind to
-`0.0.0.0` instead of `127.0.0.1` and open port 11434 on the firewall if needed.
 
-### 4. Start n8n
-```bash
-cd n8n
-docker compose up -d
+The dry run changes nothing; it lists what is missing and what it would do.
+
+### 3. Install (elevated PowerShell)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 `
+  -SupabaseUrl https://onsmkbwqucvbzggugmmn.supabase.co -SupabaseKey sb_publishable_... `
+  -TeamId <from admin> -BuzzChannels <from admin>
 ```
-Visit `http://<admin-host>:5678`, create the owner account, then generate an
-API key (Settings → API). Import `buzz-dispatch-workflow.json` and activate it.
-Update the workflow's HTTP Request nodes if the dashboard isn't on the same
-host as n8n — replace `host.docker.internal:8787` with the dashboard's real
-reachable address.
 
-### 5. Start the dashboard + bridge
-```bash
-cd arunachala-dashboard
-node server.js          # or install as a Windows service (NSSM) / systemd unit
-cd buzz-bridge
-node bridge.js
+It pulls the local models, asks for your name, Buzz pubkey, a **unique bot
+name** and your Supabase email + password (typed hidden, stored only in your
+gitignored `.env`), installs the three services as LocalSystem, starts n8n on
+`127.0.0.1:5678` and imports the dispatch workflow. Re-running is safe.
+
+### 4. Finish in n8n
+
+Open http://127.0.0.1:5678, create the owner account, open **buzz-dispatch**
+and switch it to **Active**. (It polls `/api/runs` every 10 s until the run
+ends, then calls the bridge's `/notify`.)
+
+### 5. First message
+
+In Buzz, switch to the **mytestbed** community, open your team channel, type
+`@`, **pick your bot from the popup**, and send:
+
 ```
-For production, register these as services so they survive reboots:
-- Windows: NSSM (`nssm install ArunachalaDashboard ...`)
-- Linux: systemd unit files
+@<your bot> run noop in arunachala-dashboard: hello
+```
 
-### 6. Expose to the team
-Decide how teammates reach the admin host:
-- Same LAN: share the admin machine's local IP (e.g. `192.168.1.50`)
-- Remote: set up a Cloudflare Tunnel or Tailscale and share that hostname
-
-Write down three URLs you'll hand to every teammate:
-- `BUZZ_RELAY_URL` (port 3000)
-- `N8N_WEBHOOK_URL` (e.g. `http://<admin-host>:5678/webhook/buzz-dispatch`)
-- `OLLAMA_URL` (port 11434) — only needed if teammates run their own
-  bridge instance that calls the shared model directly
+You should get an acknowledgement with a run id, then "finished" in the same
+thread. Your run also appears for the team at `/api/runs?scope=team`.
 
 ---
 
-## Part B — Teammate: connect to the shared stack
+## Optional settings (`.env`)
 
-Each teammate does this on their own machine. No Docker, no Ollama, no n8n
-required locally — just Node and git.
+| Setting | Default | Use |
+|---|---|---|
+| `DISPATCH_LOCAL_FIRST` | `false` | `true`: claude requests try the local agent first; claude runs only if the repo's tests fail. Repos opt in with a `.arunachala-test` file (one-line test command) or an npm test script. |
+| `PERSONA_MODEL` | `gemma3:4b` | `qwen2.5:7b` only with a GPU - on CPU it is 2x slower and overruns the 45 s chat timeout. |
+| `MEMORY_EMBEDDINGS` | `true` | `false` falls back to keyword memory search. |
 
-### 1. Prerequisites
-- Node.js 18+
-- git
+All settings: `.env.example` and `buzz-bridge/.env.example`.
 
-### 2. Clone
-```bash
-git clone <this-repo-url>
-cd arunachala-dashboard/buzz-bridge
-cp .env.example .env
-```
+## Troubleshooting
 
-### 3. Fill in `.env` with the admin's shared URLs
-```
-BUZZ_RELAY_URL=<from admin>
-N8N_WEBHOOK_URL=<from admin>
-OLLAMA_URL=<from admin>           # if bridge calls the model directly
-BRIDGE_NOTIFY_PORT=3100           # local port the bridge listens on for n8n callbacks
-```
-Ask the admin for your own Buzz identity/token — never reuse someone else's.
+| Symptom | Cause | Fix |
+|---|---|---|
+| Bot never answers, nothing in `logs\buzz-bridge.out.log` | Posted in another community (e.g. drisyon-ai) or another channel | Use the mytestbed channel whose id is in `BUZZ_BOT_CHANNELS` |
+| Log says `Skipped ...: bot not mentioned` | Bot name typed as text | Pick the bot from the `@` popup |
+| `team-store off: missing SUPABASE_PASSWORD` in `logs\server.err.log` | Team sync not configured | Add it to `.env`, restart `ArunachalaDashboard` |
+| Dispatch accepted but no run in the Agent Runs tab | The script failed silently (detached) | Check `04_internal\agent-runs\<run id>.log`; usually a missing CLI login |
+| Service will not start after switching it to your account | Windows Hello-only sign-in rejects the password | Keep LocalSystem; `OPERATOR_HOME` gives agents your profile |
+| Agent CLIs not found in a run | Installed outside `%APPDATA%\npm` (claude) or `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` (codex) | Reinstall to the default location - those are the folders the dispatch adds to `PATH` |
 
-### 4. Run the bridge
-```bash
-node bridge.js
-```
-This is the only process a teammate needs running locally. It connects
-to the shared Buzz relay, forwards your messages, and receives notify
-callbacks from the shared n8n instance when a dispatched agent finishes.
+## Costs and limits
 
-### 5. Verify
-- Send a message to Buzz. You should get a response within ~60s (or the
-  fallback message if the model is slow/unavailable).
-- Ask Buzz to do something that triggers a dispatch (e.g. "check the repo
-  status"). You should get a follow-up message once the agent run completes —
-  this confirms the notify callback reached your machine.
-
-If step 5 doesn't respond at all: check `BUZZ_RELAY_URL` is reachable
-(`curl <BUZZ_RELAY_URL>/health` or similar) and that your bridge process is
-actually running, not crashed on startup.
-
----
-
-## Notes / known gotchas
-
-- **Windows path handling**: `agent-dispatch.sh` uses `git -C <path>` with
-  native Windows paths, not MSYS `/c/...` paths. If you see git errors about
-  "cannot change to" a directory, check the path format being passed.
-- **Credentials never go in git**: `.env`, n8n API keys, Buzz tokens are all
-  gitignored. If you accidentally commit one, rotate it immediately.
-- **One shared n8n/Ollama instance means one point of failure.** If the admin's
-  box goes down, dispatch and the local model stop working for everyone.
-  Acceptable for a small team; revisit if this becomes business-critical.
-- **Scaling note**: if more than a handful of people start dispatching agents
-  concurrently, watch Ollama's queue — one shared GPU/CPU serves everyone's
-  requests serially-ish. Consider a beefier host or per-team-sharding if it
-  becomes a bottleneck.
+- Local calls (routing, personas, embeddings) are free and logged with
+  `provider = ollama`; they never count towards caps.
+- Paid calls are capped per person (200/day) and per team (1000/day) in the
+  database (`arunachala_ai_limits`, owners can change them).
+- Every call - local or paid - is in `arunachala_ai_calls`: tokens, time,
+  purpose. Look there before deciding what to optimise.
