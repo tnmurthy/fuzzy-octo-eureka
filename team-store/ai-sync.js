@@ -19,6 +19,7 @@ function toCallRow(c, teamId) {
     input_tokens: n(c.input_tokens),
     output_tokens: n(c.output_tokens),
     ms: c.ms == null ? null : n(c.ms),
+    cost_usd: Number.isFinite(Number(c.cost_usd)) && Number(c.cost_usd) >= 0 ? Number(c.cost_usd) : 0,
     created_at: c.at,
   };
 }

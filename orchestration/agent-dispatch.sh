@@ -35,6 +35,17 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # merges. Override with CLAUDE_ALLOWED_TOOLS for a different task shape.
 CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-Read Edit Write Glob Grep Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(supabase:*) Bash(node:*) Bash(ls:*) Bash(cat:*) Bash($HERE/db-lock.sh:*)}"
 CLAUDE_DENIED_TOOLS="${CLAUDE_DENIED_TOOLS:-Bash(git push:*) Bash(gh:*)}"
+# Model for dispatched claude runs: routine tasks do not need the account's
+# default (often the most expensive) model.
+CLAUDE_MODEL="${CLAUDE_MODEL:-sonnet}"
+# A run that cannot finish in this many turns is stuck, not slow.
+CLAUDE_MAX_TURNS="${CLAUDE_MAX_TURNS:-40}"
+# Lean context: no MCP servers, no skills, no user settings - a dispatched run
+# needs none of them. Measured here: 64k -> 39k tokens loaded before any work.
+CLAUDE_LEAN="${CLAUDE_LEAN:-true}"
+# The AI call ledger the dashboard syncs to the team; claude runs record their
+# real tokens and cost in it (claude-usage.mjs).
+AI_CALLS_FILE="${AI_CALLS_FILE:-$HERE/../logs/ai-calls.jsonl}"
 # Lets a run pick a model the login can use; empty means the CLI's default.
 CODEX_MODEL="${CODEX_MODEL:-}"
 
@@ -132,8 +143,7 @@ export AGENT_NAME="$agent"
 run_agent() {
   local who="$1" limit="$2"
   case "$who" in
-    claude) (cd "$worktree" && timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
-               --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS") ;;
+    claude) run_claude "$limit" ;;
     codex)  timeout "$limit" codex exec -C "$worktree" -s workspace-write \
                ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
     agy)    (cd "$worktree" && timeout "$limit" agy --mode plan --disable-slash-commands \
@@ -142,6 +152,21 @@ run_agent() {
     noop)   printf '%s\n' "$prompt" ;;
     *)      echo "unknown agent: $who"; return 2 ;;
   esac
+}
+
+# claude prints JSON (--output-format json) so its usage and cost can be
+# recorded; claude-usage.mjs logs them and prints the readable result. The
+# exit code is claude's, not node's.
+run_claude() {
+  local limit="$1" json="$RUNS_DIR/$run_id.claude.json" rc
+  local lean=()
+  [ "$CLAUDE_LEAN" = true ] && lean=(--strict-mcp-config --disable-slash-commands --setting-sources project,local)
+  (cd "$worktree" && timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
+     --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS" \
+     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format json "${lean[@]}") > "$json"
+  rc=$?
+  node "$(native "$HERE/claude-usage.mjs")" "$(native "$json")" "$(native "$AI_CALLS_FILE")" "$run_id"
+  return "$rc"
 }
 
 # The repo's own check for `auto`: .arunachala-test, else an npm test script.

@@ -71,6 +71,11 @@ every object is prefixed `arunachala_`.
   pass = done, fail / no tests = worktree reset and claude runs. End line
   records `escalated`. `DISPATCH_LOCAL_FIRST=true` turns claude requests into
   `auto` server-side. Tests: `orchestration/agent-dispatch.test.js` (stubs).
+- Claude runs: dispatched with `--model $CLAUDE_MODEL` (sonnet), `--max-turns`
+  (40) and, with `CLAUDE_LEAN=true`, no MCP servers / skills / user settings
+  (measured 64k -> 39k context tokens). `--output-format json` output goes to
+  `<runId>.claude.json`; `claude-usage.mjs` writes tokens + `cost_usd` to the
+  AI ledger (provider `anthropic`, purpose `dispatch`) and prints the result.
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)

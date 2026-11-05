@@ -23,6 +23,7 @@ esac
 const CLAUDE_STUB = `#!/usr/bin/env bash
 echo claude > fixed; git add -A; git -c user.email=t@t -c user.name=t commit -qm claude
 touch "$CLAUDE_MARK"
+echo '{"result":"done","is_error":false,"total_cost_usd":0.05,"duration_ms":1000,"num_turns":2,"usage":{"input_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":0,"output_tokens":20},"modelUsage":{"claude-sonnet-test":{}}}'
 `;
 
 function setup({ withTests }) {
@@ -46,6 +47,7 @@ function setup({ withTests }) {
 
 function dispatch(t, stubLocal) {
   const mark = path.join(t.dir, 'claude-ran');
+  const ledger = path.join(t.dir, 'ai-calls.jsonl');
   const res = spawnSync(BASH, [posix(SCRIPT), 'auto', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
     encoding: 'utf8',
     env: {
@@ -55,11 +57,13 @@ function dispatch(t, stubLocal) {
       HERMES_BIN: posix(path.join(t.bin, 'hermes-stub')),
       STUB_LOCAL: stubLocal,
       CLAUDE_MARK: posix(mark),
+      AI_CALLS_FILE: posix(ledger),
     },
   });
   const lines = fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   const worktree = path.join(t.dir, 'repo--task-x');
-  return { res, end: lines.at(-1), claudeRan: fs.existsSync(mark), worktree, log: fs.readFileSync(path.join(t.runs, 'run-1.log'), 'utf8') };
+  const calls = fs.existsSync(ledger) ? fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse) : [];
+  return { res, end: lines.at(-1), claudeRan: fs.existsSync(mark), worktree, calls, log: fs.readFileSync(path.join(t.runs, 'run-1.log'), 'utf8') };
 }
 
 test('auto: local fix passes the tests - claude never runs', () => {
@@ -68,6 +72,7 @@ test('auto: local fix passes the tests - claude never runs', () => {
   assert.equal(r.end.status, 'done');
   assert.equal(r.end.escalated, false);
   assert.equal(r.claudeRan, false);
+  assert.equal(r.calls.length, 0, 'no paid call when local passes');
   assert.equal(fs.readFileSync(path.join(r.worktree, 'fixed'), 'utf8').trim(), 'local');
 });
 
@@ -78,6 +83,13 @@ test('auto: local attempt fails the tests - reset, then claude', () => {
   assert.equal(r.claudeRan, true);
   assert.equal(fs.existsSync(path.join(r.worktree, 'junk.txt')), false, 'local attempt was not thrown away');
   assert.match(r.log, /tests failed .* escalating to claude/);
+  // the paid run is in the ledger with its real cost; the log stays readable
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.calls[0].provider, 'anthropic');
+  assert.equal(r.calls[0].cost_usd, 0.05);
+  assert.equal(r.calls[0].input_tokens, 110);
+  assert.equal(r.calls[0].run_id, 'run-1');
+  assert.match(r.log, /^done$/m);
 });
 
 test('auto: local agent errors - claude takes over', () => {

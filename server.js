@@ -667,6 +667,8 @@ function handleRequest(req, res) {
           stdio: 'ignore',
           env: Object.assign({}, process.env, {
             AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
+            // claude runs record their real tokens and cost in the same ledger.
+            AI_CALLS_FILE,
             // Service runs under LocalSystem, whose PATH may not include
             // node's install dir, so agent-dispatch.sh's bare `node` calls
             // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
