@@ -54,7 +54,10 @@ every object is prefixed `arunachala_`.
   dedupes). Local `ollama` calls are exempt from the paid-call caps.
 - Memory: new `drisyon-memory.json` entries sync to `arunachala_memory`
   (state = newest `createdAt` sent); `GET /api/memory/search?scope=team`
-  ranks the team's entries with the local scoring (`searchEntries`).
+  ranks the team's entries. Ranking is by meaning: local `nomic-embed-text`
+  embeddings (`embeddings.js`, cache `logs/embeddings-cache.json`, ~1 s cold /
+  6 ms warm), keyword `searchEntries` when Ollama is down or
+  `MEMORY_EMBEDDINGS=false`. Response field `ranker` says which ran.
 - Tasks: with team-store on, `/api/tasks` is the shared board
   (`POST /api/tasks` {title, project?, status?, link?}, `PATCH
   /api/tasks/<uuid>` {status}); falls back to read-only `TASKS.md`.
