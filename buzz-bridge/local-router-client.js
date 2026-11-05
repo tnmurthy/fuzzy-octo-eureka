@@ -129,7 +129,7 @@ function normalizeAnswers(raw, questions) {
 
 /**
  * @param {{ host?: string, port?: number, model?: string, timeoutMs?: number,
- *           fetch?: typeof fetch }} opts
+ *           fetch?: typeof fetch, onCall?: (call: object) => void }} opts
  */
 function createLocalRouterClient(opts = {}) {
   const host = opts.host || DEFAULT_HOST;
@@ -138,7 +138,32 @@ function createLocalRouterClient(opts = {}) {
   const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
   const fetchFn = opts.fetch || fetch;
 
+  // Reports every call (ok or not) for the AI call ledger; never throws.
+  function report(ok, body) {
+    if (!opts.onCall) return;
+    const b = body || {};
+    try {
+      opts.onCall({
+        provider: 'ollama', model, purpose: 'route', ok,
+        input_tokens: Number(b.prompt_eval_count) || 0,
+        output_tokens: Number(b.eval_count) || 0,
+        ms: b.total_duration ? Math.round(b.total_duration / 1e6) : null,
+      });
+    } catch { /* the ledger must not break routing */ }
+  }
+
   async function systemOne(request) {
+    try {
+      const { result, body } = await callModel(request);
+      report(true, body);
+      return result;
+    } catch (err) {
+      report(false, err.body);
+      throw err;
+    }
+  }
+
+  async function callModel(request) {
     const prompt = buildPrompt(request);
     let res;
     try {
@@ -164,11 +189,18 @@ function createLocalRouterClient(opts = {}) {
       throw new Error(`local router HTTP ${res.status}: ${detail}`);
     }
     const body = await res.json();
+    // The model ran (tokens spent) even if its answer is unusable: keep the
+    // body on the error so the ledger still records the usage.
+    const fail = (msg) => Object.assign(new Error(msg), { body });
     const content = body.message && body.message.content;
-    if (!content) throw new Error('local router returned no content');
-    const raw = extractJson(content);
-    const answers = normalizeAnswers(raw, request.questions);
-    return { answers, model };
+    if (!content) throw fail('local router returned no content');
+    let answers;
+    try {
+      answers = normalizeAnswers(extractJson(content), request.questions);
+    } catch (err) {
+      throw fail(err.message);
+    }
+    return { result: { answers, model }, body };
   }
 
   return { systemOne };

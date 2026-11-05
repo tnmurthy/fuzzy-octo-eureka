@@ -39,6 +39,11 @@ const CHANNELS = (process.env.BUZZ_BOT_CHANNELS || '').split(',').filter(Boolean
 const DASHBOARD = process.env.DASHBOARD_URL || 'http://127.0.0.1:8787';
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(__dirname, '../..');
 const LEDGER_FILE = path.resolve(__dirname, '../logs/typesafe-ledger.jsonl');
+// Shared AI call ledger (same file server.js writes its persona calls to);
+// the dashboard's team-store syncs it to Supabase when configured.
+const AI_CALLS_FILE = path.resolve(__dirname, '../logs/ai-calls.jsonl');
+const { recordAiCall } = require('../team-store/ai-ledger');
+const onCall = (call) => recordAiCall(AI_CALLS_FILE, call);
 const CHAT_TIMEOUT_MS = 120000;
 const RECONNECT_MAX_MS = 60000;
 const SEEN_LIMIT = 500;
@@ -164,6 +169,7 @@ const router = ROUTER_MODE === 'local'
           port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
           model: LOCAL_ROUTER_MODEL,
           timeoutMs: LOCAL_ROUTER_TIMEOUT_MS,
+          onCall,
         }),
       },
       {
@@ -173,6 +179,7 @@ const router = ROUTER_MODE === 'local'
           port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
           model: LOCAL_ROUTER_FALLBACK_MODEL,
           timeoutMs: LOCAL_ROUTER_FALLBACK_TIMEOUT_MS,
+          onCall,
         }),
       },
     ])
@@ -180,6 +187,7 @@ const router = ROUTER_MODE === 'local'
       apiKey: process.env.TYPESAFE_API_KEY,
       ledgerFile: LEDGER_FILE,
       dailyCap: Number(process.env.TYPESAFE_DAILY_CAP) || undefined,
+      onCall,
     });
 
 const handle = createHandler({

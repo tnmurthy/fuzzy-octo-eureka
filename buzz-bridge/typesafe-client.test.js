@@ -78,3 +78,14 @@ test('an API error is thrown and still logged', async () => {
   await assert.rejects(c.systemOne(req), /422/);
   assert.equal(JSON.parse(fs.readFileSync(ledgerFile, 'utf8').trim()).ok, false);
 });
+
+test('reports each billable call to onCall as well as its own ledger', async () => {
+  const seen = [];
+  const c = createTypeSafeClient({ apiKey: 'k', fetch: fakeFetch(200, okResponse), ledgerFile: tmpLedger(), now: () => day, onCall: (e) => seen.push(e) });
+  await c.systemOne(req);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].provider, 'typesafe');
+  assert.equal(seen[0].purpose, 'route');
+  assert.equal(seen[0].ok, true);
+  assert.equal(seen[0].input_tokens, 100);
+});

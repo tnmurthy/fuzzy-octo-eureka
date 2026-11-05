@@ -24,7 +24,8 @@ function countToday(ledgerFile, today) {
 
 /**
  * @param {{ apiKey: string, ledgerFile: string, model?: string, dailyCap?: number,
- *           timeoutMs?: number, fetch?: typeof fetch, now?: () => number }} opts
+ *           timeoutMs?: number, fetch?: typeof fetch, now?: () => number,
+ *           onCall?: (call: object) => void }} opts
  */
 function createTypeSafeClient(opts) {
   const fetchFn = opts.fetch || fetch;
@@ -36,6 +37,15 @@ function createTypeSafeClient(opts) {
   function record(entry) {
     fs.mkdirSync(path.dirname(opts.ledgerFile), { recursive: true });
     fs.appendFileSync(opts.ledgerFile, JSON.stringify(entry) + '\n');
+    // Also into the shared AI call ledger; that must never break the call.
+    if (opts.onCall) {
+      try {
+        opts.onCall({
+          provider: 'typesafe', model: entry.model, purpose: entry.purpose, ok: entry.ok,
+          input_tokens: entry.input_tokens || 0, output_tokens: entry.output_tokens || 0, ms: entry.ms ?? null,
+        });
+      } catch { /* ignore */ }
+    }
   }
 
   async function systemOne(request, { purpose = 'route' } = {}) {

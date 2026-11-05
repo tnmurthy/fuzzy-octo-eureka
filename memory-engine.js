@@ -142,49 +142,48 @@ class DrisyonMemoryEngine {
   }
 
   search(query, options = {}) {
-    const {
-      tenantId = 'tenant:drisyon_core',
-      projectId = null,
-      category = null,
-      topK = 5,
-      threshold = 0.05
-    } = options;
+    return this.searchEntries(this.episodicMemory, query, options);
+  }
 
+  // Tenant / project / category rules shared by every search. Non-core
+  // tenants only see their own memories (ReBAC / multi-tenancy).
+  filterEntries(entries, options = {}) {
+    const { tenantId = 'tenant:drisyon_core', projectId = null, category = null } = options;
+    return entries.filter((mem) =>
+      (tenantId === 'tenant:drisyon_core' || mem.tenantId === tenantId) &&
+      (!projectId || mem.projectId === 'all' || mem.projectId === 'global' || mem.projectId === projectId) &&
+      (!category || mem.category === category));
+  }
+
+  toResult(mem, score) {
+    return {
+      id: mem.id,
+      score: Math.round(score * 100) / 100,
+      tenantId: mem.tenantId,
+      projectId: mem.projectId,
+      category: mem.category,
+      title: mem.title,
+      content: mem.content,
+      metadata: mem.metadata,
+      createdAt: mem.createdAt
+    };
+  }
+
+  // Keyword ranking of any list of entries (local, or the team's from
+  // Supabase, which carry no vector). Fallback for memory-search.js.
+  searchEntries(entries, query, options = {}) {
+    const { topK = 5, threshold = 0.05 } = options;
     const queryVec = this._computeVector(query);
-    const results = [];
-
-    for (const mem of this.episodicMemory) {
-      // ReBAC / Multi-tenancy check: non-core tenants only see their own memories
-      if (tenantId !== 'tenant:drisyon_core' && mem.tenantId !== tenantId) {
-        continue;
-      }
-
-      if (projectId && mem.projectId !== 'all' && mem.projectId !== 'global' && mem.projectId !== projectId) {
-        continue;
-      }
-
-      if (category && mem.category !== category) {
-        continue;
-      }
-
-      const score = this._cosineSimilarity(queryVec, mem.vector);
-      if (score >= threshold) {
-        results.push({
-          id: mem.id,
-          score: Math.round(score * 100) / 100,
-          tenantId: mem.tenantId,
-          projectId: mem.projectId,
-          category: mem.category,
-          title: mem.title,
-          content: mem.content,
-          metadata: mem.metadata,
-          createdAt: mem.createdAt
-        });
-      }
-    }
-
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, topK);
+    return this.filterEntries(entries, options)
+      .map((mem) => {
+        const vector = mem.vector ||
+          this._computeVector(mem.content + ' ' + (mem.title || '') + ' ' + (mem.tags || []).join(' '));
+        return { mem, score: this._cosineSimilarity(queryVec, vector) };
+      })
+      .filter((r) => r.score >= threshold)
+      .sort((x, y) => y.score - x.score)
+      .slice(0, topK)
+      .map((r) => this.toResult(r.mem, r.score));
   }
 
   saveToDisk() {

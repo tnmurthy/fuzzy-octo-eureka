@@ -35,6 +35,10 @@ hard-coded. Templates: `.env.example` (read by `server.js` and
 telemetry brain dir resolve to the system profile. `BUZZ_OPERATORS` has no
 default: an empty value stops the bridge at startup.
 
+New teammate: `SETUP.md` (admin steps + teammate steps) and
+`install-teammate.ps1` (`-DryRun` first; elevated to install). The n8n
+workflow it imports is `n8n/buzz-dispatch-workflow.json` (polls every 10 s).
+
 ## Shared team context - `team-store/` + `supabase/`
 
 Optional: on only when `.env` has all of `SUPABASE_URL`,
@@ -49,7 +53,24 @@ every object is prefixed `arunachala_`.
   30 s new or changed runs upsert into `arunachala_agent_runs` (repo name only, no local
   paths). State in `logs/run-sync-state.json`; offline = retried next tick.
 - `GET /api/runs?scope=team` reads the team's runs; falls back to local.
-- Memory and tasks: schema ready, sync not built yet.
+- AI calls: every model call (persona chat, bridge router, TypeSafe) appends
+  to `logs/ai-calls.jsonl`; synced to `arunachala_ai_calls` (`client_id`
+  dedupes). Local `ollama` calls are exempt from the paid-call caps.
+- Memory: new `drisyon-memory.json` entries sync to `arunachala_memory`
+  (state = newest `createdAt` sent); `GET /api/memory/search?scope=team`
+  ranks the team's entries. Ranking is by meaning: local `nomic-embed-text`
+  embeddings (`embeddings.js`, cache `logs/embeddings-cache.json`, ~1 s cold /
+  6 ms warm), keyword `searchEntries` when Ollama is down or
+  `MEMORY_EMBEDDINGS=false`. Response field `ranker` says which ran.
+- Tasks: with team-store on, `/api/tasks` is the shared board
+  (`POST /api/tasks` {title, project?, status?, link?}, `PATCH
+  /api/tasks/<uuid>` {status}); falls back to read-only `TASKS.md`.
+  `node scripts/import-tasks.js [--apply]` copies `TASKS.md` onto the board.
+- Local-first dispatch: agent `auto` in `agent-dispatch.sh` runs `LOCAL_AGENT`
+  (hermes) first, then the repo's tests (`.arunachala-test`, else `npm test`);
+  pass = done, fail / no tests = worktree reset and claude runs. End line
+  records `escalated`. `DISPATCH_LOCAL_FIRST=true` turns claude requests into
+  `auto` server-side. Tests: `orchestration/agent-dispatch.test.js` (stubs).
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)
