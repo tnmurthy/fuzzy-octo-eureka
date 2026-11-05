@@ -35,6 +35,10 @@ hard-coded. Templates: `.env.example` (read by `server.js` and
 telemetry brain dir resolve to the system profile. `BUZZ_OPERATORS` has no
 default: an empty value stops the bridge at startup.
 
+New teammate: `SETUP.md` (admin steps + teammate steps) and
+`install-teammate.ps1` (`-DryRun` first; elevated to install). The n8n
+workflow it imports is `n8n/buzz-dispatch-workflow.json` (polls every 10 s).
+
 ## Shared team context - `team-store/` + `supabase/`
 
 Optional: on only when `.env` has all of `SUPABASE_URL`,
