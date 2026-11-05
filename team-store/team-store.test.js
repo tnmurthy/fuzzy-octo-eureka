@@ -251,3 +251,9 @@ test('an auto run syncs with whether it escalated to claude', () => {
   assert.equal(row.escalated, false);
   assert.equal(toRow(run(), TEAM).escalated, null);
 });
+
+test('a refused sign-in names the reason from the current Auth error shape', async () => {
+  const fetch = fakeFetch([{ status: 400, json: { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' } }]);
+  const s = createSession({ url: URL, key: KEY, email: 'a@x.in', password: 'pw', fetch, now: () => 0 });
+  await assert.rejects(s.getToken(), /sign-in failed \(400\): Invalid login credentials \(invalid_credentials\)/);
+});
