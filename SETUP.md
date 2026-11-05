@@ -19,14 +19,21 @@ the database only lets them read their team's rows and write their own.
 
 ## Part A - Admin, once per new teammate (about 10 minutes)
 
-1. **Supabase user.** Talia project → Authentication → Add user → their
-   email + a temporary password, tick *Auto confirm*.
+1. **Supabase user.** Talia organisation → Talia project → Authentication →
+   Users → **Add user** → *Create new user*. Use their address with a
+   `+arunachala` alias (`ravi+arunachala@example.com`; mail still reaches
+   their inbox), set the password yourself, tick **Auto Confirm User**, and
+   give them the password privately.
+   - Why a separate login: other apps share the Talia project, and Talia's
+     password-recovery emails link to those apps - so recovery cannot be
+     used to set an Arunachala password. A dashboard-created user needs no
+     email at all.
 2. **Team membership.** SQL editor (replace the three values):
 
    ```sql
    insert into public.arunachala_team_members (team_id, user_id, display_name, buzz_pubkey, role)
    select 'fc4a173d-e64a-4324-b26f-4ef786427e26', id, 'Ravi', '<their 64-hex Buzz pubkey>', 'member'
-   from auth.users where email = 'ravi@example.com';
+   from auth.users where email = 'ravi+arunachala@example.com';
    ```
 
 3. **Buzz relay.** Add their Buzz identity, then their bot's once it exists
@@ -73,9 +80,15 @@ powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 `
 ```
 
 It pulls the local models, asks for your name, Buzz pubkey, a **unique bot
-name** and your Supabase email + password (typed hidden, stored only in your
-gitignored `.env`), installs the three services as LocalSystem, starts n8n on
-`127.0.0.1:5678` and imports the dispatch workflow. Re-running is safe.
+name** and your Supabase `+arunachala` email + password, installs the three
+services as LocalSystem, starts n8n on `127.0.0.1:5678` and imports the
+dispatch workflow. Re-running is safe.
+
+The password is typed hidden and saved to
+`C:\tt-ai-stack\04_internal\secrets\arunachala-team.env`
+(`SUPABASE_PASSWORD=...`), never the project folder; `.env` only names that
+file in `SECRETS_ENV_FILE`. To change it later, edit that one line and
+restart `ArunachalaDashboard`.
 
 ### 4. Finish in n8n
 
@@ -113,7 +126,9 @@ All settings: `.env.example` and `buzz-bridge/.env.example`.
 |---|---|---|
 | Bot never answers, nothing in `logs\buzz-bridge.out.log` | Posted in another community (e.g. drisyon-ai) or another channel | Use the mytestbed channel whose id is in `BUZZ_BOT_CHANNELS` |
 | Log says `Skipped ...: bot not mentioned` | Bot name typed as text | Pick the bot from the `@` popup |
-| `team-store off: missing SUPABASE_PASSWORD` in `logs\server.err.log` | Team sync not configured | Add it to `.env`, restart `ArunachalaDashboard` |
+| `team-store off: missing SUPABASE_PASSWORD` in `logs\server.err.log` | Team sync not configured | Put `SUPABASE_PASSWORD=...` in `04_internal\secrets\arunachala-team.env`, check `.env` has `SECRETS_ENV_FILE` pointing at it, restart `ArunachalaDashboard` |
+| `team-store ... sign-in failed (400): Invalid login credentials` | Wrong password, or the Talia database password used by mistake | Admin sets a new password on the `+arunachala` user (Users → the user → edit, or delete and re-add); update the secrets file; restart |
+| `secrets file not loaded: <path>` | `SECRETS_ENV_FILE` points at a missing file | Create it or fix the path in `.env` |
 | Dispatch accepted but no run in the Agent Runs tab | The script failed silently (detached) | Check `04_internal\agent-runs\<run id>.log`; usually a missing CLI login |
 | Service will not start after switching it to your account | Windows Hello-only sign-in rejects the password | Keep LocalSystem; `OPERATOR_HOME` gives agents your profile |
 | Agent CLIs not found in a run | Installed outside `%APPDATA%\npm` (claude) or `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` (codex) | Reinstall to the default location - those are the folders the dispatch adds to `PATH` |

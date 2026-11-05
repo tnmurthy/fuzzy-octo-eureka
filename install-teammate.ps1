@@ -24,6 +24,9 @@ $Logs    = Join-Path $Root 'logs'
 $Bridge  = Join-Path $Root 'buzz-bridge'
 $EnvFile = Join-Path $Root '.env'
 $BridgeEnvFile = Join-Path $Bridge '.env'
+# The team login password lives in the stack's secrets folder, never in the
+# project folder; .env names this file in SECRETS_ENV_FILE (load-env.js).
+$SecretsFile = Join-Path (Resolve-Path (Join-Path $Root '..\..\..')).Path '04_internal\secrets\arunachala-team.env'
 $Models  = @('gemma3:4b', 'qwen2.5-coder:3b', 'nomic-embed-text')
 $MinNode = [version]'20.12.0'   # process.loadEnvFile
 $GitBash = 'C:\Program Files\Git\bin\bash.exe'
@@ -102,7 +105,7 @@ function Set-DashboardEnv {
             foreach ($k in 'OPERATOR_NAME', 'OPERATOR_HOME', 'SUPABASE_URL', 'TEAM_ID') {
                 if (Get-EnvValue $EnvFile $k) { Say "$k set" } else { Say "$k not set - would ask" }
             }
-            if (Get-EnvValue $EnvFile 'SUPABASE_PASSWORD') { Say 'SUPABASE_PASSWORD set' } else { Say 'SUPABASE_PASSWORD not set - would ask (team sync stays off without it)' }
+            if (Get-EnvValue $SecretsFile 'SUPABASE_PASSWORD') { Say "SUPABASE_PASSWORD set in $SecretsFile" } else { Say "SUPABASE_PASSWORD not set - would ask and save it to $SecretsFile (team sync stays off without it)" }
         } else { Say 'would create .env from .env.example' }
         return
     }
@@ -118,10 +121,16 @@ function Set-DashboardEnv {
     Set-EnvValue $EnvFile 'SUPABASE_PUBLISHABLE_KEY' (Ask 'Supabase publishable key (sb_publishable_...)' ($SupabaseKey, (Get-EnvValue $EnvFile 'SUPABASE_PUBLISHABLE_KEY') | Where-Object { $_ } | Select-Object -First 1) '^sb_publishable_\S+$')
     Set-EnvValue $EnvFile 'TEAM_ID' (Ask 'Team id (from your admin)' ($TeamId, (Get-EnvValue $EnvFile 'TEAM_ID') | Where-Object { $_ } | Select-Object -First 1) '^[0-9a-fA-F-]{36}$')
     Set-EnvValue $EnvFile 'SUPABASE_EMAIL' (Ask 'Your Supabase login email' (Get-EnvValue $EnvFile 'SUPABASE_EMAIL') '^\S+@\S+\.\S+$')
-    if (-not (Get-EnvValue $EnvFile 'SUPABASE_PASSWORD')) {
-        $secure = Read-Host 'Your Supabase password (not shown; stored only in this .env)' -AsSecureString
+    Set-EnvValue $EnvFile 'SECRETS_ENV_FILE' $SecretsFile
+    if (-not (Get-EnvValue $SecretsFile 'SUPABASE_PASSWORD')) {
+        $secure = Read-Host 'Your Supabase password (not shown; saved only in the secrets folder)' -AsSecureString
         $plain = [System.Net.NetworkCredential]::new('', $secure).Password
-        if ($plain) { Set-EnvValue $EnvFile 'SUPABASE_PASSWORD' $plain }
+        if ($plain) {
+            New-Item -ItemType Directory -Force (Split-Path $SecretsFile) | Out-Null
+            if (-not (Test-Path $SecretsFile)) { New-Item -ItemType File $SecretsFile | Out-Null }
+            Set-EnvValue $SecretsFile 'SUPABASE_PASSWORD' $plain
+            Say "password saved to $SecretsFile"
+        }
     }
 }
 
