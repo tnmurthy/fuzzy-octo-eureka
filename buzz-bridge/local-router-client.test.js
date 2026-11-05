@@ -117,3 +117,20 @@ test('surfaces a network/connection failure (e.g. Ollama not running)', async ()
   const c = createLocalRouterClient({ fetch });
   await assert.rejects(c.systemOne(req), /local router request failed: ECONNREFUSED/);
 });
+
+test('reports each call to onCall with model, outcome and token usage', async () => {
+  const seen = [];
+  const fetch = fakeFetch(200, { ...ollamaReply('{"route": "status", "risky": false}'), prompt_eval_count: 300, eval_count: 12, total_duration: 4e9 });
+  const c = createLocalRouterClient({ fetch, model: 'gemma3:4b', onCall: (e) => seen.push(e) });
+  await c.systemOne(req);
+  assert.deepEqual(seen, [{ provider: 'ollama', model: 'gemma3:4b', purpose: 'route', ok: true, input_tokens: 300, output_tokens: 12, ms: 4000 }]);
+});
+
+test('reports a failed call too, and an onCall error never breaks routing', async () => {
+  const seen = [];
+  const c = createLocalRouterClient({ fetch: fakeFetch(500, {}), onCall: (e) => seen.push(e) });
+  await assert.rejects(c.systemOne(req), /HTTP 500/);
+  assert.equal(seen[0].ok, false);
+  const ok = createLocalRouterClient({ fetch: fakeFetch(200, ollamaReply('{"route": "status", "risky": false}')), onCall: () => { throw new Error('boom'); } });
+  await ok.systemOne(req);
+});

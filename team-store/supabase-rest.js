@@ -31,6 +31,14 @@ function createRest({ url, key, session, fetch = globalThis.fetch }) {
         body: JSON.stringify(rows),
       });
     },
+    // Append-only tables: a row already sent (same key) is skipped, not updated.
+    async insertIgnoringDuplicates(table, rows, onConflict) {
+      await request(table, `${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
+        method: 'POST',
+        headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify(rows),
+      });
+    },
     async select(table, query = {}) {
       const qs = Object.entries(query).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
       const res = await request(table, qs ? `${table}?${qs}` : table, { method: 'GET' });

@@ -217,3 +217,12 @@ test('syncOnce logs an outage once, not every interval', async () => {
   assert.equal(logs.length, 1);
   assert.match(logs[0], /run sync failed: fetch failed/);
 });
+
+test('insertIgnoringDuplicates posts with ignore-duplicates on the given key', async () => {
+  const fetch = fakeFetch([{ status: 201, json: null }]);
+  const rest = createRest({ url: URL, key: KEY, session, fetch });
+  await rest.insertIgnoringDuplicates('arunachala_ai_calls', [{ client_id: 'c1' }], 'client_id');
+  const c = fetch.calls[0];
+  assert.equal(c.url, `${URL}/rest/v1/arunachala_ai_calls?on_conflict=client_id`);
+  assert.match(c.init.headers.Prefer, /resolution=ignore-duplicates/);
+});

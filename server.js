@@ -54,6 +54,8 @@ const teamStore = require('./team-store').createTeamStore(process.env, {
   readRuns,
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'run-sync-state.json'),
+  callsFile: path.join(DASHBOARD_DIR, 'logs', 'ai-calls.jsonl'),
+  callStateFile: path.join(DASHBOARD_DIR, 'logs', 'ai-sync-state.json'),
 });
 if (teamStore) teamStore.start();
 const DrisyonMemoryEngine = require('./memory-engine');
@@ -70,6 +72,14 @@ const PERSONA_MODEL = process.env.PERSONA_MODEL || 'gemma3:4b';
 // Ollama's length cap is num_predict (max_length is not an Ollama option and
 // was silently ignored). ~400 tokens fits the 45 s timeout at gemma's speed.
 const PERSONA_MAX_TOKENS = Number(process.env.PERSONA_MAX_TOKENS) || 400;
+
+// Every model call goes in logs/ai-calls.jsonl (the bridge appends its router
+// calls to the same file); team-store syncs it to Supabase when configured.
+const AI_CALLS_FILE = path.join(DASHBOARD_DIR, 'logs', 'ai-calls.jsonl');
+const { recordAiCall, ollamaUsage } = require('./team-store/ai-ledger');
+function recordPersonaCall(purpose, ollamaBody, ok = true) {
+  recordAiCall(AI_CALLS_FILE, { provider: 'ollama', model: PERSONA_MODEL, purpose, ok, ...ollamaUsage(ollamaBody) });
+}
 const PING_TIMEOUT_MS = 3000;
 
 // openclaw CLI calls can take 30s-several minutes under memory pressure
@@ -446,6 +456,7 @@ function handleRequest(req, res) {
           ollamaRes.on('end', () => {
             try {
               const parsed = JSON.parse(resData);
+              recordPersonaCall('persona', parsed);
               // Handle different model response formats
               let reply = 'No response from model.';
               if (parsed.message && parsed.message.content) {
@@ -457,12 +468,14 @@ function handleRequest(req, res) {
               }
               sendJson(res, 200, { ok: true, reply, agent: agentKey });
             } catch (e) {
+              recordPersonaCall('persona', null, false);
               sendJson(res, 200, { ok: false, reply: `[Local model error]: ${resData.slice(0, 150)}` });
             }
           });
         });
 
         ollamaReq.on('error', (e) => {
+          recordPersonaCall('persona', null, false);
           sendJson(res, 200, { ok: true, reply: `[Offline fallback response]: Hello ${OPERATOR_NAME}! I am Arunachala Ramana. Received: "${userMessage}". Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.` });
         });
 
@@ -682,6 +695,7 @@ function handleRequest(req, res) {
           ollamaRes.on('end', () => {
             try {
               const parsed = JSON.parse(resData);
+              recordPersonaCall('buzz_event', parsed);
               // Handle different model response formats
               let reply = 'Agent spawning initiated.';
               if (parsed.message && parsed.message.content) {
@@ -693,12 +707,14 @@ function handleRequest(req, res) {
               }
               sendJson(res, 200, { ok: true, reply, agent: 'po', stored: true });
             } catch (e) {
+              recordPersonaCall('buzz_event', null, false);
               sendJson(res, 200, { ok: true, reply: resData.slice(0, 500), raw: true });
             }
           });
         });
         
         ollamaReq.on('error', (e) => {
+          recordPersonaCall('buzz_event', null, false);
           // Intent already stored above
           sendJson(res, 200, { ok: true, reply: 'Agent spawning initiated', stored: true, from: sender });
         });

@@ -15,6 +15,7 @@ grant execute on function auth.uid() to authenticated, anon;
 
 \i /migrations/20261104000000_arunachala_team_context.sql
 \i /migrations/20261104000100_arunachala_revoke_trigger_fn_execute.sql
+\i /migrations/20261105000000_arunachala_ai_calls_ledger.sql
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
@@ -73,6 +74,20 @@ do $$ begin
     if sqlerrm not like 'ai_cap_member%' then raise; end if;
     raise notice 'PASS 4: member cap enforced (%)', sqlerrm;
   end;
+
+  -- 7. local Ollama calls are recorded past the cap and do not count
+  insert into public.arunachala_ai_calls (team_id, provider, model, purpose, client_id)
+    values ('10000000-0000-0000-0000-00000000000a', 'ollama', 'gemma3:4b', 'persona', 'local-1');
+  raise notice 'PASS 7: local call recorded past the paid-call cap';
+
+  -- 8. a resent ledger line (same client_id) is skipped, not duplicated
+  insert into public.arunachala_ai_calls (team_id, provider, model, purpose, client_id)
+    values ('10000000-0000-0000-0000-00000000000a', 'ollama', 'gemma3:4b', 'persona', 'local-1')
+    on conflict (client_id) do nothing;
+  if (select count(*) from public.arunachala_ai_calls where client_id = 'local-1') <> 1 then
+    raise exception 'FAIL 8: duplicate ledger line stored';
+  end if;
+  raise notice 'PASS 8: resent ledger line ignored';
 end $$;
 
 -- As Bob -------------------------------------------------------------------------
