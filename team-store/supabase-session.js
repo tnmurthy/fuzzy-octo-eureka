@@ -18,7 +18,10 @@ function createSession({ url, key, email, password, fetch = globalThis.fetch, no
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.access_token) {
       // Never include the request body: it holds the password or refresh token.
-      throw new Error(`Supabase sign-in failed (${res.status}): ${data.error_description || data.error || 'no token'}`);
+      // Current Auth replies { error_code, msg }; older ones { error, error_description }.
+      const reason = data.msg || data.error_description || data.error || 'no token';
+      const code = data.error_code ? ` (${data.error_code})` : '';
+      throw new Error(`Supabase sign-in failed (${res.status}): ${reason}${code}`);
     }
     return {
       token: data.access_token,
