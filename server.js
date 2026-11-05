@@ -63,6 +63,13 @@ const memory = new DrisyonMemoryEngine({
 
 const OLLAMA_HOST = '127.0.0.1';
 const OLLAMA_PORT = 11434;
+// Persona chat model. gemma3:4b answers at ~6.5 tok/s on this CPU-only box;
+// qwen2.5:7b at ~3.1, which runs past the 45 s chat timeout on a full answer.
+// A teammate with a GPU can set PERSONA_MODEL=qwen2.5:7b in .env.
+const PERSONA_MODEL = process.env.PERSONA_MODEL || 'gemma3:4b';
+// Ollama's length cap is num_predict (max_length is not an Ollama option and
+// was silently ignored). ~400 tokens fits the 45 s timeout at gemma's speed.
+const PERSONA_MAX_TOKENS = Number(process.env.PERSONA_MAX_TOKENS) || 400;
 const PING_TIMEOUT_MS = 3000;
 
 // openclaw CLI calls can take 30s-several minutes under memory pressure
@@ -318,7 +325,7 @@ function handleRequest(req, res) {
     return serveJsonFile(res, TELEMETRY_FILE, {});
   }
   if (req.url.startsWith('/api/config')) {
-    return sendJson(res, 200, { operatorName: OPERATOR_NAME });
+    return sendJson(res, 200, { operatorName: OPERATOR_NAME, personaModel: PERSONA_MODEL });
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
@@ -414,13 +421,13 @@ function handleRequest(req, res) {
 
         const systemPrompt = agentSystemPrompts[agentKey] || agentSystemPrompts.po;
         const ollamaReqData = JSON.stringify({
-          model: 'gemma3:4b',
+          model: PERSONA_MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage }
           ],
           stream: false,
-          options: { temperature: 0.3, max_length: 1500 }
+          options: { temperature: 0.3, num_predict: PERSONA_MAX_TOKENS }
         });
 
         const ollamaReq = http.request({
@@ -650,13 +657,13 @@ function handleRequest(req, res) {
         
         // Forward to agent chat (route to PO for autonomous agent spawning)
         const ollamaReqData = JSON.stringify({
-          model: 'gemma3:4b',
+          model: PERSONA_MODEL,
           messages: [
             { role: 'system', content: 'You are Arunachala Ramana. Process Buzz directives as operator commands and respond with clear, actionable next steps.' },
             { role: 'user', content: `Buzz directive from ${sender}: ${message}` }
           ],
           stream: false,
-          options: { temperature: 0.3, max_length: 1500 }
+          options: { temperature: 0.3, num_predict: PERSONA_MAX_TOKENS }
         });
         
         const ollamaReq = http.request({
