@@ -48,6 +48,10 @@ const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
 // the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
 const { readRuns } = require('./runs-reader');
+const DrisyonMemoryEngine = require('./memory-engine');
+const memory = new DrisyonMemoryEngine({
+  storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
+});
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
@@ -56,12 +60,12 @@ const teamStore = require('./team-store').createTeamStore(process.env, {
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'run-sync-state.json'),
   callsFile: path.join(DASHBOARD_DIR, 'logs', 'ai-calls.jsonl'),
   callStateFile: path.join(DASHBOARD_DIR, 'logs', 'ai-sync-state.json'),
+  readMemories: () => memory.episodicMemory,
+  memoryStateFile: path.join(DASHBOARD_DIR, 'logs', 'memory-sync-state.json'),
 });
 if (teamStore) teamStore.start();
-const DrisyonMemoryEngine = require('./memory-engine');
-const memory = new DrisyonMemoryEngine({
-  storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
-});
+const { parseTasksMd } = require('./tasks-md');
+const { validateNewTask, validateStatus } = require('./team-store/tasks');
 
 const OLLAMA_HOST = '127.0.0.1';
 const OLLAMA_PORT = 11434;
@@ -330,6 +334,76 @@ fs.readFile(OPENCLAW_CACHE_FILE, 'utf8', (err, data) => {
 pollOpenclawStatus();
 setInterval(pollOpenclawStatus, OPENCLAW_POLL_INTERVAL_MS);
 
+const MAX_TASK_BODY_BYTES = 10 * 1024;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readJsonBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > limit) { reject(new Error('body too large')); req.destroy(); }
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(body || '{}')); } catch { reject(new Error('bad JSON')); }
+    });
+  });
+}
+
+// Task Board. With team-store on, the shared board in Supabase (create with
+// POST /api/tasks, move with PATCH /api/tasks/<id>); otherwise, or if the
+// team board can't be reached, the read-only 04_internal/TASKS.md.
+function handleTasks(req, res) {
+  const readLocal = (note) => {
+    const tasksFile = process.env.TASKS_FILE || path.resolve(DASHBOARD_DIR, '../../../04_internal/TASKS.md');
+    fs.readFile(tasksFile, 'utf8', (err, data) => {
+      if (err) {
+        return sendJson(res, 200, { ok: false, error: 'TASKS.md not found', columns: { backlog: [], in_progress: [], done: [] } });
+      }
+      try {
+        sendJson(res, 200, { ok: true, source: 'local', ...(note ? { note } : {}), columns: parseTasksMd(data) });
+      } catch (e) {
+        sendJson(res, 500, { ok: false, error: e.message });
+      }
+    });
+  };
+
+  if (req.method === 'GET') {
+    if (!teamStore) return readLocal();
+    teamStore.teamTasks()
+      .then((body) => sendJson(res, 200, body))
+      .catch((err) => readLocal(`team board unavailable: ${err.message}`));
+    return;
+  }
+  if (!teamStore) {
+    return sendJson(res, 409, { ok: false, error: 'team board not configured: set SUPABASE_* and TEAM_ID in .env' });
+  }
+  const id = req.url.split('?')[0].split('/')[3];
+  if (req.method === 'POST' && !id) {
+    readJsonBody(req, MAX_TASK_BODY_BYTES)
+      .then((input) => {
+        const v = validateNewTask(input);
+        if (!v.ok) return sendJson(res, 400, { ok: false, error: v.error });
+        return teamStore.createTask(v.task).then((task) => sendJson(res, 201, { ok: true, task }));
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    return;
+  }
+  if (req.method === 'PATCH' && id) {
+    if (!UUID_RE.test(id)) return sendJson(res, 400, { ok: false, error: 'task id must be a UUID' });
+    readJsonBody(req, MAX_TASK_BODY_BYTES)
+      .then((input) => {
+        if (!validateStatus(input.status)) return sendJson(res, 400, { ok: false, error: 'status must be backlog, in_progress or done' });
+        return teamStore.moveTask(id, input.status).then((task) => (task
+          ? sendJson(res, 200, { ok: true, task })
+          : sendJson(res, 404, { ok: false, error: 'no such task on your team board' })));
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    return;
+  }
+  return sendJson(res, 405, { ok: false, error: 'use GET, POST /api/tasks or PATCH /api/tasks/<id>' });
+}
+
 function handleRequest(req, res) {
   if (req.url.startsWith('/api/telemetry')) {
     return serveJsonFile(res, TELEMETRY_FILE, {});
@@ -357,61 +431,7 @@ function handleRequest(req, res) {
     });
   }
   if (req.url.startsWith('/api/tasks')) {
-    // The dashboard moved from 04_internal/dashboard to 01_projects/active, so a
-    // path relative to it broke the board. Anchored to the workspace root now,
-    // overridable for another layout.
-    const tasksFile = process.env.TASKS_FILE || path.resolve(DASHBOARD_DIR, '../../../04_internal/TASKS.md');
-    fs.readFile(tasksFile, 'utf8', (err, data) => {
-      if (err) {
-        return sendJson(res, 200, { ok: false, error: 'TASKS.md not found', columns: { backlog: [], in_progress: [], done: [] } });
-      }
-      try {
-        const lines = data.split(/\r?\n/);
-        const columns = { backlog: [], in_progress: [], done: [] };
-        let currentSection = null;
-
-        for (let line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('## In Progress')) {
-            currentSection = 'in_progress';
-          } else if (trimmed.startsWith('## Backlog')) {
-            currentSection = 'backlog';
-          } else if (trimmed.startsWith('## Done')) {
-            currentSection = 'done';
-          } else if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
-            currentSection = null;
-          } else if (currentSection && trimmed.startsWith('|') && !trimmed.includes('---') && !trimmed.toLowerCase().includes('task |') && !trimmed.toLowerCase().includes('# | task')) {
-            const parts = trimmed.split('|').map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-            if (parts.length >= 1) {
-              if (currentSection === 'in_progress') {
-                columns.in_progress.push({
-                  id: parts[0] || '—',
-                  task: parts[1] || parts[0],
-                  project: parts[2] || 'docker-base',
-                  owner: parts[3] || 'Agent/CI'
-                });
-              } else if (currentSection === 'backlog') {
-                columns.backlog.push({
-                  id: parts[0] || '—',
-                  task: parts[1] || parts[0],
-                  project: parts[2] || 'General',
-                  issue: parts[3] || ''
-                });
-              } else if (currentSection === 'done') {
-                columns.done.push({
-                  task: parts[0],
-                  completed: parts[1] || 'Completed'
-                });
-              }
-            }
-          }
-        }
-        sendJson(res, 200, { ok: true, columns });
-      } catch (e) {
-        sendJson(res, 500, { ok: false, error: e.message });
-      }
-    });
-    return;
+    return handleTasks(req, res);
   }
   if (req.url.startsWith('/api/agent/chat') && req.method === 'POST') {
     let body = '';
@@ -523,6 +543,19 @@ function handleRequest(req, res) {
     const query = parsedUrl.searchParams.get('q') || '';
     const tenantId = parsedUrl.searchParams.get('tenant') || 'tenant:drisyon_core';
     const projectId = parsedUrl.searchParams.get('project') || null;
+    if (teamStore && parsedUrl.searchParams.get('scope') === 'team') {
+      // Every teammate's memory, ranked with the same scoring as local search.
+      teamStore.teamMemories()
+        .then((entries) => {
+          const results = memory.searchEntries(entries, query, { tenantId, projectId, topK: 10 });
+          sendJson(res, 200, { ok: true, source: 'team', count: results.length, memories: results });
+        })
+        .catch((err) => {
+          const results = memory.search(query, { tenantId, projectId, topK: 10 });
+          sendJson(res, 200, { ok: true, source: 'local', note: `team memory unavailable: ${err.message}`, count: results.length, memories: results });
+        });
+      return;
+    }
     const results = memory.search(query, { tenantId, projectId, topK: 10 });
     return sendJson(res, 200, { ok: true, count: results.length, memories: results });
   }

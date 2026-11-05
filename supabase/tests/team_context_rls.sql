@@ -16,6 +16,7 @@ grant execute on function auth.uid() to authenticated, anon;
 \i /migrations/20261104000000_arunachala_team_context.sql
 \i /migrations/20261104000100_arunachala_revoke_trigger_fn_execute.sql
 \i /migrations/20261105000000_arunachala_ai_calls_ledger.sql
+\i /migrations/20261105000100_arunachala_memory_client_id.sql
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
@@ -88,6 +89,25 @@ do $$ begin
     raise exception 'FAIL 8: duplicate ledger line stored';
   end if;
   raise notice 'PASS 8: resent ledger line ignored';
+
+  -- 9. a resent memory entry (same client_id) is skipped
+  insert into public.arunachala_memory (team_id, content, client_id)
+    values ('10000000-0000-0000-0000-00000000000a', 'note', 'mem_1');
+  insert into public.arunachala_memory (team_id, content, client_id)
+    values ('10000000-0000-0000-0000-00000000000a', 'note', 'mem_1')
+    on conflict (client_id) do nothing;
+  if (select count(*) from public.arunachala_memory where client_id = 'mem_1') <> 1 then
+    raise exception 'FAIL 9: duplicate memory stored';
+  end if;
+  raise notice 'PASS 9: resent memory ignored';
+
+  -- 10. any member moves a task on the shared board
+  insert into public.arunachala_tasks (team_id, title) values ('10000000-0000-0000-0000-00000000000a', 'Ship it');
+  update public.arunachala_tasks set status = 'in_progress' where title = 'Ship it';
+  if (select status from public.arunachala_tasks where title = 'Ship it') <> 'in_progress' then
+    raise exception 'FAIL 10: task not moved';
+  end if;
+  raise notice 'PASS 10: task created and moved';
 end $$;
 
 -- As Bob -------------------------------------------------------------------------

@@ -49,7 +49,16 @@ every object is prefixed `arunachala_`.
   30 s new or changed runs upsert into `arunachala_agent_runs` (repo name only, no local
   paths). State in `logs/run-sync-state.json`; offline = retried next tick.
 - `GET /api/runs?scope=team` reads the team's runs; falls back to local.
-- Memory and tasks: schema ready, sync not built yet.
+- AI calls: every model call (persona chat, bridge router, TypeSafe) appends
+  to `logs/ai-calls.jsonl`; synced to `arunachala_ai_calls` (`client_id`
+  dedupes). Local `ollama` calls are exempt from the paid-call caps.
+- Memory: new `drisyon-memory.json` entries sync to `arunachala_memory`
+  (state = newest `createdAt` sent); `GET /api/memory/search?scope=team`
+  ranks the team's entries with the local scoring (`searchEntries`).
+- Tasks: with team-store on, `/api/tasks` is the shared board
+  (`POST /api/tasks` {title, project?, status?, link?}, `PATCH
+  /api/tasks/<uuid>` {status}); falls back to read-only `TASKS.md`.
+  `node scripts/import-tasks.js [--apply]` copies `TASKS.md` onto the board.
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)

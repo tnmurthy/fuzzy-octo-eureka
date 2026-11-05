@@ -142,6 +142,12 @@ class DrisyonMemoryEngine {
   }
 
   search(query, options = {}) {
+    return this.searchEntries(this.episodicMemory, query, options);
+  }
+
+  // Ranks any list of entries (local, or the team's from Supabase, which
+  // carry no vector) with the same scoring and tenant rules as search().
+  searchEntries(entries, query, options = {}) {
     const {
       tenantId = 'tenant:drisyon_core',
       projectId = null,
@@ -153,7 +159,7 @@ class DrisyonMemoryEngine {
     const queryVec = this._computeVector(query);
     const results = [];
 
-    for (const mem of this.episodicMemory) {
+    for (const mem of entries) {
       // ReBAC / Multi-tenancy check: non-core tenants only see their own memories
       if (tenantId !== 'tenant:drisyon_core' && mem.tenantId !== tenantId) {
         continue;
@@ -167,7 +173,9 @@ class DrisyonMemoryEngine {
         continue;
       }
 
-      const score = this._cosineSimilarity(queryVec, mem.vector);
+      const vector = mem.vector ||
+        this._computeVector(mem.content + ' ' + (mem.title || '') + ' ' + (mem.tags || []).join(' '));
+      const score = this._cosineSimilarity(queryVec, vector);
       if (score >= threshold) {
         results.push({
           id: mem.id,
