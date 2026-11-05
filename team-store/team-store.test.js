@@ -244,3 +244,10 @@ test('update patches rows matching the filter and returns them', async () => {
   assert.equal(fetch.calls[0].init.method, 'PATCH');
   assert.deepEqual(fetch.calls[0].body, { status: 'done' });
 });
+
+test('an auto run syncs with whether it escalated to claude', () => {
+  const row = toRow(run({ agent: 'auto', escalated: false }), TEAM);
+  assert.equal(row.agent, 'auto');
+  assert.equal(row.escalated, false);
+  assert.equal(toRow(run(), TEAM).escalated, null);
+});

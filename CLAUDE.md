@@ -59,6 +59,11 @@ every object is prefixed `arunachala_`.
   (`POST /api/tasks` {title, project?, status?, link?}, `PATCH
   /api/tasks/<uuid>` {status}); falls back to read-only `TASKS.md`.
   `node scripts/import-tasks.js [--apply]` copies `TASKS.md` onto the board.
+- Local-first dispatch: agent `auto` in `agent-dispatch.sh` runs `LOCAL_AGENT`
+  (hermes) first, then the repo's tests (`.arunachala-test`, else `npm test`);
+  pass = done, fail / no tests = worktree reset and claude runs. End line
+  records `escalated`. `DISPATCH_LOCAL_FIRST=true` turns claude requests into
+  `auto` server-side. Tests: `orchestration/agent-dispatch.test.js` (stubs).
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)

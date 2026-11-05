@@ -604,8 +604,11 @@ function handleRequest(req, res) {
       } catch (e) {
         return sendJson(res, 400, { ok: false, error: `bad JSON: ${e.message}` });
       }
-      const { agent, repo, branch, task } = payload;
-      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop']);
+      const { repo, branch, task } = payload;
+      // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
+      // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
+      const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
+      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto']);
       if (!allowedAgents.has(agent)) {
         return sendJson(res, 400, { ok: false, error: `unknown agent: ${agent}` });
       }

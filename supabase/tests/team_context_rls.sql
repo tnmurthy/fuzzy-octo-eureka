@@ -17,6 +17,7 @@ grant execute on function auth.uid() to authenticated, anon;
 \i /migrations/20261104000100_arunachala_revoke_trigger_fn_execute.sql
 \i /migrations/20261105000000_arunachala_ai_calls_ledger.sql
 \i /migrations/20261105000100_arunachala_memory_client_id.sql
+\i /migrations/20261105000200_arunachala_runs_auto.sql
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
@@ -108,6 +109,11 @@ do $$ begin
     raise exception 'FAIL 10: task not moved';
   end if;
   raise notice 'PASS 10: task created and moved';
+
+  -- 11. an auto run records whether it escalated
+  insert into public.arunachala_agent_runs (id, team_id, agent, repo, escalated)
+    values ('run-auto', '10000000-0000-0000-0000-00000000000a', 'auto', 'r', false);
+  raise notice 'PASS 11: auto run with escalated stored';
 end $$;
 
 -- As Bob -------------------------------------------------------------------------
