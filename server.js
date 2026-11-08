@@ -69,11 +69,17 @@ if (teamStore) teamStore.start();
 const { parseTasksMd } = require('./tasks-md');
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 
+// Ollama connection details (can be local or remote, e.g. a Mac Studio on LAN/VPN)
+const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
+const OLLAMA_PORT = Number(process.env.OLLAMA_PORT) || 11434;
+
 // Memory search by meaning: local nomic-embed-text embeddings, cached on
 // disk; keyword scoring when Ollama is down or MEMORY_EMBEDDINGS=false.
 const { createEmbedder } = require('./embeddings');
 const { semanticSearch, docText } = require('./memory-search');
 const embedder = process.env.MEMORY_EMBEDDINGS === 'false' ? null : createEmbedder({
+  host: OLLAMA_HOST,
+  port: OLLAMA_PORT,
   model: process.env.EMBED_MODEL || 'nomic-embed-text',
   cacheFile: path.join(DASHBOARD_DIR, 'logs', 'embeddings-cache.json'),
   onCall: (call) => recordAiCall(AI_CALLS_FILE, call),
@@ -107,8 +113,6 @@ if (embedder) {
   }, EMBED_WARMUP_DELAY_MS);
 }
 
-const OLLAMA_HOST = '127.0.0.1';
-const OLLAMA_PORT = 11434;
 // Persona chat model. gemma3:4b answers at ~6.5 tok/s on this CPU-only box;
 // qwen2.5:7b at ~3.1, which runs past the 45 s chat timeout on a full answer.
 // A teammate with a GPU can set PERSONA_MODEL=qwen2.5:7b in .env.

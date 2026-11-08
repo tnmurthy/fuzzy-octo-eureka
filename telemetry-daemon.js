@@ -32,7 +32,8 @@ const APP_LOG_FILE = path.join(STACK_ROOT, '04_internal', 'logs', 'app.log');
 
 const POLL_INTERVAL_MS = 5000;
 const HISTORY_MAX_POINTS = 720;
-const OLLAMA_PORT = 11434;
+const OLLAMA_HOST = envValues['OLLAMA_HOST'] || '127.0.0.1';
+const OLLAMA_PORT = Number(envValues['OLLAMA_PORT']) || 11434;
 const OPENCLAW_PORT = 18789;
 const BUZZ_PORT = 3000;
 
@@ -192,7 +193,7 @@ async function getBuzzStatus() {
 
 async function getActiveOllamaModels(ollamaOnline) {
   if (!ollamaOnline) return [];
-  const res = await httpGetJson(`http://127.0.0.1:${OLLAMA_PORT}/api/ps`, 2000);
+  const res = await httpGetJson(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/ps`, 2000);
   if (res.ok && res.data && Array.isArray(res.data.models)) {
     return res.data.models.map((m) => ({
       name: m.name,
@@ -243,14 +244,14 @@ function updateHistory(newPoint) {
 async function tick() {
   const cpu = getCpuUsage();
   const [ollamaTcp, openclawTcp, buzzStatus] = await Promise.all([
-    testTcpPort(OLLAMA_PORT),
+    testTcpPort(OLLAMA_PORT, OLLAMA_HOST),
     testTcpPort(OPENCLAW_PORT),
     getBuzzStatus()
   ]);
 
   let ollamaLatencyMs = ollamaTcp.latencyMs;
   if (ollamaTcp.online) {
-    const ping = await httpGetJson(`http://127.0.0.1:${OLLAMA_PORT}/api/tags`, 2000);
+    const ping = await httpGetJson(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags`, 2000);
     if (ping.ok) ollamaLatencyMs = ping.latencyMs;
   }
 

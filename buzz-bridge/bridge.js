@@ -160,13 +160,15 @@ const LOCAL_ROUTER_MODEL = process.env.LOCAL_ROUTER_MODEL || 'gemma3:4b';
 const LOCAL_ROUTER_FALLBACK_MODEL = process.env.LOCAL_ROUTER_FALLBACK_MODEL || 'qwen2.5-coder:3b';
 const LOCAL_ROUTER_TIMEOUT_MS = Number(process.env.LOCAL_ROUTER_TIMEOUT_MS) || 25000;
 const LOCAL_ROUTER_FALLBACK_TIMEOUT_MS = Number(process.env.LOCAL_ROUTER_FALLBACK_TIMEOUT_MS) || 20000;
+const OLLAMA_ROUTER_HOST = process.env.LOCAL_ROUTER_HOST || process.env.OLLAMA_HOST || undefined;
+const OLLAMA_ROUTER_PORT = Number(process.env.LOCAL_ROUTER_PORT || process.env.OLLAMA_PORT) || undefined;
 const router = ROUTER_MODE === 'local'
   ? createFallbackRouterClient([
       {
         label: LOCAL_ROUTER_MODEL,
         client: createLocalRouterClient({
-          host: process.env.LOCAL_ROUTER_HOST,
-          port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
+          host: OLLAMA_ROUTER_HOST,
+          port: OLLAMA_ROUTER_PORT,
           model: LOCAL_ROUTER_MODEL,
           timeoutMs: LOCAL_ROUTER_TIMEOUT_MS,
           onCall,
@@ -175,8 +177,8 @@ const router = ROUTER_MODE === 'local'
       {
         label: LOCAL_ROUTER_FALLBACK_MODEL,
         client: createLocalRouterClient({
-          host: process.env.LOCAL_ROUTER_HOST,
-          port: Number(process.env.LOCAL_ROUTER_PORT) || undefined,
+          host: OLLAMA_ROUTER_HOST,
+          port: OLLAMA_ROUTER_PORT,
           model: LOCAL_ROUTER_FALLBACK_MODEL,
           timeoutMs: LOCAL_ROUTER_FALLBACK_TIMEOUT_MS,
           onCall,

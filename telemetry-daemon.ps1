@@ -34,7 +34,8 @@
     $PollIntervalSeconds = 5
     $LogTailLines        = 15
 
-    $OllamaPortNumber   = 11434
+    $OllamaHost         = if ($EnvValues['OLLAMA_HOST']) { $EnvValues['OLLAMA_HOST'] } else { "127.0.0.1" }
+    $OllamaPortNumber   = if ($EnvValues['OLLAMA_PORT']) { [int]$EnvValues['OLLAMA_PORT'] } else { 11434 }
     $OpenClawPortNumber = 18789
     $OllamaPingPath     = "/api/tags"
 
@@ -418,7 +419,7 @@
             try {
                 $cpu = Get-HostCpuLoad
 
-                $ollamaStatus   = Test-TcpPortOpen -Port $OllamaPortNumber
+                $ollamaStatus   = Test-TcpPortOpen -ComputerName $OllamaHost -Port $OllamaPortNumber
                 $openclawStatus = Test-TcpPortOpen -Port $OpenClawPortNumber
                 $ollamaOnline   = $ollamaStatus.online
                 $openclawOnline = $openclawStatus.online
@@ -426,13 +427,13 @@
                 # Real HTTP-level handshake against Ollama for latency
                 $ollamaLatencyMs = $ollamaStatus.latencyMs
                 if ($ollamaOnline) {
-                    $handshake = Test-OllamaHandshake -Port $OllamaPortNumber -PingPath $OllamaPingPath
+                    $handshake = Test-OllamaHandshake -ComputerName $OllamaHost -Port $OllamaPortNumber -PingPath $OllamaPingPath
                     if ($handshake.ok) { $ollamaLatencyMs = $handshake.latencyMs }
                 }
 
                 $watchtowerStatus = Get-WatchtowerStatus
                 $buzzStatus       = Get-BuzzStatus
-                $activeModels     = Get-ActiveOllamaModels -OllamaOnline $ollamaOnline -Port $OllamaPortNumber
+                $activeModels     = Get-ActiveOllamaModels -OllamaOnline $ollamaOnline -ComputerName $OllamaHost -Port $OllamaPortNumber
                 $logs             = Get-AppLogTail -Path $LogFile -Tail $LogTailLines
                 $agentStats       = Get-AgentStats -BrainDir $BrainDir -Roles $AgentRoles -PoConversationId $PoConversationId
                 $engineStats      = Get-EngineStats -BrainDir $BrainDir -PoConversationId $PoConversationId -OpenClawConfigPath $OpenClawConfigPath

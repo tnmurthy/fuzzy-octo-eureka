@@ -49,6 +49,12 @@ AI_CALLS_FILE="${AI_CALLS_FILE:-$HERE/../logs/ai-calls.jsonl}"
 # Lets a run pick a model the login can use; empty means the CLI's default.
 CODEX_MODEL="${CODEX_MODEL:-}"
 
+# Remote or local Ollama host (e.g. Mac Studio) for local agent execution
+export OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1}"
+export OLLAMA_PORT="${OLLAMA_PORT:-11434}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-http://$OLLAMA_HOST:$OLLAMA_PORT/v1}"
+export OLLAMA_API_BASE="${OLLAMA_API_BASE:-http://$OLLAMA_HOST:$OLLAMA_PORT}"
+
 # Hermes Desktop puts only hermes.cmd on PATH. Bash cannot find a .cmd by bare
 # name, and cmd's %* cuts a multi-line prompt at the first newline, so use the
 # venv's real hermes binary. HERMES_BIN overrides; the .venv copy is a fallback
