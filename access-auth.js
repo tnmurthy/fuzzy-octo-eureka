@@ -40,7 +40,8 @@ async function defaultFetchCerts(teamDomain) {
  *           fetchCerts?: (teamDomain: string) => Promise<{ keys: object[] }> }} opts
  */
 function createAccessGate(opts) {
-  const { teamDomain, aud } = opts;
+  const { teamDomain } = opts;
+  const auds = (opts.aud || '').split(',').map(s => s.trim()).filter(Boolean);
   const hosts = new Set(opts.publicHostnames.map(h => h.toLowerCase()));
   const allowed = (opts.allowedEmails || []).map(e => e.toLowerCase());
   const now = opts.now || Date.now;
@@ -95,7 +96,7 @@ function createAccessGate(opts) {
     if (!crypto.verify('RSA-SHA256', signed, key, sig)) return { ok: false, reason: 'bad signature' };
 
     const audList = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-    if (!audList.includes(aud)) return { ok: false, reason: 'wrong audience' };
+    if (auds.length && !audList.some(a => auds.includes(a))) return { ok: false, reason: 'wrong audience' };
     if (claims.iss !== `https://${teamDomain}`) return { ok: false, reason: 'wrong issuer' };
 
     const t = Math.floor(now() / 1000);
