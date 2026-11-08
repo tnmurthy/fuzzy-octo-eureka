@@ -8,7 +8,8 @@
 const path = require('path');
 
 function loadEnv(dir, log = console.error) {
-  try { process.loadEnvFile(path.join(dir, '.env')); } catch { /* no .env: defaults */ }
+  const envPath = process.env.DASHBOARD_ENV_FILE || path.join(dir, '.env');
+  try { process.loadEnvFile(envPath); } catch { /* no .env: defaults */ }
   const secrets = process.env.SECRETS_ENV_FILE;
   if (!secrets) return;
   try {
