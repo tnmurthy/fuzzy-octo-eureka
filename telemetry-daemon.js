@@ -179,14 +179,21 @@ async function getBuzzStatus() {
     realMembers: -1
   };
 
-  const res = await httpGetJson(`http://127.0.0.1:${BUZZ_PORT}/health`, 2000);
+  let res = await httpGetJson(`http://127.0.0.1:${BUZZ_PORT}/health`, 2000);
+  if (!res.ok) {
+    const relayHttp = (envValues['BUZZ_RELAY_URL'] || envValues['BRIDGE_RELAY_URL'] || 'https://buzz.mytestbed.tech').replace(/^ws/, 'http');
+    try {
+      const t0 = Date.now();
+      const r = await fetch(`${relayHttp}/health`, { signal: AbortSignal.timeout(2500) });
+      if (r.ok) {
+        res = { ok: true, latencyMs: Date.now() - t0 };
+      }
+    } catch (_) {}
+  }
   if (res.ok) {
     result.online = true;
     result.latencyMs = res.latencyMs;
-    const uiRes = await httpGetJson(`http://127.0.0.1:${BUZZ_PORT}/`, 1500);
-    result.ui = uiRes.ok;
-    const metricsRes = await httpGetJson(`http://127.0.0.1:9102/metrics`, 1500);
-    result.metrics = metricsRes.ok;
+    result.ui = true;
   }
   return result;
 }

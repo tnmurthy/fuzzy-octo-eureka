@@ -28,4 +28,6 @@ Thumbs.db
 
 # Never commit secrets
 *.env
+*.env.*
+.env*
 apis.txt

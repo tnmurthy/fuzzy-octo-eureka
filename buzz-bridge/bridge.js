@@ -21,8 +21,15 @@ const { createLocalRouterClient } = require('./local-router-client');
 const { createFallbackRouterClient } = require('./router-fallback');
 const { createPendingStore } = require('./pending-store');
 
-const ENV_FILE = path.join(__dirname, '.env');
+const ENV_FILE = process.env.BRIDGE_ENV_FILE || path.join(__dirname, '.env');
 try { process.loadEnvFile(ENV_FILE); } catch { /* no .env: rely on the environment */ }
+
+let AUTH_TAG = null;
+try {
+  if (process.env.BUZZ_AUTH_TAG) AUTH_TAG = JSON.parse(process.env.BUZZ_AUTH_TAG);
+} catch (e) {
+  console.error('Failed to parse BUZZ_AUTH_TAG:', e.message);
+}
 
 // Own variable name: the machine already sets BUZZ_RELAY_URL=https://... for
 // Buzz desktop, and NIP-42 needs the ws(s) URL in the AUTH relay tag.
@@ -206,6 +213,9 @@ function connect(startedAt, attempt = 0) {
 
   const send = (msg) => ws.send(JSON.stringify(msg));
   const publish = (template) => {
+    if (AUTH_TAG && template.tags && !template.tags.some(t => t[0] === 'auth')) {
+      template.tags.push(AUTH_TAG);
+    }
     const event = finalizeEvent(template, SECRET);
     send(['EVENT', event]);
     return event;
@@ -220,7 +230,9 @@ function connect(startedAt, attempt = 0) {
     const [type] = msg;
 
     if (type === 'AUTH') {
-      send(['AUTH', finalizeEvent(makeAuthEvent(RELAY_URL, msg[1]), SECRET)]);
+      const template = makeAuthEvent(RELAY_URL, msg[1]);
+      if (AUTH_TAG) template.tags.push(AUTH_TAG);
+      send(['AUTH', finalizeEvent(template, SECRET)]);
       return;
     }
     if (type === 'OK' && !authed) {
