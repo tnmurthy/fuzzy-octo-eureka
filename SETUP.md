@@ -53,39 +53,63 @@ the database only lets them read their team's rows and write their own.
 
 ### 1. Prerequisites
 
-Windows 11, 12 GB RAM or more (16 recommended). In PowerShell:
-
-```powershell
-winget install OpenJS.NodeJS.LTS Git.Git NSSM.NSSM Docker.DockerDesktop Ollama.Ollama
-```
+- **Windows 11**: 12 GB RAM or more (16 recommended). In PowerShell:
+  ```powershell
+  winget install OpenJS.NodeJS.LTS Git.Git NSSM.NSSM Docker.DockerDesktop Ollama.Ollama
+  ```
+- **macOS (Mac Studio / Apple Silicon)**: macOS 13+ with Homebrew:
+  ```bash
+  brew install node@22 git ollama coreutils
+  brew install --cask orbstack   # or docker
+  npm install -g pm2
+  ```
 
 Sign in to the agent CLIs you will dispatch to (`claude`, `codex`) as yourself.
 
 ### 2. Get the code and check
 
+**Windows:**
 ```powershell
 git clone https://github.com/tnmurthy/fuzzy-octo-eureka.git C:\tt-ai-stack\01_projects\active\arunachala-dashboard
 cd C:\tt-ai-stack\01_projects\active\arunachala-dashboard
 powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 -DryRun
 ```
 
+**macOS (Mac Studio):**
+```bash
+git clone https://github.com/tnmurthy/fuzzy-octo-eureka.git ~/tt-ai-stack/01_projects/active/arunachala-dashboard
+cd ~/tt-ai-stack/01_projects/active/arunachala-dashboard
+chmod +x install-teammate.sh
+./install-teammate.sh --dry-run
+```
+
 The dry run changes nothing; it lists what is missing and what it would do.
 
-### 3. Install (elevated PowerShell)
+### 3. Install
 
+**Windows (elevated PowerShell):**
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 `
   -SupabaseUrl https://onsmkbwqucvbzggugmmn.supabase.co -SupabaseKey sb_publishable_... `
   -TeamId <from admin> -BuzzChannels <from admin>
 ```
 
+**macOS (Terminal):**
+```bash
+./install-teammate.sh \
+  --supabase-url https://onsmkbwqucvbzggugmmn.supabase.co \
+  --supabase-key sb_publishable_... \
+  --team-id <from admin> \
+  --buzz-channels <from admin>
+```
+
 It pulls the local models, asks for your name, Buzz pubkey, a **unique bot
-name** and your Supabase `+arunachala` email + password, installs the three
-services as LocalSystem, starts n8n on `127.0.0.1:5678` and imports the
-dispatch workflow. Re-running is safe.
+name** and your Supabase `+arunachala` email + password, installs the background
+services (NSSM as LocalSystem on Windows, PM2 on macOS), starts n8n on
+`127.0.0.1:5678` and imports the dispatch workflow. Re-running is safe.
 
 The password is typed hidden and saved to
-`C:\tt-ai-stack\04_internal\secrets\arunachala-team.env`
+`04_internal/secrets/arunachala-team.env`
 (`SUPABASE_PASSWORD=...`), never the project folder; `.env` only names that
 file in `SECRETS_ENV_FILE`. To change it later, edit that one line and
 restart `ArunachalaDashboard`.

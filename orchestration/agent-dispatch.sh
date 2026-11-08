@@ -51,17 +51,37 @@ CODEX_MODEL="${CODEX_MODEL:-}"
 
 # Hermes Desktop puts only hermes.cmd on PATH. Bash cannot find a .cmd by bare
 # name, and cmd's %* cuts a multi-line prompt at the first newline, so use the
-# venv's real hermes.exe. HERMES_BIN overrides; the .venv copy is a fallback
-# for older installs.
+# venv's real hermes binary. HERMES_BIN overrides; the .venv copy is a fallback
+# for older installs. Supports Windows, macOS, and Linux paths.
 resolve_hermes() {
-  local h="${LOCALAPPDATA:-$HOME/AppData/Local}/hermes/hermes-agent"
+  local h_win="${LOCALAPPDATA:-$HOME/AppData/Local}/hermes/hermes-agent"
+  local h_mac="$HOME/Library/Application Support/hermes/hermes-agent"
+  local h_posix="$HOME/.hermes"
   local c
   for c in "${HERMES_BIN:-}" "$(command -v hermes 2>/dev/null || true)" \
-           "$h/venv/Scripts/hermes.exe" "$h/.venv/Scripts/hermes.exe"; do
+           "$h_win/venv/Scripts/hermes.exe" "$h_win/.venv/Scripts/hermes.exe" \
+           "$h_mac/venv/bin/hermes" "$h_mac/.venv/bin/hermes" \
+           "$h_posix/venv/bin/hermes" "$h_posix/.venv/bin/hermes"; do
     [ -n "$c" ] && [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
   done
-  echo "hermes not found: set HERMES_BIN to Hermes's hermes.exe" >&2
+  echo "hermes not found: set HERMES_BIN to Hermes executable" >&2
   return 1
+}
+
+# Cross-platform helpers for timeout and ISO-8601 timestamps (macOS BSD date/timeout compatibility)
+run_timeout() {
+  local limit="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$limit" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$limit" "$@"
+  else
+    "$@"
+  fi
+}
+
+iso_date() {
+  date -Iseconds 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
@@ -135,7 +155,7 @@ started=$(date +%s)
 
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$repo" \
   branch="$branch" worktree="$worktree" log="$log" status=running \
-  task="$(head -c 160 "$prompt_file" | tr '\r\n' '  ')" started_at="$(date -Iseconds)"
+  task="$(head -c 160 "$prompt_file" | tr '\r\n' '  ')" started_at="$(iso_date)"
 
 export AGENT_NAME="$agent"
 
@@ -144,11 +164,11 @@ run_agent() {
   local who="$1" limit="$2"
   case "$who" in
     claude) run_claude "$limit" ;;
-    codex)  timeout "$limit" codex exec -C "$worktree" -s workspace-write \
+    codex)  run_timeout "$limit" codex exec -C "$worktree" -s workspace-write \
                ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
-    agy)    (cd "$worktree" && timeout "$limit" agy --mode plan --disable-slash-commands \
+    agy)    (cd "$worktree" && run_timeout "$limit" agy --mode plan --disable-slash-commands \
                --print-timeout "${limit}s" --prompt="$prompt") ;;
-    hermes) timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt" ;;
+    hermes) run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt" ;;
     noop)   printf '%s\n' "$prompt" ;;
     *)      echo "unknown agent: $who"; return 2 ;;
   esac
@@ -161,7 +181,7 @@ run_claude() {
   local limit="$1" json="$RUNS_DIR/$run_id.claude.json" rc
   local lean=()
   [ "$CLAUDE_LEAN" = true ] && lean=(--strict-mcp-config --disable-slash-commands --setting-sources project,local)
-  (cd "$worktree" && timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
+  (cd "$worktree" && run_timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
      --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS" \
      --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format json "${lean[@]}") > "$json"
   rc=$?
@@ -191,7 +211,7 @@ run_auto() {
     run_agent "$LOCAL_AGENT" "$LOCAL_TIMEOUT_SECONDS"; rc=$?
     if [ "$rc" -eq 0 ]; then
       echo "== auto: $LOCAL_AGENT finished - running tests"
-      (cd "$worktree" && timeout "$TEST_TIMEOUT_SECONDS" bash -c "$tests"); rc=$?
+      (cd "$worktree" && run_timeout "$TEST_TIMEOUT_SECONDS" bash -c "$tests"); rc=$?
       if [ "$rc" -eq 0 ]; then
         echo "== auto: tests pass - no escalation"
         escalated=false
@@ -226,7 +246,7 @@ status=done
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" status="$status" \
   exit_code:="$exit_code" duration_s:="$(( $(date +%s) - started ))" \
   commits_ahead:="$commits" head="$(git -C "$(native "$worktree")" rev-parse --short HEAD)" \
-  finished_at="$(date -Iseconds)" ${escalated:+escalated:="$escalated"}
+  finished_at="$(iso_date)" ${escalated:+escalated:="$escalated"}
 
 echo "$run_id $status (exit $exit_code) log: $log"
 exit "$exit_code"

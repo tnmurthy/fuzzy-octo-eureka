@@ -142,15 +142,17 @@ const CLOUD_PROVIDERS = new Set(['google', 'openai', 'anthropic']);
 const OPENCLAW_HOME = process.env.OPERATOR_HOME || require('os').homedir();
 const OPERATOR_NAME = process.env.OPERATOR_NAME || 'Operator';
 const OPENCLAW_BIN = process.env.OPENCLAW_BIN ||
-  path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm', 'openclaw.cmd');
+  (process.platform === 'win32'
+    ? path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm', 'openclaw.cmd')
+    : 'openclaw');
 // LocalSystem's own $HOME/$USERPROFILE isn't the operator's profile, so point the
 // CLI at the real config/state explicitly rather than letting it resolve
 // (and silently operate on) the wrong home directory.
 const OPENCLAW_ENV = Object.assign({}, process.env, {
   USERPROFILE: OPENCLAW_HOME,
   HOME: OPENCLAW_HOME,
-  OPENCLAW_STATE_DIR: OPENCLAW_HOME + '\\.openclaw',
-  OPENCLAW_CONFIG_PATH: OPENCLAW_HOME + '\\.openclaw\\openclaw.json'
+  OPENCLAW_STATE_DIR: path.join(OPENCLAW_HOME, '.openclaw'),
+  OPENCLAW_CONFIG_PATH: path.join(OPENCLAW_HOME, '.openclaw', 'openclaw.json')
 });
 
 // Initialize ReBAC Engine and Seed Permission Nodes & Relations
@@ -728,7 +730,42 @@ function handleRequest(req, res) {
         fs.writeFileSync(promptFile, buildDispatchPrompt(task, memories), 'utf8');
 
         const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
-        const bashBin = process.env.DISPATCH_BASH_BIN || 'C:\\Program Files\\Git\\bin\\bash.exe';
+        const bashBin = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash');
+        const isWin = process.platform === 'win32';
+        const pathDirs = [
+          path.dirname(process.execPath),
+          isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm') : path.join(OPENCLAW_HOME, '.npm-global', 'bin'),
+          isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Local', 'Programs', 'OpenAI', 'Codex', 'bin') : '/opt/homebrew/bin',
+          '/usr/local/bin',
+          '/usr/bin',
+          '/bin',
+          process.env.PATH || '',
+        ].filter(Boolean);
+
+        const dispatchEnv = Object.assign({}, process.env, {
+          AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
+          // claude runs record their real tokens and cost in the same ledger.
+          AI_CALLS_FILE,
+          PATH: pathDirs.join(path.delimiter),
+          // LocalSystem does not own the repos, so git's dubious-ownership
+          // check kills the script's first git call (set -e, stdio ignored:
+          // silent). safe.directory is honoured from command-line config,
+          // which GIT_CONFIG_COUNT/KEY/VALUE is; scoped to the projects dir
+          // (repos and their sibling worktrees), not '*'.
+          GIT_CONFIG_COUNT: '1',
+          GIT_CONFIG_KEY_0: 'safe.directory',
+          GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
+          // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
+          // logins in the operator's profile, not LocalSystem's.
+          USERPROFILE: OPENCLAW_HOME,
+          HOME: OPENCLAW_HOME,
+        });
+
+        if (isWin) {
+          dispatchEnv.APPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Roaming');
+          dispatchEnv.LOCALAPPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Local');
+        }
+
         const child = require('child_process').spawn(
           bashBin,
           [scriptPath, agent, repoPath, safeBranch, promptFile, runId],
@@ -737,36 +774,7 @@ function handleRequest(req, res) {
             windowsHide: true,
             detached: true,
             stdio: 'ignore',
-            env: Object.assign({}, process.env, {
-              AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
-              // claude runs record their real tokens and cost in the same ledger.
-              AI_CALLS_FILE,
-              // Service runs under LocalSystem, whose PATH may not include
-              // node's install dir, so agent-dispatch.sh's bare `node` calls
-              // (runlog.mjs) fail silently (spawn is detached/stdio:'ignore').
-              // process.execPath always knows exactly where this node is.
-              // The agent CLIs (claude via npm, codex) live in the operator's profile.
-              PATH: [
-                path.dirname(process.execPath),
-                OPENCLAW_HOME + '\\AppData\\Roaming\\npm',
-                OPENCLAW_HOME + '\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin',
-                process.env.PATH || '',
-              ].join(';'),
-              // LocalSystem does not own the repos, so git's dubious-ownership
-              // check kills the script's first git call (set -e, stdio ignored:
-              // silent). safe.directory is honoured from command-line config,
-              // which GIT_CONFIG_COUNT/KEY/VALUE is; scoped to the projects dir
-              // (repos and their sibling worktrees), not '*'.
-              GIT_CONFIG_COUNT: '1',
-              GIT_CONFIG_KEY_0: 'safe.directory',
-              GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
-              // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
-              // logins in the operator's profile, not LocalSystem's.
-              USERPROFILE: OPENCLAW_HOME,
-              HOME: OPENCLAW_HOME,
-              APPDATA: OPENCLAW_HOME + '\\AppData\\Roaming',
-              LOCALAPPDATA: OPENCLAW_HOME + '\\AppData\\Local',
-            }),
+            env: dispatchEnv,
           }
         );
         child.unref();

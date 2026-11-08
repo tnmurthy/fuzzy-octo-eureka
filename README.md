@@ -71,6 +71,7 @@ recovery email (Talia's recovery emails point at other apps).
 
 ### 1.2 Teammate - install (30-60 minutes, mostly downloads)
 
+**Windows:**
 ```powershell
 winget install OpenJS.NodeJS.LTS Git.Git NSSM.NSSM Docker.DockerDesktop Ollama.Ollama
 git clone https://github.com/tnmurthy/fuzzy-octo-eureka.git C:\tt-ai-stack\01_projects\active\arunachala-dashboard
@@ -79,10 +80,21 @@ powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 -DryRun   # chec
 powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1           # elevated: installs
 ```
 
+**macOS (Mac Studio / Apple Silicon):**
+```bash
+brew install node@22 git ollama coreutils
+brew install --cask orbstack   # or docker
+npm install -g pm2
+git clone https://github.com/tnmurthy/fuzzy-octo-eureka.git ~/tt-ai-stack/01_projects/active/arunachala-dashboard
+cd ~/tt-ai-stack/01_projects/active/arunachala-dashboard
+chmod +x install-teammate.sh
+./install-teammate.sh --dry-run                                         # check, changes nothing
+./install-teammate.sh                                                   # interactive install
+```
+
 The installer pulls the local models, asks for your name, Buzz key, a unique
-bot name and your Supabase login, saves the password to
-`C:\tt-ai-stack\04_internal\secrets\arunachala-team.env` (never the project
-folder), installs the three services and imports the n8n workflow. Then:
+bot name and your Supabase login, installs background services (NSSM on Windows, PM2 on macOS),
+and imports the n8n workflow. Then:
 
 1. Open http://127.0.0.1:5678, create the n8n owner account, switch the
    **buzz-dispatch** workflow to **Active**.
