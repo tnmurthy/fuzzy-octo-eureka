@@ -1223,6 +1223,42 @@
         .catch((err) => renderAgentRuns({ ok: false, error: `Could not load runs: ${err.message}` }));
     }
 
+    window.handleQuickDispatch = function(e) {
+      if (e) e.preventDefault();
+      const btn = document.getElementById('dispatch-btn');
+      const status = document.getElementById('dispatch-status');
+      const agent = (document.getElementById('dispatch-agent') || {}).value || 'auto';
+      const repo = ((document.getElementById('dispatch-repo') || {}).value || '').trim();
+      const branch = ((document.getElementById('dispatch-branch') || {}).value || '').trim();
+      const task = ((document.getElementById('dispatch-task') || {}).value || '').trim();
+
+      if (!repo || !task) return;
+      if (btn) btn.disabled = true;
+      if (status) { status.style.color = '#94a3b8'; status.textContent = 'Dispatching task...'; }
+
+      fetch('/api/dispatch/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent, repo, branch: branch || undefined, task })
+      })
+      .then((r) => r.json())
+      .then((data) => {
+        if (btn) btn.disabled = false;
+        if (data.ok) {
+          if (status) { status.style.color = '#10b981'; status.textContent = `Dispatched run ${data.runId}!`; }
+          const taskInput = document.getElementById('dispatch-task');
+          if (taskInput) taskInput.value = '';
+          setTimeout(() => loadAgentRuns(), 800);
+        } else {
+          if (status) { status.style.color = '#ef4444'; status.textContent = `Error: ${data.error}`; }
+        }
+      })
+      .catch((err) => {
+        if (btn) btn.disabled = false;
+        if (status) { status.style.color = '#ef4444'; status.textContent = `Network error: ${err.message}`; }
+      });
+    };
+
     setInterval(() => {
       const tab = document.getElementById('runs');
       if (tab && tab.classList.contains('active')) loadAgentRuns();

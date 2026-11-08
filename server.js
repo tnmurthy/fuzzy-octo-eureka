@@ -238,10 +238,7 @@ function serveStaticFile(req, res) {
     const ext = path.extname(filePath);
     res.writeHead(200, {
       'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-      // This dashboard is under active edit and served through a Cloudflare
-      // tunnel; without this, the CDN edge caches static JS/CSS/HTML past
-      // client reloads (client no-store only bypasses the browser cache).
-      'Cache-Control': 'no-cache, must-revalidate'
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
     });
     res.end(data);
   });
@@ -836,8 +833,10 @@ function handleRequest(req, res) {
       if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
         return sendJson(res, 400, { ok: false, error: 'repo must be a plain directory name' });
       }
-      const repoPath = path.resolve(PROJECTS_DIR, repo);
-      if (!repoPath.startsWith(PROJECTS_DIR) || !fs.existsSync(path.join(repoPath, '.git'))) {
+      const repoPath = (repo === path.basename(DASHBOARD_DIR) || repo === '.')
+        ? DASHBOARD_DIR
+        : path.resolve(PROJECTS_DIR, repo);
+      if (!fs.existsSync(path.join(repoPath, '.git'))) {
         return sendJson(res, 400, { ok: false, error: `not a known repo: ${repo}` });
       }
       if (typeof task !== 'string' || !task.trim()) {

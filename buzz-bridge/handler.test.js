@@ -153,3 +153,57 @@ test('runs: lists only today\'s runs when there are some', () => {
 test('formatStatus marks unknown services instead of guessing', () => {
   assert.match(formatStatus({ services: {} }, [], 'services'), /Ollama: unknown/);
 });
+
+test('fast-path: /status returns immediate status without calling router', async () => {
+  let routerCalled = false;
+  const deps = {
+    typesafe: { systemOne: async () => { routerCalled = true; throw new Error('should not call'); } },
+    dashboard: { telemetry: async () => telemetry, runs: async () => runs, chat: async () => '' },
+    repos: () => ['bov'],
+  };
+  const handle = createHandler(deps);
+  const reply = await handle({ text: '/status', thread: [] });
+  assert.equal(routerCalled, false);
+  assert.match(reply, /Ollama: up/);
+});
+
+test('fast-path: /run dispatches directly without calling router', async () => {
+  let routerCalled = false;
+  let triggered = null;
+  const deps = {
+    typesafe: { systemOne: async () => { routerCalled = true; throw new Error('should not call'); } },
+    dashboard: { telemetry: async () => telemetry, runs: async () => runs, chat: async () => '' },
+    repos: () => ['bov'],
+    dispatch: {
+      trigger: async (args) => { triggered = args; return { runId: 'run-fast-1' }; },
+      registerPending: () => {}
+    }
+  };
+  const handle = createHandler(deps);
+  const reply = await handle({ text: '/run hermes bov fix tests in auth', thread: [] });
+  assert.equal(routerCalled, false);
+  assert.equal(triggered.agent, 'hermes');
+  assert.equal(triggered.repo, 'bov');
+  assert.equal(triggered.task, 'fix tests in auth');
+  assert.match(reply, /Dispatched hermes in bov \(run run-fast-1\)/);
+});
+
+test('fast-path: /po routes directly to persona chat', async () => {
+  let routerCalled = false;
+  let chatArgs = null;
+  const deps = {
+    typesafe: { systemOne: async () => { routerCalled = true; throw new Error('should not call'); } },
+    dashboard: {
+      telemetry: async () => telemetry,
+      runs: async () => runs,
+      chat: async (p, msg) => { chatArgs = { p, msg }; return 'PO reply'; }
+    },
+    repos: () => ['bov'],
+  };
+  const handle = createHandler(deps);
+  const reply = await handle({ text: '/po what is the roadmap?', thread: [] });
+  assert.equal(routerCalled, false);
+  assert.equal(chatArgs.p, 'po');
+  assert.equal(chatArgs.msg, 'what is the roadmap?');
+  assert.equal(reply, 'PO reply');
+});

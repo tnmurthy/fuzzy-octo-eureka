@@ -9,7 +9,7 @@
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-      <link rel="stylesheet" href="dashboard.css">
+      <link rel="stylesheet" href="dashboard.css?v=20261108_macstudio">
     </head>
     <body>
 
@@ -708,6 +708,42 @@
                 <p>Every task dispatched to an agent: who has it, where it works, and how it ended.</p>
               </div>
             </section>
+            <section class="card" style="margin-bottom: 1.5rem;">
+              <div class="card-header">
+                <div class="card-title"><span class="card-title-icon">⚡</span><h3>Quick Dispatch</h3></div>
+                <span class="card-subtitle">Dispatch an agent run immediately without going through chat</span>
+              </div>
+              <form id="quick-dispatch-form" onsubmit="handleQuickDispatch(event)" style="display:flex; flex-direction:column; gap:0.75rem; padding:1.25rem;">
+                <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                  <div style="flex:1; min-width:160px;">
+                    <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Agent</label>
+                    <select id="dispatch-agent" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem;">
+                      <option value="auto" selected>auto (Local Hermes first, Claude if tests fail)</option>
+                      <option value="hermes">hermes (Local model, free)</option>
+                      <option value="claude">claude (Claude Code Sonnet)</option>
+                      <option value="codex">codex (Codex CLI)</option>
+                      <option value="agy">agy (Antigravity plan/review)</option>
+                    </select>
+                  </div>
+                  <div style="flex:1; min-width:180px;">
+                    <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Repository</label>
+                    <input id="dispatch-repo" type="text" value="fuzzy-octo-eureka" placeholder="Repository folder name" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem;" required />
+                  </div>
+                  <div style="flex:1; min-width:160px;">
+                    <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Branch (optional)</label>
+                    <input id="dispatch-branch" type="text" placeholder="buzz/auto-generated" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem;" />
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Task Prompt</label>
+                  <textarea id="dispatch-task" rows="2" placeholder="e.g. Run tests and clean up unused console logs" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem; resize:vertical; font-family:inherit;" required></textarea>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.25rem;">
+                  <span id="dispatch-status" style="font-size:0.8rem; color:#94a3b8;"></span>
+                  <button type="submit" id="dispatch-btn" style="padding:0.6rem 1.5rem; background:#3b82f6; color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:0.85rem;">Dispatch Task</button>
+                </div>
+              </form>
+            </section>
             <section class="card">
               <div class="card-header">
                 <div class="card-title"><span class="card-title-icon">🧭</span><h3>Recent runs</h3></div>
@@ -820,6 +856,6 @@
       <!-- Toast Notification Container -->
       <div id="toast-container" class="toast-container"></div>
 
-      <script src="dashboard.js?v=20260909_navfix"></script>
+      <script src="dashboard.js?v=20261108_macstudio"></script>
     </body>
     </html>

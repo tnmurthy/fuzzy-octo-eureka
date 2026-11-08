@@ -58,6 +58,40 @@ function describeDispatch(d) {
  */
 function createHandler(deps) {
   return async function handle({ text, thread, log = () => {} }) {
+    const trimmed = (text || '').trim();
+
+    // Fast-path: /status [services|runs|everything]
+    if (trimmed.startsWith('/status')) {
+      const topic = trimmed.includes('runs') ? 'runs' : trimmed.includes('services') ? 'services' : 'everything';
+      const [telemetry, runs] = await Promise.all([deps.dashboard.telemetry(), deps.dashboard.runs()]);
+      return formatStatus(telemetry, runs, topic);
+    }
+
+    // Fast-path: /run <agent> <repo> <task...> or /dispatch <agent> <repo> <task...>
+    if (trimmed.startsWith('/run ') || trimmed.startsWith('/dispatch ')) {
+      const parts = trimmed.split(/\s+/);
+      if (parts.length >= 4) {
+        const agent = parts[1];
+        const repo = parts[2];
+        const task = parts.slice(3).join(' ');
+        if (!deps.dispatch) return `Dispatch not configured.`;
+        try {
+          const { runId } = await deps.dispatch.trigger({ agent, repo, task });
+          deps.dispatch.registerPending(runId);
+          return `Dispatched ${agent} in ${repo} (run ${runId}). I will reply here when it finishes.`;
+        } catch (err) {
+          return `Could not dispatch: ${err.message}`;
+        }
+      }
+    }
+
+    // Fast-path: /po <text>, /tech <text>, /qa <text>, /infra <text>, /doc <text>
+    const personaMatch = trimmed.match(/^\/(po|tech|qa|infra|doc)\s+(.+)$/s);
+    if (personaMatch) {
+      const [, p, query] = personaMatch;
+      return deps.dashboard.chat(p, query);
+    }
+
     let decision;
     try {
       const runs = await deps.dashboard.runs();

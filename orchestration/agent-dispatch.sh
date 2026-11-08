@@ -254,5 +254,12 @@ node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" status="$status" \
   commits_ahead:="$commits" head="$(git -C "$(native "$worktree")" rev-parse --short HEAD)" \
   finished_at="$(iso_date)" ${escalated:+escalated:="$escalated"}
 
+# Directly notify bridge listener if active, bypassing n8n polling wait
+notify_port="${BRIDGE_NOTIFY_PORT:-3100}"
+duration_s="$(( $(date +%s) - started ))"
+curl -s -m 2 -X POST "http://127.0.0.1:${notify_port}/notify" \
+  -H "Content-Type: application/json" \
+  -d "{\"runId\": \"$run_id\", \"text\": \"Run $run_id $status in $(basename "$repo") ($status, exit $exit_code, took ${duration_s}s, ${commits} commits)\"}" >/dev/null 2>&1 || true
+
 echo "$run_id $status (exit $exit_code) log: $log"
 exit "$exit_code"
