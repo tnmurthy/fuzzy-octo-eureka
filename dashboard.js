@@ -19,7 +19,7 @@
       },
       tech: {
         title: "💻 Technical Lead & Architect",
-        role: "Responsible for designing system architectures, feature implementation, refactoring legacy components, and reviewing schemas inside C:/tt-ai-stack.",
+        role: "Responsible for designing system architectures, feature implementation, refactoring legacy components, and reviewing schemas across the workspace stack.",
         prompt: `You are the Technical Lead & Architect subagent.
     Your role is to design and implement software systems, execute code edits, debug issues, and refactor existing code.
     You report directly to the Product Strategist & Product Owner (Arunachala Ramana).`,
@@ -35,7 +35,7 @@
       },
       infra: {
         title: "🛠️ DevOps & Infrastructure Expert",
-        role: "Manages container configurations (Docker, docker-compose), local server offloading optimizations (Ollama Vulkan/GPU mappings), and workspace shell scripting utilities.",
+        role: "Manages container configurations (Docker, docker-compose), local server offloading optimizations (Ollama GPU/Metal compute mappings), and workspace shell scripting utilities.",
         prompt: `You are the Infrastructure & DevOps Specialist subagent.
     Your role is to manage containers, deployments, scripting, environment setups, and local AI model server configurations (e.g., Ollama).
     You report directly to the Product Strategist & Product Owner (Arunachala Ramana).`,
@@ -47,7 +47,7 @@
         prompt: `You are the Documentation & Memory Specialist subagent.
     Your role is to maintain the project's state, long-term memory, daily logs, and documentation files.
     You report directly to the Product Strategist & Product Owner (Arunachala Ramana).`,
-        task: "Daily log file C:/tt-ai-stack/memory/2026-05-23.md fully reconciled with latest milestones."
+        task: "Daily memory log files reconciled with latest milestones."
       }
     };
 
@@ -92,10 +92,29 @@
     let lastTelemetryData = null;
     // Who this install belongs to (server .env OPERATOR_NAME), for greetings.
     let operatorName = 'Operator';
+    let currentHostSpecs = null;
+    let personaModel = 'gemma3:4b';
     fetch('/api/config')
       .then(res => res.json())
-      .then(cfg => { if (cfg && cfg.operatorName) operatorName = cfg.operatorName; })
+      .then(cfg => {
+        if (cfg) {
+          if (cfg.operatorName) operatorName = cfg.operatorName;
+          if (cfg.personaModel) {
+            personaModel = cfg.personaModel;
+            applyPersonaModelBadges(cfg.personaModel);
+          }
+          if (cfg.host) updateHostSpecsUI(cfg.host);
+        }
+      })
       .catch(() => {});
+
+    function applyPersonaModelBadges(model) {
+      if (!model) return;
+      const infraBadge = document.getElementById('id-badge-infra');
+      const docBadge = document.getElementById('id-badge-doc');
+      if (infraBadge) infraBadge.innerText = model;
+      if (docBadge) docBadge.innerText = model;
+    }
 
     // ---------------------------------------------------------------------------
     // Tab switching
@@ -495,9 +514,13 @@
 
       setTimeout(() => {
         const sweepTime = new Date().toTimeString().split(' ')[0];
+        const rootDisplay = (currentHostSpecs && currentHostSpecs.openclawConfigFile)
+          ? currentHostSpecs.openclawConfigFile.replace(/[/\\]openclaw\.json$/, '')
+          : 'tt-ai-stack';
+        const cfgDisplay = (currentHostSpecs && currentHostSpecs.openclawConfigFile) || 'openclaw.json';
         const messages = [
-          `[${sweepTime}] [sweep] Workspace 'C:\\tt-ai-stack' contains folders: 01_projects (clean), 02_engines (restored), 03_documents (archived), 04_internal (isolated).`,
-          `[${sweepTime}] [sweep] OpenClaw config C:\\tt-ai-stack\\openclaw.json is active and valid.`,
+          `[${sweepTime}] [sweep] Workspace '${rootDisplay}' contains folders: 01_projects (clean), 02_engines (restored), 03_documents (archived), 04_internal (isolated).`,
+          `[${sweepTime}] [sweep] OpenClaw config ${cfgDisplay} is active and valid.`,
           `[${sweepTime}] [sweep] All 5 system agents report healthy. Ready for commands.`
         ];
         messages.forEach(msg => {
@@ -578,6 +601,53 @@
       syncDaemonLogs(data);
       updateAgentTelemetryPanel(data);
       updateEngineStatsPanel(data);
+      if (data.host) updateHostSpecsUI(data.host);
+    }
+
+    function updateHostSpecsUI(host) {
+      if (!host) return;
+      currentHostSpecs = host;
+
+      const osEl = document.getElementById('id-host-os');
+      if (osEl && host.os) osEl.innerText = host.os;
+
+      const cpuEl = document.getElementById('id-host-cpu');
+      if (cpuEl && host.cpu) cpuEl.innerText = host.cpu;
+
+      const gpuEl = document.getElementById('id-host-gpu');
+      if (gpuEl && host.gpu) gpuEl.innerText = host.gpu;
+
+      const ollamaEl = document.getElementById('id-host-ollama');
+      if (ollamaEl && host.ollamaEndpoint) ollamaEl.innerText = host.ollamaEndpoint;
+
+      const openclawEl = document.getElementById('id-host-openclaw');
+      if (openclawEl && host.openclawConfig) openclawEl.innerText = host.openclawConfig;
+
+      const openclawFileEl = document.getElementById('id-openclaw-config-file');
+      if (openclawFileEl && host.openclawConfigFile) openclawFileEl.innerText = host.openclawConfigFile;
+
+      const initWorkspaceLog = document.getElementById('id-init-workspace-log');
+      if (initWorkspaceLog && host.stackRoot) {
+        initWorkspaceLog.innerText = `[18:30:04] [workspace] Relocation verified. Root ${host.stackRoot} structured (01_projects, 02_engines, 03_documents, 04_internal).`;
+      }
+
+      const shellChip = document.getElementById('id-shell-chip');
+      if (shellChip && host.shellName) {
+        shellChip.innerText = host.shellName;
+      }
+
+      const cpuSubEl = document.getElementById('id-cpu-sub');
+      if (cpuSubEl && host.cpu) {
+        cpuSubEl.innerHTML = `<span class="status-dot green"></span> ${host.cpu}`;
+      }
+
+      const gpuHeaderEl = document.getElementById('id-gpu-header');
+      if (gpuHeaderEl && host.gpuHeader) gpuHeaderEl.innerText = host.gpuHeader;
+
+      const gpuSubEl = document.getElementById('id-gpu-sub');
+      if (gpuSubEl && host.gpuSub) {
+        gpuSubEl.innerHTML = `<span class="status-dot green"></span> ${host.gpuSub}`;
+      }
     }
 
     function updateLatencyMetrics(data) {
@@ -695,12 +765,14 @@
         item.className = 'model-item';
         const modelName = m.name || m;
         const sizeGb = m.size ? `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB` : 'Installed';
-        const isPrimary = modelName.includes('qwen2.5-coder:7b');
+        const isPrimary = personaModel
+          ? modelName.toLowerCase().includes(personaModel.toLowerCase())
+          : (modelName.includes('gemma3') || modelName.includes('qwen2.5-coder:7b'));
         const isVector = modelName.includes('nomic-embed');
 
         item.innerHTML = `
           <div class="model-name">${modelName}</div>
-          <div class="model-role">${isPrimary ? 'Primary Coding' : (isVector ? 'Embeddings/RAG' : 'Local Inference')}</div>
+          <div class="model-role">${isPrimary ? 'Primary Persona/Coding' : (isVector ? 'Embeddings/RAG' : 'Local Inference')}</div>
           <div class="model-stat">${sizeGb}</div>
           <div class="model-badge">${isPrimary ? 'Primary' : (isVector ? 'Vector' : 'Online')}</div>
         `;
@@ -728,7 +800,7 @@
           badge.style.color = 'var(--status-green)';
           badge.style.borderColor = 'var(--status-green)';
         } else {
-          if (name.includes('qwen2.5-coder:7b')) badge.innerText = 'Primary';
+          if (personaModel && name.toLowerCase().includes(personaModel.toLowerCase())) badge.innerText = 'Primary';
           else if (name.includes('nomic-embed')) badge.innerText = 'Vector';
           else badge.innerText = 'Online';
           badge.style.backgroundColor = '';

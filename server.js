@@ -38,6 +38,9 @@ const accessGate = createAccessGate({
   publicHostnames: (process.env.PUBLIC_HOSTNAMES || 'team.mytestbed.tech').split(','),
   allowedEmails: (process.env.ACCESS_ALLOWED_EMAILS || '').split(',').filter(Boolean),
 });
+const auth = require('./auth');
+const teamManager = require('./team-manager');
+const { getHostSpecs } = require('./host-specs');
 const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
 const HISTORY_FILE = path.join(DASHBOARD_DIR, 'history.json');
@@ -182,7 +185,13 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2'
 };
 
 function sendJson(res, statusCode, payload) {
@@ -497,8 +506,120 @@ function handleDigest(req, res) {
 }
 
 function handleRequest(req, res) {
+  // ── Auth & Team Management Endpoints ──
+  if (req.url.startsWith('/login')) {
+    const user = auth.getSessionUser(req);
+    if (user && req.method === 'GET') {
+      res.writeHead(302, { Location: '/' });
+      return res.end();
+    }
+    req.url = '/login.html';
+    return serveStaticFile(req, res);
+  }
+
+  if (req.url.startsWith('/logout')) {
+    res.writeHead(302, {
+      'Set-Cookie': auth.clearSessionCookie(),
+      Location: '/login'
+    });
+    return res.end();
+  }
+
+  if (req.url.startsWith('/api/auth/login') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { username, password, activateTeam } = JSON.parse(body || '{}');
+        if (!auth.verifyCredentials(username, password)) {
+          return sendJson(res, 401, { ok: false, error: 'Invalid username or password' });
+        }
+
+        let teamActivation = null;
+        if (activateTeam !== false) {
+          teamActivation = teamManager.activateTeam(`Login by ${username}`);
+        }
+
+        const cookie = auth.createSessionCookie(username);
+        res.writeHead(200, {
+          'Set-Cookie': cookie,
+          'Content-Type': 'application/json'
+        });
+        res.end(JSON.stringify({
+          ok: true,
+          user: username,
+          activated: true,
+          teamActivation,
+          message: 'Logged in successfully. Buzz AI Team activated on Mac Studio.'
+        }));
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err.message });
+      }
+    });
+    return;
+  }
+
+  if (req.url.startsWith('/api/auth/logout')) {
+    res.writeHead(200, {
+      'Set-Cookie': auth.clearSessionCookie(),
+      'Content-Type': 'application/json'
+    });
+    return res.end(JSON.stringify({ ok: true, message: 'Logged out successfully' }));
+  }
+
+  if (req.url.startsWith('/api/auth/me') || req.url.startsWith('/api/auth/status')) {
+    const user = auth.getSessionUser(req);
+    return sendJson(res, 200, {
+      authenticated: !!user,
+      user: user || null,
+      teamStatus: teamManager.getTeamStatus()
+    });
+  }
+
+  if (req.url.startsWith('/api/team/status')) {
+    return sendJson(res, 200, teamManager.getTeamStatus());
+  }
+
+  if (req.url.startsWith('/api/team/activate') && req.method === 'POST') {
+    const user = auth.getSessionUser(req) || 'dashboard';
+    const result = teamManager.activateTeam(`Manual activation by ${user}`);
+    return sendJson(res, result.ok ? 200 : 500, result);
+  }
+
+  if (req.url.startsWith('/api/team/deactivate') && req.method === 'POST') {
+    const result = teamManager.deactivateTeam();
+    return sendJson(res, result.ok ? 200 : 500, result);
+  }
+
+  if (req.url.startsWith('/api/team/directive') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { channelId, content } = JSON.parse(body || '{}');
+        if (!channelId || !content) {
+          return sendJson(res, 400, { ok: false, error: 'channelId and content required' });
+        }
+        const result = teamManager.sendDirective(channelId, content);
+        return sendJson(res, 200, { ok: true, result });
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, error: err.message });
+      }
+    });
+    return;
+  }
+
   if (req.url.startsWith('/api/telemetry')) {
-    return serveJsonFile(res, TELEMETRY_FILE, {});
+    let telemetry = {};
+    if (fs.existsSync(TELEMETRY_FILE)) {
+      try {
+        telemetry = JSON.parse(fs.readFileSync(TELEMETRY_FILE, 'utf8'));
+      } catch (_) {}
+    }
+    if (!telemetry.host) {
+      telemetry.host = getHostSpecs();
+    }
+    return sendJson(res, 200, telemetry);
   }
   if (req.url.startsWith('/api/digest')) {
     return handleDigest(req, res);
@@ -507,7 +628,7 @@ function handleRequest(req, res) {
     return handleCosts(req, res);
   }
   if (req.url.startsWith('/api/config')) {
-    return sendJson(res, 200, { operatorName: OPERATOR_NAME, personaModel: PERSONA_MODEL });
+    return sendJson(res, 200, { operatorName: OPERATOR_NAME, personaModel: PERSONA_MODEL, host: getHostSpecs() });
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
@@ -880,14 +1001,50 @@ function handleRequest(req, res) {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (accessGate.requiresAccess(req)) {
-    const verdict = await accessGate.verifyRequest(req);
-    if (!verdict.ok) {
-      console.error(`Access denied ${req.method} ${req.url}: ${verdict.reason}`);
-      return sendJson(res, 403, { ok: false, error: 'Cloudflare Access login required' });
-    }
+  const urlPath = req.url.split('?')[0];
+  const isPublicAuth = urlPath === '/login' || 
+                       urlPath === '/logout' || 
+                       urlPath === '/api/auth/login' || 
+                       urlPath === '/api/auth/status' || 
+                       urlPath === '/api/auth/logout';
+  const isStaticAsset = /\.(css|js|jpg|jpeg|png|gif|svg|ico|woff|woff2|ttf|map)$/i.test(urlPath);
+
+  // 1. Allow public auth pages and static assets
+  if (isPublicAuth || isStaticAsset) {
+    return handleRequest(req, res);
   }
-  return handleRequest(req, res);
+
+  // 2. Localhost requests bypass external auth
+  if (!accessGate.requiresAccess(req)) {
+    return handleRequest(req, res);
+  }
+
+  // 3. Valid session cookie authentication
+  const sessionUser = auth.getSessionUser(req);
+  if (sessionUser) {
+    req.sessionUser = sessionUser;
+    return handleRequest(req, res);
+  }
+
+  // 4. Cloudflare Access assertion token (if used)
+  const cfVerdict = await accessGate.verifyRequest(req);
+  if (cfVerdict && cfVerdict.ok) {
+    req.sessionUser = cfVerdict.email || 'cf-user';
+    return handleRequest(req, res);
+  }
+
+  // 5. Unauthenticated: return 401 for API, redirect to /login for pages
+  if (req.url.startsWith('/api/')) {
+    return sendJson(res, 401, {
+      ok: false,
+      error: 'Authentication required. Please login with username and password at /login',
+      loginUrl: '/login'
+    });
+  }
+
+  const redirectParam = encodeURIComponent(req.url);
+  res.writeHead(302, { Location: `/login?redirect=${redirectParam}` });
+  return res.end();
 });
 
 server.listen(PORT, HOST, () => {

@@ -8,6 +8,7 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { getHostSpecs } = require('./host-specs');
 
 const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
@@ -269,6 +270,7 @@ async function tick() {
   const telemetry = {
     timestamp,
     cpu,
+    host: getHostSpecs(),
     services: {
       ollama: { online: ollamaTcp.online, port: OLLAMA_PORT, latencyMs: ollamaLatencyMs },
       openclaw: { online: openclawTcp.online, port: OPENCLAW_PORT, latencyMs: openclawTcp.latencyMs },

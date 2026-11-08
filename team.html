@@ -54,8 +54,34 @@
         <h1>👥 Team</h1>
         <div class="muted">Who directs whom, and which tool each one runs on. <span id="updated">Loading…</span></div>
       </div>
-      <a href="/">← Operations dashboard</a>
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span id="user-display" class="muted mono"></span>
+        <a href="/">← Operations dashboard</a>
+      </div>
     </header>
+
+    <!-- Live Buzz AI Team Control Card -->
+    <section style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+          <span class="dot green" style="box-shadow: 0 0 10px #22c55e;"></span>
+          <strong style="font-size: 1.05rem; letter-spacing: -0.01em;">⚡ Buzz AI Team: ACTIVE</strong>
+          <span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); color: #86efac; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px;">Local Mac Studio</span>
+        </div>
+        <div class="muted" style="font-size: 0.8rem;">
+          Relay: <span class="mono" style="color: var(--status-blue);">wss://drisyon-ai.communities.buzz.xyz</span> · 
+          Bot: <span class="mono" style="color: #fff;">@arunachala</span> · 
+          Operator: <span class="mono" style="color: #fff;">NM (bd11c441...)</span>
+        </div>
+        <div class="muted" style="font-size: 0.75rem; margin-top: 4px;">
+          Channels: <code style="color: #93c5fd;">#general</code>, <code style="color: #93c5fd;">#arunachala-dashboard</code>, <code style="color: #93c5fd;">#paperclip-tt-company</code>, <code style="color: #93c5fd;">#buzz</code>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button id="btn-reactivate" onclick="reActivateTeam()" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-weight: 500;">⚡ Re-activate Team</button>
+        <a href="/logout" style="color: #f87171; text-decoration: none; font-size: 0.8rem; padding: 7px 12px; border: 1px solid rgba(248, 113, 113, 0.3); border-radius: 8px;">Sign Out</a>
+      </div>
+    </section>
 
     <div class="tier"><div class="node lead" data-id="operator" tabindex="0" role="button">
       <div class="title">👤 You - Operator</div>
@@ -214,7 +240,34 @@
       if (n && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(n.dataset.id); }
     });
 
+    async function loadUser() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            document.getElementById('user-display').textContent = '👤 ' + data.user;
+          }
+        }
+      } catch {}
+    }
+
+    async function reActivateTeam() {
+      const btn = document.getElementById('btn-reactivate');
+      if (btn) btn.textContent = 'Activating...';
+      try {
+        const res = await fetch('/api/team/activate', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || (data.ok ? 'Buzz AI Team activated successfully!' : 'Activation failed'));
+      } catch (err) {
+        alert('Failed to activate: ' + err.message);
+      } finally {
+        if (btn) btn.textContent = '⚡ Re-activate Team';
+      }
+    }
+
     async function load() {
+      loadUser();
       const errBox = document.getElementById('err');
       try {
         const [tel, runs] = await Promise.all([

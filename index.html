@@ -35,6 +35,7 @@
               <li class="nav-item" onclick="switchTab('runs')"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
               <li class="nav-item" onclick="switchTab('costs')"><span class="nav-link" id="id-nav-costs">💰 Costs</span></li>
               <li class="nav-item" onclick="location.href='/team.html'"><span class="nav-link" id="id-nav-team">🗂️ Team (Org Chart)</span></li>
+              <li class="nav-item" onclick="location.href='/logout'"><span class="nav-link" style="color:var(--status-red);">🚪 Sign Out</span></li>
             </ul>
           </nav>
 
@@ -82,11 +83,15 @@
                 <div style="font-size:0.78rem; color:var(--color-text-muted);">Decentralized autonomous engineering pod · ReBAC tenancy active</div>
               </div>
             </div>
-            <div style="display:flex; gap:12px;">
-              <a href="https://drisyon-ai-team.mytestbed.tech/ops" target="_blank" style="padding:8px 16px; background:linear-gradient(135deg, rgba(0,176,255,0.2), rgba(124,77,255,0.3)); border:1px solid rgba(0,176,255,0.4); color:#fff; font-size:0.8rem; font-weight:600; border-radius:8px; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-                <span>🗣️ Human-to-Team Dispatch</span>
-                <span>➔</span>
-              </a>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="text-align:right;">
+                <span class="status-badge" style="color:var(--status-green); border-color:var(--status-green); font-size:0.75rem; padding:3px 10px; display:inline-flex; align-items:center; gap:6px;">
+                  <span class="status-dot green" style="box-shadow:0 0 8px #22c55e;"></span>
+                  Buzz AI Team: ACTIVE
+                </span>
+                <div style="font-size:0.72rem; color:var(--color-text-muted); margin-top:3px; font-family:'JetBrains Mono',monospace;">wss://drisyon-ai.communities.buzz.xyz</div>
+              </div>
+              <a href="/logout" style="padding:6px 12px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#fca5a5; font-size:0.75rem; border-radius:6px; text-decoration:none;">Sign Out</a>
             </div>
           </section>
 
@@ -107,12 +112,12 @@
               <div class="metric-card">
                 <div class="metric-header">Host CPU Load</div>
                 <div class="metric-value" id="id-cpu-val">12.4%</div>
-                <div class="metric-sub"><span class="status-dot green"></span> Intel i7-13700H (16c)</div>
+                <div class="metric-sub" id="id-cpu-sub"><span class="status-dot green"></span> Apple M5 Max (18c)</div>
               </div>
               <div class="metric-card">
-                <div class="metric-header">Intel Iris Xe GPU</div>
+                <div class="metric-header" id="id-gpu-header">Apple M5 Max GPU</div>
                 <div class="metric-value" id="id-gpu-val">Active</div>
-                <div class="metric-sub"><span class="status-dot green"></span> Vulkan Assist Enabled</div>
+                <div class="metric-sub" id="id-gpu-sub"><span class="status-dot green"></span> Metal Assist Enabled (36.0GB Unified)</div>
               </div>
               <div class="metric-card">
                 <div class="metric-header">Workspace Status</div>
@@ -183,7 +188,7 @@
                 <div class="flow-node-card highlight">
                   <div class="flow-node-header">
                     <span>💻 Tech Lead</span>
-                    <span class="flow-node-badge cyan">qwen2.5-coder:7b</span>
+                    <span class="flow-node-badge cyan" id="id-badge-tech">qwen2.5-coder:3b</span>
                   </div>
                   <div class="flow-node-desc">Spawns on code edit tasks. Performs AST inspection & surgical file diffs.</div>
                   <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
@@ -199,7 +204,7 @@
                 <div class="flow-node-card">
                   <div class="flow-node-header">
                     <span>🧪 QA Lead</span>
-                    <span class="flow-node-badge green">qwen2.5-coder:1.5b</span>
+                    <span class="flow-node-badge green" id="id-badge-qa">qwen2.5-coder:3b</span>
                   </div>
                   <div class="flow-node-desc">Spawns before commits. Runs automated linting, unit tests, and regression sweeps.</div>
                   <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
@@ -214,14 +219,14 @@
                 <div class="flow-node-card">
                   <div class="flow-node-header">
                     <span>🛠️ DevOps</span>
-                    <span class="flow-node-badge cyan">qwen2.5-coder:7b</span>
+                    <span class="flow-node-badge cyan" id="id-badge-infra">gemma3:4b</span>
                   </div>
                   <div class="flow-node-desc">Spawns for container lifecycle, tunnel management, and host configurations.</div>
                   <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
                   <div class="flow-tool-chips">
                     <span class="tool-chip">docker-compose</span>
                     <span class="tool-chip">cloudflared</span>
-                    <span class="tool-chip">powershell</span>
+                    <span class="tool-chip" id="id-shell-chip">bash / zsh</span>
                   </div>
                 </div>
 
@@ -229,7 +234,7 @@
                 <div class="flow-node-card">
                   <div class="flow-node-header">
                     <span>📝 Doc Scribe</span>
-                    <span class="flow-node-badge amber">llama3.1:8b</span>
+                    <span class="flow-node-badge amber" id="id-badge-doc">gemma3:4b</span>
                   </div>
                   <div class="flow-node-desc">Spawns upon task completion to update MEMORY.md and daily transaction journals.</div>
                   <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
@@ -253,8 +258,8 @@
               <div class="log-panel" id="id-handshake-logs">
                 <div class="log-entry success">[18:30:01] [system] Arunachala Operations Dashboard initialized.</div>
                 <div class="log-entry info">[18:30:02] [probe] Checking local Ollama endpoint at http://127.0.0.1:11434...</div>
-                <div class="log-entry success">[18:30:03] [handshake] Ollama HTTP Response 200 OK. Available models: qwen2.5-coder:7b, qwen2.5-coder:1.5b, llama3.1:8b, gemma2:9b, nomic-embed-text.</div>
-                <div class="log-entry success">[18:30:04] [workspace] Relocation verified. Root C:/tt-ai-stack structured (01_projects, 02_engines, 03_documents, 04_internal).</div>
+                <div class="log-entry success">[18:30:03] [handshake] Ollama HTTP Response 200 OK. Available models: gemma3:4b, qwen2.5-coder:3b, nomic-embed-text.</div>
+                <div class="log-entry success" id="id-init-workspace-log">[18:30:04] [workspace] Relocation verified. Root /Users/Sriad/tt-ai-stack structured (01_projects, 02_engines, 03_documents, 04_internal).</div>
               </div>
             </section>
           </div>
@@ -362,7 +367,7 @@
                     <div class="agent-badge idle">Idle</div>
                   </div>
                   <div class="agent-role">Containers, Ollama Offload & Scripts</div>
-                  <div class="agent-desc">Manages Docker, Ollama Vulkan configuration, and workspace health.</div>
+                  <div class="agent-desc">Manages Docker, Ollama GPU/Metal acceleration, container runtime, and workspace health.</div>
                 </div>
 
                 <div class="agent-card" onclick="selectAgent('doc')">
@@ -481,32 +486,20 @@
                 </div>
                 <div class="model-list" id="id-model-routing-list">
                   <div class="model-item">
-                    <div class="model-name">qwen2.5-coder:7b</div>
-                    <div class="model-role">Primary Coding</div>
-                    <div class="model-stat">32k ctx</div>
+                    <div class="model-name">gemma3:4b</div>
+                    <div class="model-role">Primary Persona & Reasoning</div>
+                    <div class="model-stat">128k ctx</div>
                     <div class="model-badge">Primary</div>
                   </div>
                   <div class="model-item">
-                    <div class="model-name">qwen2.5-coder:1.5b</div>
-                    <div class="model-role">Fast/Lightweight</div>
+                    <div class="model-name">qwen2.5-coder:3b</div>
+                    <div class="model-role">Code Generation & Refactoring</div>
                     <div class="model-stat">32k ctx</div>
-                    <div class="model-badge">Online</div>
-                  </div>
-                  <div class="model-item">
-                    <div class="model-name">llama3.1:8b</div>
-                    <div class="model-role">Architect/Planning</div>
-                    <div class="model-stat">128k ctx</div>
-                    <div class="model-badge">Online</div>
-                  </div>
-                  <div class="model-item">
-                    <div class="model-name">gemma2:9b</div>
-                    <div class="model-role">Creative/Alternative</div>
-                    <div class="model-stat">8k ctx</div>
                     <div class="model-badge">Online</div>
                   </div>
                   <div class="model-item">
                     <div class="model-name">nomic-embed-text</div>
-                    <div class="model-role">Embeddings/RAG</div>
+                    <div class="model-role">Embeddings / RAG Semantic Search</div>
                     <div class="model-stat">8k ctx</div>
                     <div class="model-badge">Vector</div>
                   </div>
@@ -564,11 +557,11 @@
                     </div>
                   </div>
                   <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:8px;">
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OS:</span><span>Windows 11 (Vulkan Assist)</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">CPU:</span><span>Intel Core i7-13700H</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">GPU:</span><span>Intel Iris Xe (Integrated)</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Ollama Endpoint:</span><code>http://127.0.0.1:11434</code></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config:</span><code>openclaw.json</code></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OS:</span><span id="id-host-os">macOS 27.2 (Metal Assist)</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">CPU:</span><span id="id-host-cpu">Apple M5 Max (18c)</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">GPU:</span><span id="id-host-gpu">Apple M5 Max</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Ollama Endpoint:</span><code id="id-host-ollama">http://127.0.0.1:11434</code></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config:</span><code id="id-host-openclaw">openclaw.json</code></div>
                   </div>
                 </div>
               </div>
@@ -656,7 +649,7 @@
                 </div>
                 <div style="font-size:0.85rem; display:flex; flex-direction:column; gap:10px;">
                   <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Paperclip Sync:</span><span style="color:var(--status-green);">Enabled (Local Task Orchestration)</span></div>
-                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config File:</span><span style="font-family:'JetBrains Mono', monospace; color:var(--status-blue);">C:/tt-ai-stack/openclaw.json</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">OpenClaw Config File:</span><span id="id-openclaw-config-file" style="font-family:'JetBrains Mono', monospace; color:var(--status-blue);">/Users/Sriad/tt-ai-stack/openclaw.json</span></div>
                   <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Hermes Traces Directory:</span><span id="id-traces-count" style="font-family:'JetBrains Mono', monospace; color:#fff;">0 logs</span></div>
                   <div style="display:flex; justify-content:space-between;"><span style="color:var(--color-text-muted);">Sandboxed Tool Mode:</span><span>Full Read/Write (Internal stack)</span></div>
                 </div>

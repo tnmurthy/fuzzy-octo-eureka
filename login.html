@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — Arunachala Operations Center | team.mytestbed.tech</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    :root {
+      --bg-body: #0d1117;
+      --bg-card: #161b22;
+      --border-color: #30363d;
+      --border-glow: rgba(56, 189, 248, 0.3);
+      --accent-blue: #38bdf8;
+      --accent-green: #22c55e;
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 20%, #172033 0%, #0d1117 80%);
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 440px;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 36px 32px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-glow);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .brand-icon {
+      font-size: 2.8rem;
+      margin-bottom: 12px;
+      display: inline-block;
+      animation: pulse 3s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.4)); }
+      50% { transform: scale(1.05); filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.8)); }
+    }
+
+    .brand-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 6px 0;
+    }
+
+    .brand-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .target-badge {
+      display: inline-block;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: var(--accent-blue);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-top: 10px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+    }
+
+    .activation-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 22px 0 26px 0;
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      padding: 12px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .activation-toggle input {
+      accent-color: var(--accent-green);
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .activation-label {
+      font-size: 0.82rem;
+      color: #bbf7d0;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 13px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-submit:hover:not(:disabled) {
+      background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .alert {
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .alert.error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      display: block;
+    }
+
+    .alert.success {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #86efac;
+      display: block;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 24px;
+    }
+
+    .footer-note a {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="brand-header">
+        <div class="brand-icon">🧭</div>
+        <h1 class="brand-title">Arunachala Operations</h1>
+        <p class="brand-sub">AI Team Control & Workspace</p>
+        <div class="target-badge">team.mytestbed.tech</div>
+      </div>
+
+      <div id="alertBox" class="alert"></div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="username">Username</label>
+          <input class="form-input" type="text" id="username" name="username" value="sriad" required autocomplete="username" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-input" type="password" id="password" name="password" required autocomplete="current-password" placeholder="Enter password">
+        </div>
+
+        <label class="activation-toggle" for="activateTeam">
+          <input type="checkbox" id="activateTeam" name="activateTeam" checked>
+          <span class="activation-label">
+            <strong>⚡ Activate Buzz Team locally</strong><br>
+            Connects relay <code>drisyon-ai</code> and starts AI agents
+          </span>
+        </label>
+
+        <button type="submit" id="submitBtn" class="btn-submit">
+          <span>Sign In & Activate Team</span>
+          <span>→</span>
+        </button>
+      </form>
+
+      <div class="footer-note">
+        Protected with cryptographic Nostr identity & local Ollama acceleration
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin(e) {
+      e.preventDefault();
+      const alertBox = document.getElementById('alertBox');
+      const submitBtn = document.getElementById('submitBtn');
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const activateTeam = document.getElementById('activateTeam').checked;
+
+      alertBox.className = 'alert';
+      alertBox.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Activating AI Team...</span>';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, activateTeam })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Authentication failed');
+        }
+
+        alertBox.className = 'alert success';
+        alertBox.innerHTML = `✓ ${data.message || 'Authenticated! Redirecting to workspace...'}`;
+        alertBox.style.display = 'block';
+
+        setTimeout(() => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const redirect = urlParams.get('redirect') || '/';
+          window.location.href = redirect;
+        }, 800);
+
+      } catch (err) {
+        alertBox.className = 'alert error';
+        alertBox.textContent = err.message;
+        alertBox.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Sign In & Activate Team</span><span>→</span>';
+      }
+    }
+  </script>
+</body>
+</html>
