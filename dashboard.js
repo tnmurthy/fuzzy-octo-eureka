@@ -202,6 +202,160 @@
     // ---------------------------------------------------------------------------
     // Kanban Board Functions
     // ---------------------------------------------------------------------------
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    let draggedTaskId = null;
+
+    function handleCardDragStart(e, taskId) {
+      draggedTaskId = taskId;
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('text/plain', taskId);
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    }
+
+    function handleColDragOver(e) {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+      const col = e.currentTarget;
+      if (col && !col.classList.contains('drag-over')) {
+        col.classList.add('drag-over');
+      }
+    }
+
+    function handleColDragLeave(e) {
+      const col = e.currentTarget;
+      if (col) {
+        col.classList.remove('drag-over');
+      }
+    }
+
+    function handleColDrop(e, targetStatus) {
+      e.preventDefault();
+      const col = e.currentTarget;
+      if (col) {
+        col.classList.remove('drag-over');
+      }
+      const taskId = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || draggedTaskId;
+      if (!taskId) return;
+      moveKanbanTask(taskId, targetStatus);
+    }
+
+    function moveKanbanTask(taskId, targetStatus) {
+      if (!taskId || !targetStatus) return;
+      fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            showToast(`Task #${taskId} moved to ${targetStatus}`, 'success', '📋');
+            loadKanbanTasks();
+          } else {
+            showToast(`Failed to move task: ${data.error || 'Unknown error'}`, 'error', '⚠️');
+          }
+        })
+        .catch(err => {
+          showToast(`Network error moving task: ${err.message}`, 'error', '⚠️');
+        });
+    }
+
+    function dispatchCardTask(taskId, agent, repo, taskText) {
+      showToast(`⚡ Dispatching [${(agent || 'agent').toUpperCase()}] for #${taskId}...`, 'info', '🤖');
+      fetch('/api/dispatch/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent: agent || 'hermes',
+          repo: repo || 'fuzzy-octo-eureka',
+          task: `[${taskId}] ${taskText}`
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            showToast(`Run dispatched: ${data.runId || 'started'}. Moving task to Execution...`, 'success', '🚀');
+            moveKanbanTask(taskId, 'in_execution');
+          } else {
+            showToast(`Dispatch failed: ${data.error || 'Server error'}`, 'error', '🚨');
+          }
+        })
+        .catch(err => {
+          showToast(`Dispatch error: ${err.message}`, 'error', '🚨');
+        });
+    }
+
+    function openAddTaskModal() {
+      const modal = document.getElementById('add-task-modal');
+      if (modal) modal.style.display = 'flex';
+      const input = document.getElementById('task-title-input');
+      if (input) input.focus();
+    }
+
+    function closeAddTaskModal() {
+      const modal = document.getElementById('add-task-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function handleCreateKanbanTask(e) {
+      e.preventDefault();
+      const titleInput = document.getElementById('task-title-input');
+      const repoSelect = document.getElementById('task-repo-select');
+      const ownerSelect = document.getElementById('task-owner-select');
+      const stageSelect = document.getElementById('task-stage-select');
+      const decisionSelect = document.getElementById('task-decision-select');
+
+      const title = titleInput ? titleInput.value.trim() : '';
+      const project = repoSelect ? repoSelect.value : 'fuzzy-octo-eureka';
+      const owner = ownerSelect ? ownerSelect.value : 'Operator';
+      const status = stageSelect ? stageSelect.value : 'intake';
+      const decision = decisionSelect ? decisionSelect.value : 'autonomous';
+
+      if (!title) {
+        showToast('Task title is required', 'error', '⚠️');
+        return;
+      }
+
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, project, owner, status, decision })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            showToast(`Task created in ${status}`, 'success', '✅');
+            closeAddTaskModal();
+            if (titleInput) titleInput.value = '';
+            loadKanbanTasks();
+          } else {
+            showToast(`Failed to create task: ${data.error || 'Unknown error'}`, 'error', '⚠️');
+          }
+        })
+        .catch(err => {
+          showToast(`Error creating task: ${err.message}`, 'error', '⚠️');
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+      const modal = document.getElementById('add-task-modal');
+      if (modal && e.target === modal) {
+        closeAddTaskModal();
+      }
+    });
+
     function loadKanbanTasks() {
       fetch('/api/tasks')
         .then(res => res.json())
@@ -216,75 +370,121 @@
     }
 
     function renderKanban(columns) {
-      const backlogEl = document.getElementById('id-kanban-backlog');
-      const inprogressEl = document.getElementById('id-kanban-inprogress');
-      const doneEl = document.getElementById('id-kanban-done');
+      if (!columns) return;
 
-      const backlogCount = document.getElementById('id-backlog-count');
-      const inprogressCount = document.getElementById('id-inprogress-count');
-      const doneCount = document.getElementById('id-done-count');
+      const colsMap = [
+        { key: 'intake', listId: 'id-kanban-intake', countId: 'id-intake-count' },
+        { key: 'planning', listId: 'id-kanban-planning', countId: 'id-planning-count' },
+        { key: 'in_execution', listId: 'id-kanban-execution', countId: 'id-execution-count' },
+        { key: 'verification', listId: 'id-kanban-verification', countId: 'id-verification-count' },
+        { key: 'human_review', listId: 'id-kanban-review', countId: 'id-review-count' },
+        { key: 'done', listId: 'id-kanban-done', countId: 'id-done-count' },
+      ];
 
-      if (backlogCount) backlogCount.innerText = (columns.backlog || []).length;
-      if (inprogressCount) inprogressCount.innerText = (columns.in_progress || []).length;
-      if (doneCount) doneCount.innerText = (columns.done || []).length;
+      // Render 6 modern columns
+      colsMap.forEach(col => {
+        const listEl = document.getElementById(col.listId);
+        const countEl = document.getElementById(col.countId);
+        const items = columns[col.key] || [];
 
-      // Render Backlog
-      if (backlogEl) {
-        backlogEl.innerHTML = '';
-        (columns.backlog || []).forEach(item => {
+        if (countEl) countEl.innerText = items.length;
+        if (!listEl) return;
+
+        listEl.innerHTML = '';
+        if (items.length === 0) {
+          listEl.innerHTML = '<div style="font-size:0.75rem; color:#64748b; font-style:italic; padding:16px 8px; text-align:center;">No tasks in stage</div>';
+          return;
+        }
+
+        items.forEach(item => {
           const card = document.createElement('div');
           card.className = 'kanban-card';
+          card.setAttribute('draggable', 'true');
+          card.setAttribute('data-task-id', item.id || '');
+          card.ondragstart = (e) => handleCardDragStart(e, item.id);
+
+          // Decision badge
+          const rawDecision = item.decision || (col.key === 'human_review' ? 'sovereign' : (col.key === 'planning' ? 'copilot' : 'autonomous'));
+          const decision = String(rawDecision).toLowerCase();
+          let decisionBadge = '';
+          if (decision === 'sovereign') {
+            decisionBadge = '<span class="decision-badge sovereign">🔴 Sovereign</span>';
+          } else if (decision === 'copilot') {
+            decisionBadge = '<span class="decision-badge copilot">🟡 Co-Pilot</span>';
+          } else {
+            decisionBadge = '<span class="decision-badge autonomous">🟢 Autonomous</span>';
+          }
+
+          // In-card quick actions
+          let actionButtons = '';
+          const safeTaskText = (item.task || '').replace(/"/g, '&quot;').replace(/'/g, "\\'");
+          const safeRepo = (item.project || 'fuzzy-octo-eureka').replace(/'/g, "\\'");
+          const safeId = (item.id || '').replace(/'/g, "\\'");
+
+          if (col.key === 'intake' || col.key === 'planning') {
+            actionButtons = `
+              <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                <button class="card-action-btn dispatch-hermes" onclick="event.stopPropagation(); dispatchCardTask('${safeId}', 'hermes', '${safeRepo}', '${safeTaskText}')">⚡ Run Hermes</button>
+                <button class="card-action-btn dispatch-mantis" onclick="event.stopPropagation(); dispatchCardTask('${safeId}', 'mantis', '${safeRepo}', '${safeTaskText}')">🛡️ Mantis Sec</button>
+              </div>
+            `;
+          } else if (col.key === 'in_execution') {
+            actionButtons = `
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                <span class="status-badge" style="font-size:0.65rem; padding:1px 6px;"><span class="status-dot green"></span> Running</span>
+                <button class="card-action-btn" style="border:1px solid #38bdf8; color:#38bdf8;" onclick="event.stopPropagation(); moveKanbanTask('${safeId}', 'verification')">Advance to Evals →</button>
+              </div>
+            `;
+          } else if (col.key === 'verification') {
+            actionButtons = `
+              <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                <button class="card-action-btn" style="border:1px solid #a855f7; color:#c084fc;" onclick="event.stopPropagation(); dispatchCardTask('${safeId}', 'hermes', '${safeRepo}', 'Run automated test evals and verify code integrity')">🧪 Run Evals</button>
+                <button class="card-action-btn advance-review" onclick="event.stopPropagation(); moveKanbanTask('${safeId}', 'human_review')">Pass to Review →</button>
+              </div>
+            `;
+          } else if (col.key === 'human_review') {
+            actionButtons = `
+              <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                <button class="card-action-btn approve" onclick="event.stopPropagation(); moveKanbanTask('${safeId}', 'done')">✅ Sovereign Approve</button>
+                <button class="card-action-btn reject" onclick="event.stopPropagation(); moveKanbanTask('${safeId}', 'in_execution')">🔁 Revise</button>
+              </div>
+            `;
+          } else if (col.key === 'done') {
+            actionButtons = `
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:0.7rem; color:#10b981;">
+                <span>✓ Verified</span>
+                <span>${item.completed || 'Delivered'}</span>
+              </div>
+            `;
+          }
+
           card.innerHTML = `
             <div class="kanban-card-header">
-              <span class="kanban-card-id">#${item.id}</span>
-              <span class="kanban-card-project">${item.project}</span>
+              <span class="kanban-card-id" style="font-weight:700;">#${item.id || 'TASK'}</span>
+              <span class="kanban-card-project">${item.project || 'General'}</span>
             </div>
-            <div class="kanban-card-body">${item.task}</div>
+            <div class="kanban-card-body">${escapeHtml(item.task || '')}</div>
+            <div class="kanban-card-meta">
+              ${decisionBadge}
+              <span class="kanban-owner">👤 ${item.owner || 'Operator'}</span>
+            </div>
             ${item.issue ? `<div class="kanban-card-footer"><a href="${item.issue.replace(/#\d+\s+/, '')}" target="_blank" style="color:var(--status-blue); text-decoration:none; font-size:0.75rem;">🔗 GitHub Issue</a></div>` : ''}
+            ${actionButtons}
           `;
-          backlogEl.appendChild(card);
+          listEl.appendChild(card);
         });
-      }
+      });
 
-      // Render In Progress
-      if (inprogressEl) {
-        inprogressEl.innerHTML = '';
-        (columns.in_progress || []).forEach(item => {
-          const card = document.createElement('div');
-          card.className = 'kanban-card';
-          card.style.borderColor = 'rgba(0, 176, 255, 0.3)';
-          card.innerHTML = `
-            <div class="kanban-card-header">
-              <span class="kanban-card-id" style="color:var(--status-blue);">ACTIVE</span>
-              <span class="kanban-card-project">${item.project}</span>
-            </div>
-            <div class="kanban-card-body">${item.task}</div>
-            <div class="kanban-card-footer">
-              <span class="kanban-owner">👤 ${item.owner}</span>
-              <span class="status-badge" style="font-size:0.65rem; padding:1px 6px;"><span class="status-dot green"></span>Running</span>
-            </div>
-          `;
-          inprogressEl.appendChild(card);
-        });
-      }
+      // Maintain legacy aliases for backwards compatibility
+      const legacyBacklogEl = document.getElementById('id-kanban-backlog');
+      const legacyInprogressEl = document.getElementById('id-kanban-inprogress');
+      const legacyBacklogCount = document.getElementById('id-backlog-count');
+      const legacyInprogressCount = document.getElementById('id-inprogress-count');
 
-      // Render Done
-      if (doneEl) {
-        doneEl.innerHTML = '';
-        (columns.done || []).forEach(item => {
-          const card = document.createElement('div');
-          card.className = 'kanban-card';
-          card.style.opacity = '0.85';
-          card.innerHTML = `
-            <div class="kanban-card-header">
-              <span class="kanban-card-id" style="color:var(--status-green);">✓ DONE</span>
-              <span class="kanban-card-project">${item.completed}</span>
-            </div>
-            <div class="kanban-card-body" style="color:#cfd8dc;">${item.task}</div>
-          `;
-          doneEl.appendChild(card);
-        });
-      }
+      if (legacyBacklogCount) legacyBacklogCount.innerText = (columns.backlog || []).length;
+      if (legacyInprogressCount) legacyInprogressCount.innerText = (columns.in_progress || []).length;
+      if (legacyBacklogEl) legacyBacklogEl.innerHTML = '';
+      if (legacyInprogressEl) legacyInprogressEl.innerHTML = '';
     }
 
     // ---------------------------------------------------------------------------
@@ -1541,6 +1741,16 @@
     window.filterLogs = filterLogs;
     window.handleTerminalCommand = handleTerminalCommand;
     window.loadKanbanTasks = loadKanbanTasks;
+    window.renderKanban = renderKanban;
+    window.handleCardDragStart = handleCardDragStart;
+    window.handleColDragOver = handleColDragOver;
+    window.handleColDragLeave = handleColDragLeave;
+    window.handleColDrop = handleColDrop;
+    window.moveKanbanTask = moveKanbanTask;
+    window.dispatchCardTask = dispatchCardTask;
+    window.openAddTaskModal = openAddTaskModal;
+    window.closeAddTaskModal = closeAddTaskModal;
+    window.handleCreateKanbanTask = handleCreateKanbanTask;
     window.showToast = showToast;
 
     // ---------------------------------------------------------------------------

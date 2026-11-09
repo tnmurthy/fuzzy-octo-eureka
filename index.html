@@ -301,57 +301,159 @@
           <div id="kanban" class="tab-content">
             <section class="header-panel">
               <div class="header-title">
-                <h2>Master Task Kanban Board</h2>
-                <p>Live synchronized task management parsed directly from <code>04_internal/TASKS.md</code>.</p>
+                <h2>Autonomous Agency Delivery Pipeline</h2>
+                <p>6-Stage Autonomous Execution &amp; Bain Decision-Rights Flow parsed from <code>TASKS.md</code>.</p>
               </div>
-              <div class="action-group">
+              <div class="action-group" style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="openAddTaskModal()">➕ New Task</button>
                 <button class="btn btn-secondary" onclick="loadKanbanTasks()">🔄 Refresh Tasks</button>
               </div>
             </section>
 
             <section class="kanban-board">
-              <!-- Backlog Column -->
-              <div class="kanban-col">
+              <!-- Stage 1: Intake & Triage -->
+              <div class="kanban-col" style="border-top: 3px solid #94a3b8;" ondragover="handleColDragOver(event)" ondragleave="handleColDragLeave(event)" ondrop="handleColDrop(event, 'intake')">
                 <div class="kanban-col-header">
                   <div class="kanban-col-title">
-                    <span>📋</span>
-                    <span>Backlog</span>
+                    <span>📥</span>
+                    <span>1. Intake</span>
                   </div>
-                  <span class="kanban-badge-count" id="id-backlog-count">0</span>
+                  <span class="decision-badge autonomous">🟢 Autonomous</span>
+                  <span class="kanban-badge-count" id="id-intake-count">0</span>
                 </div>
-                <div class="kanban-card-list" id="id-kanban-backlog">
-                  <!-- Populated dynamically via JS -->
-                </div>
+                <div class="kanban-card-list" id="id-kanban-intake"></div>
+                <!-- Legacy alias fallback for tests -->
+                <div id="id-kanban-backlog" style="display:none;"></div>
+                <span id="id-backlog-count" style="display:none;">0</span>
               </div>
 
-              <!-- In Progress Column -->
-              <div class="kanban-col" style="border-top: 3px solid var(--status-blue);">
+              <!-- Stage 2: Scope & FinOps Gate -->
+              <div class="kanban-col" style="border-top: 3px solid #f59e0b;" ondragover="handleColDragOver(event)" ondragleave="handleColDragLeave(event)" ondrop="handleColDrop(event, 'planning')">
+                <div class="kanban-col-header">
+                  <div class="kanban-col-title">
+                    <span>📐</span>
+                    <span>2. Planning</span>
+                  </div>
+                  <span class="decision-badge copilot">🟡 Co-Pilot</span>
+                  <span class="kanban-badge-count" id="id-planning-count">0</span>
+                </div>
+                <div class="kanban-card-list" id="id-kanban-planning"></div>
+              </div>
+
+              <!-- Stage 3: Autonomous Execution Zone -->
+              <div class="kanban-col" style="border-top: 3px solid var(--status-blue);" ondragover="handleColDragOver(event)" ondragleave="handleColDragLeave(event)" ondrop="handleColDrop(event, 'in_execution')">
                 <div class="kanban-col-header">
                   <div class="kanban-col-title">
                     <span>⚡</span>
-                    <span>In Progress</span>
+                    <span>3. Execution</span>
                   </div>
-                  <span class="kanban-badge-count" id="id-inprogress-count" style="color:var(--status-blue);">0</span>
+                  <span class="decision-badge autonomous">🟢 Autonomous</span>
+                  <span class="kanban-badge-count" id="id-execution-count" style="color:var(--status-blue);">0</span>
                 </div>
-                <div class="kanban-card-list" id="id-kanban-inprogress">
-                  <!-- Populated dynamically via JS -->
-                </div>
+                <div class="kanban-card-list" id="id-kanban-execution"></div>
+                <!-- Legacy alias fallback for tests -->
+                <div id="id-kanban-inprogress" style="display:none;"></div>
+                <span id="id-inprogress-count" style="display:none;">0</span>
               </div>
 
-              <!-- Done Column -->
-              <div class="kanban-col" style="border-top: 3px solid var(--status-green);">
+              <!-- Stage 4: Automated Evals & AppSec -->
+              <div class="kanban-col" style="border-top: 3px solid #a855f7;" ondragover="handleColDragOver(event)" ondragleave="handleColDragLeave(event)" ondrop="handleColDrop(event, 'verification')">
                 <div class="kanban-col-header">
                   <div class="kanban-col-title">
-                    <span>✅</span>
-                    <span>Done</span>
+                    <span>🧪</span>
+                    <span>4. Evals &amp; Sec</span>
                   </div>
+                  <span class="decision-badge autonomous">🟢 Autonomous</span>
+                  <span class="kanban-badge-count" id="id-verification-count" style="color:#c084fc;">0</span>
+                </div>
+                <div class="kanban-card-list" id="id-kanban-verification"></div>
+              </div>
+
+              <!-- Stage 5: Sovereign HITL Review -->
+              <div class="kanban-col" style="border-top: 3px solid var(--status-red);" ondragover="handleColDragOver(event)" ondragleave="handleColDragLeave(event)" ondrop="handleColDrop(event, 'human_review')">
+                <div class="kanban-col-header">
+                  <div class="kanban-col-title">
+                    <span>🚦</span>
+                    <span>5. Review</span>
+                  </div>
+                  <span class="decision-badge sovereign">🔴 Sovereign</span>
+                  <span class="kanban-badge-count" id="id-review-count" style="color:#f87171;">0</span>
+                </div>
+                <div class="kanban-card-list" id="id-kanban-review"></div>
+              </div>
+
+              <!-- Stage 6: Delivered & Invoiced -->
+              <div class="kanban-col" style="border-top: 3px solid var(--status-green);" ondragover="handleColDragOver(event)" ondragleave="handleColDragLeave(event)" ondrop="handleColDrop(event, 'done')">
+                <div class="kanban-col-header">
+                  <div class="kanban-col-title">
+                    <span>🚀</span>
+                    <span>6. Delivered</span>
+                  </div>
+                  <span class="decision-badge autonomous">🟢 Autonomous</span>
                   <span class="kanban-badge-count" id="id-done-count" style="color:var(--status-green);">0</span>
                 </div>
-                <div class="kanban-card-list" id="id-kanban-done">
-                  <!-- Populated dynamically via JS -->
-                </div>
+                <div class="kanban-card-list" id="id-kanban-done"></div>
               </div>
             </section>
+
+            <!-- Add Task Modal -->
+            <div id="add-task-modal" class="kanban-modal-backdrop">
+              <div class="kanban-modal-dialog">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                  <h3 style="font-size:1.1rem; font-weight:600; display:flex; align-items:center; gap:8px;">
+                    <span>➕</span> Add New Agency Task
+                  </h3>
+                  <button type="button" onclick="closeAddTaskModal()" style="background:none; border:none; color:#94a3b8; font-size:1.2rem; cursor:pointer;">&times;</button>
+                </div>
+                <form id="add-task-form" onsubmit="handleCreateKanbanTask(event)" style="display:flex; flex-direction:column; gap:12px;">
+                  <div>
+                    <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Task Directive / Title</label>
+                    <input type="text" id="task-title-input" placeholder="e.g. Audit API authentication boundaries & verify ReBAC" style="width:100%; padding:9px 12px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.85rem;" required />
+                  </div>
+                  <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                      <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Target Repository</label>
+                      <select id="task-repo-select" style="width:100%; padding:9px 12px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.85rem;">
+                        <option value="fuzzy-octo-eureka">fuzzy-octo-eureka</option>
+                        <option value="mantis">mantis</option>
+                      </select>
+                    </div>
+                    <div style="flex:1;">
+                      <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Assigned Lead</label>
+                      <select id="task-owner-select" style="width:100%; padding:9px 12px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.85rem;">
+                        <option value="Tech Lead">💻 Tech Lead</option>
+                        <option value="Mantis Sec">🛡️ Mantis Sec Lead</option>
+                        <option value="QA Lead">🧪 QA Lead</option>
+                        <option value="BizDev / CFO">💰 BizDev / CFO</option>
+                        <option value="Operator">👤 Operator</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                      <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Initial Stage</label>
+                      <select id="task-stage-select" style="width:100%; padding:9px 12px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.85rem;">
+                        <option value="intake" selected>1. Intake &amp; Triage</option>
+                        <option value="planning">2. Scope &amp; FinOps</option>
+                        <option value="in_execution">3. Autonomous Execution</option>
+                      </select>
+                    </div>
+                    <div style="flex:1;">
+                      <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Decision Tier (Bain)</label>
+                      <select id="task-decision-select" style="width:100%; padding:9px 12px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.85rem;">
+                        <option value="autonomous" selected>🟢 Autonomous (Agent-Led)</option>
+                        <option value="copilot">🟡 Shared (Co-Pilot)</option>
+                        <option value="sovereign">🔴 Sovereign (Human-Veto)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+                    <button type="button" onclick="closeAddTaskModal()" style="padding:8px 16px; background:#334155; color:#cbd5e1; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem;">Cancel</button>
+                    <button type="submit" style="padding:8px 18px; background:var(--status-blue); color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:0.85rem;">Create Task</button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
 
           <!-- ==================== AGENTS TAB ==================== -->

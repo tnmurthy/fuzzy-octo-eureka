@@ -1,21 +1,39 @@
 # Arunachala Operations Center - Task Board
 
-Active engineering tasks and backlog items for Team Arunachala and Drisyon AI Mesh.
+Active engineering tasks and autonomous pipeline items for Team Arunachala and Drisyon AI Mesh.
 
-## In Progress
+## 1. Intake & Triage
 
-| ID | Task | Project | Owner |
-|---|---|---|---|
-| TASK-103 | Apple Silicon Metal GPU generation benchmark suite | perf | Sriad / Infra |
+| ID | Task | Project | Owner | Decision |
+|---|---|---|---|---|
+| TASK-105 | Persistent vector index clustering for multi-tenant memory | ai-engine | Tech Lead | copilot |
 
-## Backlog
+| TASK-104 | Interactive operator dispatch terminal in dashboard | frontend | Tech Lead | autonomous |
+## 2. Scope & FinOps Gate
 
-| ID | Task | Project | Issue |
-|---|---|---|---|
-| TASK-104 | Interactive operator dispatch terminal in dashboard | frontend | #104 |
-| TASK-105 | Persistent vector index clustering for multi-tenant memory | ai-engine | #105 |
+| ID | Task | Project | Owner | Decision |
+|---|---|---|---|---|
+| TASK-106 | Client milestone SOW and margin estimate for enterprise onboarding | commercial | BizDev / CFO | copilot |
 
-## Done
+## 3. Autonomous Execution
+
+| ID | Task | Project | Owner | Decision |
+|---|---|---|---|---|
+| TASK-103 | Apple Silicon Metal GPU generation benchmark suite | perf | Hermes / Infra | autonomous |
+
+## 4. Evals & AppSec Verification
+
+| ID | Task | Project | Owner | Decision |
+|---|---|---|---|---|
+| TASK-102 | Continuous Mantis 19-skill security sweep & ReBAC isolation audit | security | Mantis Sec | autonomous |
+
+## 5. Sovereign HITL Review
+
+| ID | Task | Project | Owner | Decision |
+|---|---|---|---|---|
+| TASK-101 | Production Cloudflare tunnel multi-domain route migration | devops | Operator | sovereign |
+
+## 6. Delivered & Invoiced
 
 | Task | Completed |
 |---|---|
@@ -29,3 +47,5 @@ Active engineering tasks and backlog items for Team Arunachala and Drisyon AI Me
 | Signed HMAC-SHA256 session cookie authentication portal | 2026-11-08 |
 | ReBAC enforcement on /api/dispatch/run and /api/rebac/inspect | 2026-11-08 |
 | Dual Cloudflare Tunnel routing for team and drisyon domains | 2026-11-08 |
+
+| Verify automated unit tests pass | 2026-11-09 |

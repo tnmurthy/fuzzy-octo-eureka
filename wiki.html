@@ -219,6 +219,7 @@
     <!-- Navigation Pills -->
     <div class="filter-pills">
       <button class="filter-pill active" onclick="filterSection('all')">🌟 All Topics</button>
+      <button class="filter-pill" onclick="filterSection('restructure')">🏛️ Strategic Advisory (Big 5)</button>
       <button class="filter-pill" onclick="filterSection('portals')">🔑 Portals & Access</button>
       <button class="filter-pill" onclick="filterSection('agents')">🧭 Agents & Delegation</button>
       <button class="filter-pill" onclick="filterSection('usage')">💬 Team Chat & Monitoring</button>
@@ -228,6 +229,44 @@
       <button class="filter-pill" onclick="filterSection('devops')">🛠️ DevOps & Runtime</button>
       <button class="filter-pill" onclick="filterSection('tips')">💡 Pro Tips & Invariants</button>
     </div>
+
+    <!-- Section: Strategic Restructure Advisory (Big 5 Frameworks) -->
+    <section class="wiki-card section-topic" id="sec-restructure">
+      <h2><span>🏛️</span> Strategic Advisory: 2026 Agentic Operating Model &amp; Decision Rights</h2>
+      <p style="color: var(--color-text-muted); font-size: 0.85rem; margin-top: -6px; margin-bottom: 16px;">
+        Synthesized from McKinsey, BCG, Bain, and Deloitte Enterprise AI Research on Autonomous Workforces.
+      </p>
+
+      <div class="warning-box">
+        <strong>⚠️ The Breakdown of Legacy Agile &amp; 3-Column Boards:</strong> Traditional pyramids and passive 3-column boards (To-Do / In Progress / Done) were designed for human communication latency. When autonomous agents generate, test, and scan code in seconds, binary status models create a "Review Queue Black Box" where humans become the latency bottleneck or agents suffer from unmonitored autonomy drift.
+      </div>
+
+      <div class="grid-2">
+        <div class="inner-panel">
+          <h3 style="color: var(--status-blue); font-size: 0.95rem; margin-bottom: 8px;">1. The 3 Outcome Pods (Bain Model)</h3>
+          <p style="font-size: 0.8rem; line-height: 1.5; color: #cbd5e1;">Instead of disconnected individual personas, specialists are grouped into cross-functional pods aligned with business outcomes:</p>
+          <ul style="font-size: 0.8rem; line-height: 1.6; padding-left: 18px; color: var(--color-text-muted);">
+            <li><strong style="color: #fff;">Pod A: Revenue &amp; Deals</strong> (<code>bizdev</code>, <code>cfo</code>, <code>marketing</code>) — SOW generation, margin protection (&ge; 85%), and proof-of-work case studies.</li>
+            <li><strong style="color: #fff;">Pod B: Core Architecture &amp; Build</strong> (<code>tech</code>, <code>doc</code>, <code>infra</code>) — AST refactoring, local Apple Silicon Metal loops, and cognitive memory.</li>
+            <li><strong style="color: #fff;">Pod C: Verification &amp; Trust</strong> (<code>sec</code> / Mantis, <code>qa</code>) — Continuous ReBAC auditing, 19-skill AppSec sweeps, and test regression gates.</li>
+          </ul>
+        </div>
+        <div class="inner-panel">
+          <h3 style="color: var(--status-green); font-size: 0.95rem; margin-bottom: 8px;">2. Explicit Decision Rights (Deloitte / Bain)</h3>
+          <p style="font-size: 0.8rem; line-height: 1.5; color: #cbd5e1;">Every ticket and card on the board has clear authority bounds to avoid review fatigue:</p>
+          <ul style="font-size: 0.8rem; line-height: 1.6; padding-left: 18px; color: var(--color-text-muted);">
+            <li><span class="badge badge-green" style="font-size:0.65rem;">🟢 Autonomous (Agent-Led)</span> Reversible low-risk actions (test fixes, AST linting, initial security sweeps) auto-advance on clean exit.</li>
+            <li><span class="badge badge-blue" style="font-size:0.65rem;">🟡 Shared (Co-Pilot)</span> Strategic engineering choices (library selection, SOW estimates) drafted by agent, confirmed by lead.</li>
+            <li><span class="badge" style="font-size:0.65rem; background:rgba(239,68,68,0.2); color:#fca5a5; border:1px solid rgba(239,68,68,0.4);">🔴 Sovereign (Human-Veto)</span> High-stakes actions (main branch merge, invoice broadcast, production release) require 1-click operator signoff.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <strong>⚡ 6-Stage Autonomous Delivery Pipeline:</strong><br>
+        <code>1. Intake &amp; Triage</code> &rarr; <code>2. Scope &amp; FinOps Gate</code> &rarr; <code>3. Autonomous Execution Zone</code> &rarr; <code>4. Automated Evals &amp; AppSec</code> &rarr; <code>5. Sovereign HITL Review</code> &rarr; <code>6. Delivered &amp; Invoiced</code>.
+      </div>
+    </section>
 
     <!-- Section: Access Portals -->
     <section class="wiki-card section-topic" id="sec-portals">

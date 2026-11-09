@@ -100,6 +100,40 @@ Hover over any sidebar button, metric tile, agent card, or status dot in the Ope
 
 ---
 
+## 🏛️ 2c. Strategic Restructure Advisory: 2026 Agentic Operating Model & Decision Rights
+*(Grounded in McKinsey, BCG, Bain, and Deloitte Enterprise AI Frameworks)*
+
+### Why Legacy Agile & 3-Column Boards Fail in AI Agencies
+Traditional software consulting pyramids (Senior Partner $\rightarrow$ Manager $\rightarrow$ Senior Dev $\rightarrow$ Junior Dev) and passive 3-column Kanban boards (`Backlog`, `In Progress`, `Done`) were designed for **human-paced coordination**:
+1. **The Latency Trap:** When autonomous agents execute multi-step code generation in seconds, human middle-management handoffs introduce 90%+ idle time waste.
+2. **The "In Progress" Black Box:** A binary "In Progress" column conceals whether code is being generated, actively evaluated against unit tests, scanned for AppSec vulnerabilities, or awaiting human approval.
+3. **Agent Drift vs. Review Queue Hell (Bain Warning):** Without explicit **Decision Rights**, teams either suffer from severe human review fatigue (operators micromanaging minor lint fixes) or risky autonomy drift (agents merging untested code directly to main).
+
+### The Big 5 Solution: Outcome Pods & 6-Stage Autonomous Pipeline
+To maximize the asymmetric margin advantage of local Apple Silicon compute while maintaining enterprise-grade safety, Team Arunachala & Drisyon AI operate under a **Bain Decision-Driven Pod Model**:
+
+#### 1. The 3 Cross-Functional Outcome Pods:
+* **Pod A: Commercial & Deal Structuring (`bizdev` + `cfo` + `marketing`):** Owns client RFPs, Statement of Work (SOW) drafting, margin enforcement (targeting $\ge 85\%$), and proof-of-work case study distribution.
+* **Pod B: Core Architecture & Build (`tech` + `doc` + `infra`):** Owns AST refactors, zero-cloud local reasoning loops, institutional vector memory clustering, and PM2/Metal compute health.
+* **Pod C: Verification, Trust & Compliance (`sec` / Mantis + `qa`):** Owns ReBAC access boundaries, 19-skill automated vulnerability sweeps, and continuous regression test verification.
+
+#### 2. The 6-Stage Autonomous Delivery Pipeline:
+```
+[1. Intake & Triage]  --> [2. Scope & FinOps] --> [3. Autonomous Execution]
+    (Autonomous)              (Co-Pilot)               (Autonomous Agents)
+         |                         |                            |
+         v                         v                            v
+[4. Evals & AppSec]    --> [5. Sovereign HITL] --> [6. Delivered & Invoiced]
+    (Autonomous Evals)         (Human Veto Gate)         (Autonomous Settlement)
+```
+
+#### 3. Explicit Decision Rights Matrix (Bain Framework):
+* **🟢 Autonomous (Agent-Led):** Reversible, low-risk actions executed without human delay (e.g., test fixing, AST linting, documentation sync, initial Mantis scan).
+* **🟡 Shared / Consultative (Co-Pilot):** Strategic technical trade-offs (e.g., library replacements, architectural patterns, SOW pricing estimates).
+* **🔴 Sovereign (Human-Exclusive Gate):** High-stakes, legally or financially binding actions (e.g., merging git worktrees to `main`, releasing client deliverables, authorizing invoices, granting security waivers).
+
+---
+
 ## 💼 3. Agency Business Model & Unit Economics
 
 Drisyon AI operates on an **asymmetric margin model**: by executing code generation, refactoring, and test sweeps locally on the **Apple Silicon M5 Max Metal GPU**, delivery cost is virtually zero, generating **85–95% gross profit margins** on software deliverables.

@@ -713,9 +713,11 @@ canvas {
 /* Kanban Board Styling */
 .kanban-board {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(6, minmax(240px, 1fr));
+  gap: 14px;
   align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 20px;
 }
 
 .kanban-col {
@@ -726,8 +728,15 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 480px;
+  min-height: 520px;
   backdrop-filter: blur(10px);
+  transition: var(--transition-smooth);
+}
+
+.kanban-col.drag-over {
+  border-color: var(--status-blue);
+  background: rgba(0, 176, 255, 0.08);
+  box-shadow: 0 0 16px rgba(0, 176, 255, 0.2);
 }
 
 .kanban-col-header {
@@ -760,7 +769,81 @@ canvas {
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
-  max-height: 600px;
+  max-height: 640px;
+}
+
+.decision-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.decision-badge.autonomous {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.decision-badge.copilot {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.decision-badge.sovereign {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.card-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  text-decoration: none;
+}
+.card-action-btn:hover {
+  background: rgba(0, 176, 255, 0.2);
+  border-color: var(--status-blue);
+  color: #fff;
+}
+.card-action-btn.primary {
+  background: rgba(0, 176, 255, 0.2);
+  border-color: var(--status-blue);
+  color: #38bdf8;
+}
+.card-action-btn.success {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: var(--status-green);
+  color: #4ade80;
+}
+
+.kanban-modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.kanban-modal-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 520px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
 }
 
 .kanban-card {
