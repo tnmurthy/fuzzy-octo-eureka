@@ -24,22 +24,25 @@ function detectActionableTask(message, agentKey) {
     let targetAgent = 'auto';
     const lower = taskContent.toLowerCase();
 
-    if (agentKey === 'sec' || lower.includes('security') || lower.includes('audit') || lower.includes('vulnerability') || lower.includes('mantis') || lower.includes('rebac') || lower.includes('cve') || lower.includes('penetration') || lower.includes('pentest') || lower.includes('exploit') || lower.includes('access control')) {
+    const isSecurityAudit = (agentKey === 'sec') ||
+      /\b(security\s+(audit|scan|review|assessment|probe|check|test)|vulnerability|mantis|rebac|cve|penetration|pentest|exploit|threat\s+model|access\s+control\s+audit)\b/i.test(taskContent);
+    const isQA = (agentKey === 'qa') ||
+      /\b(unit\s+test|e2e|integration\s+test|lint|pre-commit|test\s+suite|coverage|vitest|jest)\b/i.test(taskContent);
+
+    if (isSecurityAudit) {
       targetAgent = 'mantis';
-    } else if (agentKey === 'qa' || lower.includes('test') || lower.includes('unit test') || lower.includes('e2e') || lower.includes('lint') || lower.includes('pre-commit') || lower.includes('coverage') || lower.includes('verification') || lower.includes('vitest')) {
+    } else if (isQA) {
       targetAgent = 'auto';
-    } else if (agentKey === 'hermes' || lower.includes('hermes') || lower.includes('local model')) {
+    } else if (agentKey === 'hermes' || lower.includes('@hermes') || lower.includes('hermes runner')) {
       targetAgent = 'hermes';
     } else if (agentKey === 'openhands' || lower.includes('canvas') || lower.includes('openhands')) {
       targetAgent = 'openhands';
-    } else if (lower.includes('@claude') || lower.includes('claude')) {
+    } else if (lower.includes('@claude')) {
       targetAgent = 'claude';
-    } else if (lower.includes('@codex') || lower.includes('codex')) {
+    } else if (lower.includes('@codex')) {
       targetAgent = 'codex';
     } else if (lower.includes('@mantis')) {
       targetAgent = 'mantis';
-    } else if (lower.includes('@hermes')) {
-      targetAgent = 'hermes';
     }
 
     return {
@@ -72,6 +75,12 @@ test('detectActionableTask: routes security and vulnerability tasks to Mantis', 
   const result = detectActionableTask('Audit API authorization and verify ReBAC tenant isolation', 'po');
   assert.equal(result.actionable, true);
   assert.equal(result.targetAgent, 'mantis');
+});
+
+test('detectActionableTask: does not misclassify marketing/enrollment URLs with security as Mantis scans', () => {
+  const result = detectActionableTask('build a plan and help me in enrolling 30 users for this https://drisyon.com/cloud-security', 'po');
+  assert.equal(result.actionable, true);
+  assert.equal(result.targetAgent, 'auto');
 });
 
 test('detectActionableTask: routes testing and verification to QA/auto runner', () => {
