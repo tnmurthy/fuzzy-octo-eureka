@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Deliverable & Invoicing Portal — Drisyon AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css?v=20261109_invoicing">
+  <style>
+    .portal-container {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    .portal-nav-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+    }
+
+    .portal-nav-links {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .portal-nav-links a, .portal-btn {
+      color: var(--status-blue);
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 7px 14px;
+      border-radius: 8px;
+      background: rgba(0, 176, 255, 0.08);
+      border: 1px solid rgba(0, 176, 255, 0.2);
+      transition: var(--transition-smooth);
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .portal-nav-links a:hover, .portal-btn:hover {
+      background: rgba(0, 176, 255, 0.18);
+      border-color: var(--status-blue);
+      transform: translateY(-1px);
+    }
+
+    .portal-btn-primary {
+      background: var(--status-blue) !important;
+      color: #000 !important;
+      font-weight: 600 !important;
+      border-color: var(--status-blue) !important;
+    }
+
+    .portal-btn-primary:hover {
+      background: #33c2ff !important;
+      box-shadow: 0 0 14px var(--status-blue-glow);
+    }
+
+    /* Client Selector Card */
+    .client-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .client-select-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .client-select-wrap select {
+      background: rgba(0, 0, 0, 0.5);
+      color: #fff;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .client-meta-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 16px;
+      margin-bottom: 30px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .kpi-label {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .kpi-value {
+      font-size: 1.7rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .kpi-subtext {
+      font-size: 0.76rem;
+      color: var(--color-text-muted);
+    }
+
+    /* Section Panels */
+    .section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 26px 28px;
+      margin-bottom: 28px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .section-card h2 {
+      font-size: 1.35rem;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #fff;
+    }
+
+    .section-subtitle {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin-bottom: 20px;
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 16px 0;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+    }
+
+    table.portal-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    table.portal-table th {
+      background: rgba(0, 0, 0, 0.4);
+      color: var(--color-text-muted);
+      padding: 12px 14px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: 0.04em;
+    }
+
+    table.portal-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: middle;
+    }
+
+    table.portal-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    table.portal-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .badge-green { background: rgba(0, 230, 118, 0.15); color: var(--status-green); border: 1px solid rgba(0, 230, 118, 0.3); }
+    .badge-blue  { background: rgba(0, 176, 255, 0.15); color: var(--status-blue); border: 1px solid rgba(0, 176, 255, 0.3); }
+    .badge-amber { background: rgba(255, 179, 0, 0.15); color: var(--status-amber); border: 1px solid rgba(255, 179, 0, 0.3); }
+    .badge-purple { background: rgba(186, 104, 200, 0.15); color: #ba68c8; border: 1px solid rgba(186, 104, 200, 0.3); }
+
+    /* Commercial Invoice Document View */
+    .invoice-document {
+      background: #11151f;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 32px 36px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      margin-top: 10px;
+    }
+
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 24px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .invoice-brand h3 {
+      font-size: 1.5rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .invoice-meta {
+      text-align: right;
+    }
+
+    .invoice-num {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--status-blue);
+      margin-bottom: 4px;
+    }
+
+    .invoice-parties {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 28px;
+    }
+
+    .party-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      margin-bottom: 6px;
+    }
+
+    .party-name {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .party-details {
+      font-size: 0.82rem;
+      color: var(--color-text-muted);
+      line-height: 1.5;
+    }
+
+    .totals-box {
+      margin-left: auto;
+      max-width: 380px;
+      margin-top: 20px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.88rem;
+    }
+
+    .totals-row:last-child {
+      border-bottom: none;
+      padding-top: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .settlement-card {
+      background: rgba(0, 176, 255, 0.04);
+      border: 1px solid rgba(0, 176, 255, 0.15);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-top: 24px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+
+    /* Print Stylesheet for Clean PDF Export */
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #111827 !important;
+      }
+
+      .portal-nav-bar, .client-bar, .portal-btn, .kpi-grid, .no-print, header, nav, button {
+        display: none !important;
+      }
+
+      .portal-container {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      .section-card {
+        background: #ffffff !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      .invoice-document {
+        background: #ffffff !important;
+        color: #111827 !important;
+        border: 1px solid #d1d5db !important;
+        box-shadow: none !important;
+        padding: 24px !important;
+      }
+
+      .invoice-brand h3, .party-name, .invoice-num {
+        color: #111827 !important;
+      }
+
+      .party-details, .invoice-meta {
+        color: #4b5563 !important;
+      }
+
+      table.portal-table th {
+        background: #f3f4f6 !important;
+        color: #374151 !important;
+        border-bottom: 2px solid #d1d5db !important;
+      }
+
+      table.portal-table td {
+        border-bottom: 1px solid #e5e7eb !important;
+        color: #1f2937 !important;
+      }
+
+      .totals-box {
+        background: #f9fafb !important;
+        border: 1px solid #e5e7eb !important;
+      }
+
+      .badge {
+        border: 1px solid #9ca3af !important;
+        color: #111827 !important;
+        background: #f3f4f6 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="portal-container">
+
+    <!-- Top Navigation Bar -->
+    <header class="portal-nav-bar">
+      <div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <h1 style="font-size: 1.6rem; font-weight: 700; color: #fff;">💼 Client Deliverable & Invoicing Portal</h1>
+          <span class="badge badge-green">Cryptographically Verified</span>
+        </div>
+        <p style="color: var(--color-text-muted); font-size: 0.85rem; margin-top: 4px;">
+          Autonomous Engineering Sprint Deliverables, Google Mantis AppSec Badges & Transparent Compute Billing.
+        </p>
+      </div>
+
+      <nav class="portal-nav-links">
+        <a href="/">← Dashboard</a>
+        <a href="/costing.html">💰 Costing & ROI</a>
+        <a href="/team.html">👥 Team</a>
+        <a href="/wiki.html">📚 Agency Wiki</a>
+        <button class="portal-btn portal-btn-primary" onclick="window.print()">🖨️ Export Invoice (PDF)</button>
+      </nav>
+    </header>
+
+    <!-- Client Account Switcher -->
+    <section class="client-bar">
+      <div class="client-select-wrap">
+        <span style="font-size: 0.82rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 600;">Client Account:</span>
+        <select id="client-select" onchange="onClientChange(this.value)">
+          <option value="telangana-live" selected>Telangana Live Platform Inc.</option>
+          <option value="drisyon-core">Drisyon AI Mesh (Internal Core)</option>
+          <option value="buzz-network">Buzz Communities Decentralized Mesh</option>
+        </select>
+      </div>
+
+      <div class="client-meta-pills">
+        <span class="badge badge-blue" id="pill-contract">14-Day Enterprise Engineering Sprint Retainer</span>
+        <span class="badge badge-green" id="pill-deposit">50% Milestone Deposit Received</span>
+        <span class="badge badge-amber" id="pill-status">Pending Final Sign-Off</span>
+      </div>
+    </section>
+
+    <!-- Executive Deliverable KPI Cards -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">
+          <span>Verified Deliverables</span>
+          <span class="badge badge-green">Completed</span>
+        </div>
+        <div class="kpi-value" id="kpi-deliverables-count">10</div>
+        <div class="kpi-subtext">10 of 10 sprint milestones verified</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">
+          <span>QA Test Pass Rate</span>
+          <span class="badge badge-green">100% Pass</span>
+        </div>
+        <div class="kpi-value" style="color: var(--status-green);">178 / 178</div>
+        <div class="kpi-subtext">Zero test regressions across full suite</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">
+          <span>Mantis AppSec Audit</span>
+          <span class="badge badge-green">Certified</span>
+        </div>
+        <div class="kpi-value" style="color: var(--status-blue);">0 Critical</div>
+        <div class="kpi-subtext">19 Mantis security skills executed</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">
+          <span>Compute Subsidy</span>
+          <span class="badge badge-green">Waived</span>
+        </div>
+        <div class="kpi-value" style="color: var(--status-green);">$250.00</div>
+        <div class="kpi-subtext">Apple Silicon Metal compute cost absorbed</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">
+          <span>Amount Due on Sign-off</span>
+          <span class="badge badge-amber">Balance</span>
+        </div>
+        <div class="kpi-value" id="kpi-balance-due" style="color: #fff;">$3,750.00</div>
+        <div class="kpi-subtext">Remaining 50% sprint milestone balance</div>
+      </div>
+    </section>
+
+    <!-- Section 1: Verifiable Deliverables Registry -->
+    <section class="section-card no-print">
+      <h2>🏆 Verified Milestone Deliverables Registry</h2>
+      <div class="section-subtitle">
+        Completed software features and infrastructure components verified through automated QA regression suites and Mantis security sweeps.
+      </div>
+
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Milestone Deliverable</th>
+              <th>Category</th>
+              <th>Date</th>
+              <th>Verification Proof</th>
+              <th>Audit Fingerprint</th>
+            </tr>
+          </thead>
+          <tbody id="deliverables-tbody">
+            <tr>
+              <td colspan="6" style="text-align:center; padding:24px; color:var(--color-text-muted);">Loading verified deliverables…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 2: Formal Commercial Invoice Statement -->
+    <section class="section-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+        <h2>📄 Commercial Invoice & Delivery Statement</h2>
+        <div class="no-print" style="display:flex; gap:8px;">
+          <button class="portal-btn" onclick="toggleCustomizer()">✏️ Customize Invoice</button>
+          <button class="portal-btn portal-btn-primary" onclick="window.print()">🖨️ Print / Download PDF</button>
+        </div>
+      </div>
+      <div class="section-subtitle no-print">
+        Official milestone invoice statement ready for corporate accounts payable and audit verification.
+      </div>
+
+      <!-- Optional Invoice Customizer Drawer -->
+      <div id="customizer-box" class="no-print" style="display:none; background:rgba(0,0,0,0.4); border:1px solid var(--border-color); border-radius:10px; padding:18px; margin-bottom:20px;">
+        <h4 style="margin-bottom:12px; font-size:0.95rem; color:#fff;">Customize Invoice Details</h4>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+          <div>
+            <label style="font-size:0.75rem; color:var(--color-text-muted); display:block; margin-bottom:4px;">Client Organization</label>
+            <input type="text" id="cust-client-name" style="width:100%; background:#0a0c10; color:#fff; border:1px solid var(--border-color); border-radius:6px; padding:6px 10px; font-size:0.85rem;" value="Telangana Live Platform Inc.">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--color-text-muted); display:block; margin-bottom:4px;">Client POC</label>
+            <input type="text" id="cust-client-poc" style="width:100%; background:#0a0c10; color:#fff; border:1px solid var(--border-color); border-radius:6px; padding:6px 10px; font-size:0.85rem;" value="Dr. K. Rao (VP Engineering)">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--color-text-muted); display:block; margin-bottom:4px;">Retainer Fee ($)</label>
+            <input type="number" id="cust-fee" style="width:100%; background:#0a0c10; color:#fff; border:1px solid var(--border-color); border-radius:6px; padding:6px 10px; font-size:0.85rem;" value="7500">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--color-text-muted); display:block; margin-bottom:4px;">Deposit Received ($)</label>
+            <input type="number" id="cust-deposit" style="width:100%; background:#0a0c10; color:#fff; border:1px solid var(--border-color); border-radius:6px; padding:6px 10px; font-size:0.85rem;" value="3750">
+          </div>
+        </div>
+        <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+          <button class="portal-btn portal-btn-primary" onclick="applyCustomInvoice()">Apply Updates</button>
+        </div>
+      </div>
+
+      <!-- Printable Invoice Document -->
+      <div class="invoice-document" id="printable-invoice">
+        <div class="invoice-header">
+          <div class="invoice-brand">
+            <h3>🧭 Drisyon AI Mesh</h3>
+            <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: 4px;">
+              Team Arunachala Operations Center · Silicon High-Tech Corridor
+            </p>
+          </div>
+          <div class="invoice-meta">
+            <div class="invoice-num" id="inv-num">INV-2026-DRIS-4921</div>
+            <div style="font-size: 0.82rem; color: var(--color-text-muted);">Issue Date: <span id="inv-date">November 9, 2026</span></div>
+            <div style="font-size: 0.82rem; color: var(--color-text-muted);">Due Date: <span id="inv-due">November 23, 2026</span></div>
+            <div style="margin-top: 6px;"><span class="badge badge-amber" id="inv-status-badge">50% Deposit Paid · Balance Due on Sign-Off</span></div>
+          </div>
+        </div>
+
+        <div class="invoice-parties">
+          <div>
+            <div class="party-title">Bill To:</div>
+            <div class="party-name" id="inv-client-name">Telangana Live Platform Inc.</div>
+            <div class="party-details">
+              Attn: <span id="inv-client-poc">Dr. K. Rao (VP Engineering)</span><br>
+              Cyberabad Tech Innovation Zone, Hyderabad<br>
+              Account ID: <code id="inv-account-id">ACC-TELANGANA-01</code>
+            </div>
+          </div>
+
+          <div>
+            <div class="party-title">Service Provider:</div>
+            <div class="party-name">Drisyon AI Operations Center</div>
+            <div class="party-details">
+              Division: Team Arunachala Autonomous Mesh<br>
+              Tax ID: US-AI-9481924-M<br>
+              Node Endpoint: <code>https://drisyon.mytestbed.tech</code>
+            </div>
+          </div>
+        </div>
+
+        <!-- Line Items Table -->
+        <div class="table-wrap">
+          <table class="portal-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Deliverables / Scope Covered</th>
+                <th style="text-align:right;">Amount (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="invoice-line-items">
+              <tr>
+                <td><strong>14-Day Enterprise Engineering Sprint Retainer</strong></td>
+                <td>10 verified software milestones, ReBAC gating, and multi-tenant isolation</td>
+                <td style="text-align:right; font-family:'JetBrains Mono', monospace;">$7,500.00</td>
+              </tr>
+              <tr>
+                <td><strong>24/7 PM2 Patrol Daemon & Continuous AppSec Sweeps</strong></td>
+                <td>6-Hour Google Mantis AppSec audits & weekly operations broadcast</td>
+                <td style="text-align:right; font-family:'JetBrains Mono', monospace;"><span class="badge badge-green">Included</span></td>
+              </tr>
+              <tr>
+                <td><strong>Apple Silicon M5 Max Local Edge Compute Subsidy</strong></td>
+                <td>100% on-premises Metal acceleration (~17.8k tokens with zero third-party cloud markup)</td>
+                <td style="text-align:right; font-family:'JetBrains Mono', monospace; color:var(--status-green);">-$250.00 (Waived)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Financial Totals -->
+        <div class="totals-box">
+          <div class="totals-row">
+            <span style="color:var(--color-text-muted);">Contract Subtotal:</span>
+            <span style="font-family:'JetBrains Mono', monospace;" id="inv-subtotal">$7,500.00</span>
+          </div>
+          <div class="totals-row">
+            <span style="color:var(--color-text-muted);">Local Edge Compute Credit:</span>
+            <span style="font-family:'JetBrains Mono', monospace; color:var(--status-green);">-$250.00 (100% Waived)</span>
+          </div>
+          <div class="totals-row">
+            <span style="color:var(--color-text-muted);">50% Milestone Deposit Received:</span>
+            <span style="font-family:'JetBrains Mono', monospace; color:var(--status-blue);" id="inv-deposit">-$3,750.00</span>
+          </div>
+          <div class="totals-row">
+            <span>Balance Due on Final Acceptance:</span>
+            <span style="font-family:'JetBrains Mono', monospace; color:#fff;" id="inv-balance-due">$3,750.00</span>
+          </div>
+        </div>
+
+        <!-- Settlement Instructions -->
+        <div class="settlement-card">
+          <div style="font-weight:600; color:#fff; margin-bottom:6px;">💳 Settlement & Payment Instructions</div>
+          <div><strong>Bank Wire (Fedwire / SWIFT):</strong> Silicon Valley Commercial Bank · Routing: <code>021000021</code> · Acct: <code>98410294812</code> · SWIFT: <code>SVBKUS6S</code></div>
+          <div><strong>Digital Currency (USDC / Solana):</strong> <code>Drisyon7xQmRtY5Z9pVxK4mB8zQ3wL2eJ1aH6vN9uP</code></div>
+          <div><strong>Lightning Network (Nostr/NWC):</strong> <code>drisyon@getalby.com</code></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    let currentInvoicingData = null;
+
+    async function fetchInvoicingData(clientKey = 'telangana-live') {
+      try {
+        const res = await fetch(`/api/invoicing/summary?client=${clientKey}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        currentInvoicingData = data;
+        renderPortal(data);
+      } catch (err) {
+        console.error('Failed to load invoicing data:', err);
+      }
+    }
+
+    function renderPortal(data) {
+      const inv = data.invoice || {};
+      const delivs = data.deliverables || [];
+      const account = inv.account || {};
+      const fin = inv.financials || {};
+
+      // Pills & Headings
+      document.getElementById('pill-contract').textContent = account.contract || 'Engineering Sprint Retainer';
+      document.getElementById('pill-deposit').textContent = fin.depositReceivedUsd > 0 ? `Deposit Received ($${fin.depositReceivedUsd.toLocaleString()})` : 'Deposit Pending';
+      document.getElementById('pill-status').textContent = inv.status || 'Pending Sign-Off';
+
+      // KPIs
+      document.getElementById('kpi-deliverables-count').textContent = delivs.length;
+      document.getElementById('kpi-balance-due').textContent = `$${(fin.balanceDueUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+      // Deliverables Table
+      const tbody = document.getElementById('deliverables-tbody');
+      if (delivs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--color-text-muted);">No verified deliverables recorded yet.</td></tr>`;
+      } else {
+        tbody.innerHTML = delivs.map(d => `
+          <tr>
+            <td><code>${d.id}</code></td>
+            <td><strong>${d.title}</strong></td>
+            <td><span class="badge badge-purple">${d.category}</span></td>
+            <td>${d.completedDate}</td>
+            <td>
+              <span class="badge badge-green" style="margin-right:4px;">QA 100%</span>
+              <span class="badge badge-blue">Mantis Verified</span>
+            </td>
+            <td><code style="font-size:0.75rem;">${d.auditHash}</code></td>
+          </tr>
+        `).join('');
+      }
+
+      // Invoice Document View
+      document.getElementById('inv-num').textContent = inv.invoiceNumber;
+      document.getElementById('inv-date').textContent = inv.issueDate;
+      document.getElementById('inv-due').textContent = inv.dueDate;
+      document.getElementById('inv-client-name').textContent = account.name || 'Client Corp';
+      document.getElementById('inv-client-poc').textContent = account.poc || 'Operations Lead';
+      document.getElementById('inv-account-id').textContent = account.id || 'ACC-01';
+
+      document.getElementById('inv-subtotal').textContent = `$${(fin.subtotalUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+      document.getElementById('inv-deposit').textContent = `-$${(fin.depositReceivedUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+      document.getElementById('inv-balance-due').textContent = `$${(fin.balanceDueUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+      // Line items
+      const lineTbody = document.getElementById('invoice-line-items');
+      lineTbody.innerHTML = (inv.lineItems || []).map(item => `
+        <tr>
+          <td><strong>${item.description}</strong></td>
+          <td style="color:var(--color-text-muted); font-size:0.82rem;">${item.deliverablesIncluded}</td>
+          <td style="text-align:right; font-family:'JetBrains Mono', monospace;">
+            ${item.amountUsd < 0 
+              ? `<span style="color:var(--status-green);">-$${Math.abs(item.amountUsd).toFixed(2)} (Waived)</span>` 
+              : (item.amountUsd === 0 ? `<span class="badge badge-green">Included</span>` : `$${item.amountUsd.toFixed(2)}`)}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function onClientChange(clientKey) {
+      fetchInvoicingData(clientKey);
+    }
+
+    function toggleCustomizer() {
+      const box = document.getElementById('customizer-box');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function applyCustomInvoice() {
+      if (!currentInvoicingData) return;
+      const clientName = document.getElementById('cust-client-name').value;
+      const clientPoc = document.getElementById('cust-client-poc').value;
+      const fee = Number(document.getElementById('cust-fee').value);
+      const deposit = Number(document.getElementById('cust-deposit').value);
+
+      currentInvoicingData.invoice.account.name = clientName;
+      currentInvoicingData.invoice.account.poc = clientPoc;
+      currentInvoicingData.invoice.financials.subtotalUsd = fee;
+      currentInvoicingData.invoice.financials.depositReceivedUsd = deposit;
+      currentInvoicingData.invoice.financials.balanceDueUsd = Math.max(0, fee - deposit);
+
+      renderPortal(currentInvoicingData);
+      toggleCustomizer();
+    }
+
+    // Initial Load
+    fetchInvoicingData('telangana-live');
+  </script>
+</body>
+</html>

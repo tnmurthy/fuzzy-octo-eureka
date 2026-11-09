@@ -84,6 +84,7 @@ Drisyon AI operates on an **asymmetric margin model**: by executing code generat
 | **Gross Profit Margin** | 50% – 65% | **88% – 99.8%** |
 
 > 📊 **Dedicated Costing Portal:** Access `/costing` or [`costing.html`](/costing.html) for interactive client ROI simulators, Apple Silicon M5 Max compute/power breakdowns, and real-time ledger telemetry.
+> 💼 **Client Deliverable & Invoicing Portal:** Access `/invoicing` or `/portal` ([`invoicing.html`](/invoicing.html)) for verified milestone acceptance records, Mantis AppSec certificates, and printable commercial invoice receipts.
 
 ### 🔄 The $10,000 Project Delivery Lifecycle
 ```

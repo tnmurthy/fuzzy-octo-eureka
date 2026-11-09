@@ -54,6 +54,7 @@ const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
 // the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
 const { readRuns } = require('./runs-reader');
+const { getInvoicingSummary } = require('./invoicing');
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
   storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
@@ -257,6 +258,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/wiki') urlPath = '/wiki.html';
   if (urlPath === '/team') urlPath = '/team.html';
   if (urlPath === '/costing') urlPath = '/costing.html';
+  if (urlPath === '/invoicing' || urlPath === '/portal') urlPath = '/invoicing.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
@@ -552,6 +554,41 @@ function handleDigest(req, res) {
     .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
 }
 
+function listAvailableRepos() {
+  const dirs = [
+    DASHBOARD_DIR,
+    PROJECTS_DIR,
+    path.resolve(DASHBOARD_DIR, '..'),
+    path.resolve(process.env.STACK_ROOT || '/Users/Sriad/tt-ai-stack', 'tools')
+  ];
+  const repos = new Map();
+  repos.set(path.basename(DASHBOARD_DIR), DASHBOARD_DIR);
+
+  for (const d of dirs) {
+    if (!fs.existsSync(d)) continue;
+    try {
+      const entries = fs.readdirSync(d, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ent.isDirectory() && !ent.name.includes('--') && !ent.name.startsWith('.')) {
+          const fullPath = path.join(d, ent.name);
+          if (fs.existsSync(path.join(fullPath, '.git'))) {
+            repos.set(ent.name, fullPath);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+  return Array.from(repos.entries()).map(([name, repoPath]) => ({ name, path: repoPath }));
+}
+
+function resolveRepoPath(repo) {
+  if (repo === path.basename(DASHBOARD_DIR) || repo === '.') return DASHBOARD_DIR;
+  const repos = listAvailableRepos();
+  const match = repos.find(r => r.name === repo);
+  if (match) return match.path;
+  return path.resolve(PROJECTS_DIR, repo);
+}
+
 function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
@@ -752,6 +789,18 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/costs')) {
     return handleCosts(req, res);
   }
+  if (req.url.startsWith('/api/invoicing/summary')) {
+    const url = new URL(req.url, 'http://localhost');
+    const clientKey = url.searchParams.get('client') || 'telangana-live';
+    const summary = getInvoicingSummary({
+      baseDir: DASHBOARD_DIR,
+      tasksFile: resolveTasksFile(DASHBOARD_DIR),
+      runsFile: RUNS_FILE,
+      callsFile: AI_CALLS_FILE,
+      clientKey
+    });
+    return sendJson(res, 200, summary);
+  }
   if (req.url.startsWith('/api/config')) {
     return sendJson(res, 200, { operatorName: OPERATOR_NAME, personaModel: PERSONA_MODEL, host: getHostSpecs() });
   }
@@ -767,6 +816,9 @@ function handleRequest(req, res) {
       return;
     }
     return sendJson(res, 200, readRuns(RUNS_FILE));
+  }
+  if (req.url.startsWith('/api/repos')) {
+    return sendJson(res, 200, { ok: true, repos: listAvailableRepos() });
   }
   if (req.url.startsWith('/api/rebac/inspect')) {
     const actor = (req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')) ? 'user:drisyon' : 'user:sriad';
@@ -1007,9 +1059,7 @@ function handleRequest(req, res) {
       if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
         return sendJson(res, 400, { ok: false, error: 'repo must be a plain directory name' });
       }
-      const repoPath = (repo === path.basename(DASHBOARD_DIR) || repo === '.')
-        ? DASHBOARD_DIR
-        : path.resolve(PROJECTS_DIR, repo);
+      const repoPath = resolveRepoPath(repo);
       if (!fs.existsSync(path.join(repoPath, '.git'))) {
         return sendJson(res, 400, { ok: false, error: `not a known repo: ${repo}` });
       }
