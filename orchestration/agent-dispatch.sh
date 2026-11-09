@@ -65,6 +65,7 @@ resolve_hermes() {
   local h_posix="$HOME/.hermes"
   local c
   for c in "${HERMES_BIN:-}" "$(command -v hermes 2>/dev/null || true)" \
+           "$HERE/hermes-local.js" \
            "$h_win/venv/Scripts/hermes.exe" "$h_win/.venv/Scripts/hermes.exe" \
            "$h_mac/venv/bin/hermes" "$h_mac/.venv/bin/hermes" \
            "$h_posix/venv/bin/hermes" "$h_posix/.venv/bin/hermes"; do

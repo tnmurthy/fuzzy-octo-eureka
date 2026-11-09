@@ -1,8 +1,39 @@
 {
-  "updatedAt": "2026-11-09T07:44:53.872Z",
-  "episodicCount": 17,
+  "updatedAt": "2026-11-09T07:58:20.891Z",
+  "episodicCount": 18,
   "alignmentsCount": 3,
   "episodicMemory": [
+    {
+      "id": "mem_d429647e487b",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "fuzzy-octo-eureka",
+      "category": "security_audit",
+      "title": "Automated Mantis Security Sweep (20261109075820-mantis-yxvodl)",
+      "content": "Mantis AppSec scan executed against repository fuzzy-octo-eureka. Verification of ReBAC authorization and tenant isolation underway.",
+      "vector": {
+        "mantis": 2,
+        "appsec": 1,
+        "scan": 1,
+        "executed": 1,
+        "against": 1,
+        "repository": 1,
+        "fuzzy-octo-eureka": 1,
+        "verification": 1,
+        "rebac": 1,
+        "authorization": 1,
+        "and": 1,
+        "tenant": 1,
+        "isolation": 1,
+        "underway": 1,
+        "automated": 1,
+        "security": 1,
+        "sweep": 1,
+        "20261109075820-mantis-yxvodl": 1
+      },
+      "tags": [],
+      "metadata": {},
+      "createdAt": "2026-11-09T07:58:20.891Z"
+    },
     {
       "id": "mem_1da71806d533",
       "tenantId": "tenant:drisyon_core",

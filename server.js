@@ -1100,8 +1100,16 @@ function handleRequest(req, res) {
     const allRuns = (readRuns(RUNS_FILE, 100).runs || []);
     const mantisRuns = allRuns.filter(r => r.agent === 'mantis');
     const latestMantis = mantisRuns.length ? mantisRuns[0] : null;
+    let daemonState = null;
+    const stateFile = path.join(DASHBOARD_DIR, 'logs', 'patrol-state.json');
+    if (fs.existsSync(stateFile)) {
+      try {
+        daemonState = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+      } catch (_) {}
+    }
     return sendJson(res, 200, {
       ok: true,
+      daemon: daemonState,
       buzzDigestEnabled: process.env.BUZZ_DIGEST === 'true',
       latestMantisRun: latestMantis,
       timestamp: new Date().toISOString()
