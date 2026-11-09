@@ -30,6 +30,7 @@
               <li class="nav-item active" onclick="switchTab('dashboard')"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
               <li class="nav-item" onclick="switchTab('kanban')"><span class="nav-link" id="id-nav-kanban">📌 Kanban Board</span></li>
               <li class="nav-item" onclick="switchTab('agents')"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
+              <li class="nav-item" onclick="switchTab('canvas')"><span class="nav-link" id="id-nav-canvas">👐 Agent Canvas</span></li>
               <li class="nav-item" onclick="switchTab('infra')"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
               <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
               <li class="nav-item" onclick="switchTab('runs')"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
@@ -542,6 +543,44 @@
                   </div>
                 </div>
               </div>
+            </section>
+          </div>
+
+          <!-- ==================== AGENT CANVAS TAB (Phase 2) ==================== -->
+          <div id="canvas" class="tab-content">
+            <section class="header-panel">
+              <div class="header-title">
+                <h2>OpenHands Agent Canvas Workspace</h2>
+                <p>Interactive containerized sandbox environment on port 8000 powered by local Ollama models (<code>host.docker.internal:11434</code>).</p>
+              </div>
+              <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-secondary" onclick="reloadCanvasIframe()">🔄 Reload Canvas</button>
+                <button class="btn btn-secondary" onclick="toggleCanvasFullscreen()">⛶ Fullscreen</button>
+                <a href="/canvas/" target="_blank" class="btn btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                  <span>🔗 Open in New Window</span>
+                </a>
+              </div>
+            </section>
+
+            <section class="card" style="padding: 0; overflow: hidden; background: #000; border: 1px solid var(--border-color); border-radius: 12px; margin-top: 16px;">
+              <div style="background: rgba(0,0,0,0.4); padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem;">
+                  <span class="status-dot green"></span>
+                  <span style="font-weight: 600; color: #fff;">OpenHands Canvas Active</span>
+                  <span style="color: var(--color-text-muted);">|</span>
+                  <span style="color: var(--status-blue); font-family: 'JetBrains Mono', monospace;">Docker: openhands-canvas (:8000)</span>
+                  <span style="color: var(--color-text-muted);">|</span>
+                  <span style="color: #86efac; font-family: 'JetBrains Mono', monospace;">LLM Backend: http://host.docker.internal:11434</span>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--color-text-muted);">
+                  Target: <code>/canvas/</code> · Ingress: <code>Port 8000</code>
+                </div>
+              </div>
+              <iframe id="id-openhands-canvas-iframe" 
+                      src="/canvas/" 
+                      style="width: 100%; height: calc(100vh - 230px); min-height: 720px; border: none; display: block; background: #0b0f19;"
+                      allow="clipboard-read; clipboard-write; fullscreen">
+              </iframe>
             </section>
           </div>
 
