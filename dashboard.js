@@ -103,6 +103,7 @@
       dashboard: 'id-nav-dashboard',
       kanban: 'id-nav-kanban',
       agents: 'id-nav-agents',
+      canvas: 'id-nav-canvas',
       infra: 'id-nav-infra',
       logs: 'id-nav-logs',
       runs: 'id-nav-runs',
@@ -1431,6 +1432,25 @@
       }
     }
 
+    function reloadCanvasIframe() {
+      const iframe = document.getElementById('id-openhands-canvas-iframe');
+      if (iframe) {
+        iframe.src = '/canvas/?t=' + Date.now();
+      }
+    }
+
+    function toggleCanvasFullscreen() {
+      const iframe = document.getElementById('id-openhands-canvas-iframe');
+      if (!iframe) return;
+      if (!document.fullscreenElement) {
+        iframe.requestFullscreen().catch(err => alert(`Error entering fullscreen: ${err.message}`));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    window.reloadCanvasIframe = reloadCanvasIframe;
+    window.toggleCanvasFullscreen = toggleCanvasFullscreen;
     window.toggleMemorySearchModal = toggleMemorySearchModal;
     window.executeDashboardMemorySearch = executeDashboardMemorySearch;
     window.loadCosts = loadCosts;
