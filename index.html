@@ -35,6 +35,7 @@
               <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
               <li class="nav-item" onclick="switchTab('runs')"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
               <li class="nav-item" onclick="switchTab('costs')"><span class="nav-link" id="id-nav-costs">💰 Costs</span></li>
+              <li class="nav-item" onclick="location.href='/costing.html'"><span class="nav-link" id="id-nav-costing">📊 Drisyon Costing & ROI</span></li>
               <li class="nav-item" onclick="location.href='/team.html'"><span class="nav-link" id="id-nav-team">🗂️ Team (Org Chart)</span></li>
               <li class="nav-item" onclick="location.href='/wiki.html'"><span class="nav-link" id="id-nav-wiki">📚 Agency Wiki</span></li>
               <li class="nav-item" onclick="location.href='/logout'"><span class="nav-link" style="color:var(--status-red);">🚪 Sign Out</span></li>
@@ -851,6 +852,24 @@
                 <p>Every task dispatched to an agent: who has it, where it works, and how it ended.</p>
               </div>
             </section>
+            <!-- Phase 3: Automated Agency Watchdog & Patrol -->
+            <section class="card" style="margin-bottom: 1.5rem; border: 1px solid rgba(59, 130, 246, 0.35); background: linear-gradient(180deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);">
+              <div class="card-header">
+                <div class="card-title"><span class="card-title-icon">🛡️</span><h3>Automated Agency Watchdog & Patrol</h3></div>
+                <span class="card-subtitle">One-click Google Mantis AppSec audit sweeps & weekly AI operations ledger broadcasts</span>
+              </div>
+              <div style="padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                  <button type="button" onclick="triggerMantisPatrol()" class="btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 0.65rem 1.25rem; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                    <span>🛡️</span> Run Mantis Security Audit
+                  </button>
+                  <button type="button" onclick="triggerWeeklyDigest()" class="btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); padding: 0.65rem 1.25rem; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                    <span>📊</span> Broadcast Weekly AI Digest to Buzz
+                  </button>
+                </div>
+                <div id="patrol-status" style="font-size: 0.82rem; color: #94a3b8; line-height: 1.4; display: none; padding: 0.75rem 1rem; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid #334155;"></div>
+              </div>
+            </section>
             <section class="card" style="margin-bottom: 1.5rem;">
               <div class="card-header">
                 <div class="card-title"><span class="card-title-icon">⚡</span><h3>Quick Dispatch</h3></div>
@@ -914,13 +933,16 @@
                 <h2>AI Costs</h2>
                 <p>Every model call - local and paid - from the AI call ledger, with what to change to spend less.</p>
               </div>
-              <label class="costs-days">Last
-                <select id="costs-days" onchange="loadCosts()">
-                  <option value="1">1 day</option>
-                  <option value="7" selected>7 days</option>
-                  <option value="30">30 days</option>
-                </select>
-              </label>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <a href="/costing.html" class="btn btn-secondary" style="text-decoration:none; font-size:0.8rem; padding:6px 12px; color:var(--status-blue); border-color:var(--status-blue);">📊 Full Unit Economics & ROI</a>
+                <label class="costs-days">Last
+                  <select id="costs-days" onchange="loadCosts()">
+                    <option value="1">1 day</option>
+                    <option value="7" selected>7 days</option>
+                    <option value="30">30 days</option>
+                  </select>
+                </label>
+              </div>
             </section>
             <section class="cost-tiles">
               <div class="card cost-tile"><span class="cost-tile-label">Paid calls</span><span class="cost-tile-value" id="costs-paid">-</span></div>

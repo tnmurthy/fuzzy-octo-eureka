@@ -79,8 +79,11 @@ Drisyon AI operates on an **asymmetric margin model**: by executing code generat
 | Cost Factor | Cloud-Only Agency | Drisyon AI Mesh (Local-First) |
 | :--- | :--- | :--- |
 | **Dev Iteration Spend** | $500 – $2,000/sprint (OpenAI/Anthropic) | **$0.00** (Apple M5 Max Metal GPU) |
+| **Compute & Power Draw** | $2,450/mo (Cloud A100 GPU rental) | **$7.34/mo** continuous power (68W active) |
 | **Escalation Tokens** | 100% of all turns billed | < 8% (Only on test regression failure) |
-| **Gross Profit Margin** | 50% – 65% | **88% – 96%** |
+| **Gross Profit Margin** | 50% – 65% | **88% – 99.8%** |
+
+> 📊 **Dedicated Costing Portal:** Access `/costing` or [`costing.html`](/costing.html) for interactive client ROI simulators, Apple Silicon M5 Max compute/power breakdowns, and real-time ledger telemetry.
 
 ### 🔄 The $10,000 Project Delivery Lifecycle
 ```

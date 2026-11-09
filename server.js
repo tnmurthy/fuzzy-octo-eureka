@@ -551,6 +551,64 @@ function handleDigest(req, res) {
     .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
 }
 
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
+  const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
+  const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
+
+  return dispatchMemories(repo, task).then((memories) => {
+    const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
+    fs.writeFileSync(promptFile, buildDispatchPrompt(task, memories), 'utf8');
+
+    const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
+    const bashBin = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash');
+    const isWin = process.platform === 'win32';
+    const pathDirs = [
+      path.dirname(process.execPath),
+      path.join(OPENCLAW_HOME, '.local', 'bin'),
+      isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm') : path.join(OPENCLAW_HOME, '.npm-global', 'bin'),
+      isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Local', 'Programs', 'OpenAI', 'Codex', 'bin') : '/opt/homebrew/bin',
+      '/usr/local/bin',
+      '/usr/bin',
+      '/bin',
+      process.env.PATH || '',
+    ].filter(Boolean);
+
+    const dispatchEnv = Object.assign({}, process.env, {
+      AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
+      AI_CALLS_FILE,
+      PATH: pathDirs.join(path.delimiter),
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'safe.directory',
+      GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
+      USERPROFILE: OPENCLAW_HOME,
+      HOME: OPENCLAW_HOME,
+    });
+
+    if (isWin) {
+      dispatchEnv.APPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Roaming');
+      dispatchEnv.LOCALAPPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Local');
+    }
+
+    const child = require('child_process').spawn(
+      bashBin,
+      [scriptPath, agent, repoPath, safeBranch, promptFile, effectiveRunId],
+      {
+        cwd: DASHBOARD_DIR,
+        windowsHide: true,
+        detached: true,
+        stdio: 'ignore',
+        env: dispatchEnv,
+      }
+    );
+    child.unref();
+    child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
+
+    return { runId: effectiveRunId, agent, repo, branch: safeBranch };
+  });
+}
+
 function handleRequest(req, res) {
   // ── OpenHands Canvas Proxy (Phase 2) ──
   if (req.url.startsWith('/canvas') || req.url.startsWith('/vscode')) {
@@ -961,74 +1019,94 @@ function handleRequest(req, res) {
       if (!safetyCheck.ok) {
         return sendJson(res, 400, safetyCheck);
       }
-      const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
-      const runId = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
-
-      // Team context for the agent: the most relevant memories for this repo,
-      // looked up within DISPATCH_CONTEXT_TIMEOUT_MS; no context on any failure.
-      dispatchMemories(repo, task).then((memories) => {
-        const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
-        fs.mkdirSync(tmpDir, { recursive: true });
-        const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
-        fs.writeFileSync(promptFile, buildDispatchPrompt(task, memories), 'utf8');
-
-        const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
-        const bashBin = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash');
-        const isWin = process.platform === 'win32';
-        const pathDirs = [
-          path.dirname(process.execPath),
-          path.join(OPENCLAW_HOME, '.local', 'bin'),
-          isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm') : path.join(OPENCLAW_HOME, '.npm-global', 'bin'),
-          isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Local', 'Programs', 'OpenAI', 'Codex', 'bin') : '/opt/homebrew/bin',
-          '/usr/local/bin',
-          '/usr/bin',
-          '/bin',
-          process.env.PATH || '',
-        ].filter(Boolean);
-
-        const dispatchEnv = Object.assign({}, process.env, {
-          AGENT_RUNS_DIR: path.dirname(RUNS_FILE),
-          // claude runs record their real tokens and cost in the same ledger.
-          AI_CALLS_FILE,
-          PATH: pathDirs.join(path.delimiter),
-          // LocalSystem does not own the repos, so git's dubious-ownership
-          // check kills the script's first git call (set -e, stdio ignored:
-          // silent). safe.directory is honoured from command-line config,
-          // which GIT_CONFIG_COUNT/KEY/VALUE is; scoped to the projects dir
-          // (repos and their sibling worktrees), not '*'.
-          GIT_CONFIG_COUNT: '1',
-          GIT_CONFIG_KEY_0: 'safe.directory',
-          GIT_CONFIG_VALUE_0: `${PROJECTS_DIR.replace(/\\/g, '/')}/*`,
-          // Same reason as OPENCLAW_ENV: claude/codex/hermes keep their
-          // logins in the operator's profile, not LocalSystem's.
-          USERPROFILE: OPENCLAW_HOME,
-          HOME: OPENCLAW_HOME,
-        });
-
-        if (isWin) {
-          dispatchEnv.APPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Roaming');
-          dispatchEnv.LOCALAPPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Local');
-        }
-
-        const child = require('child_process').spawn(
-          bashBin,
-          [scriptPath, agent, repoPath, safeBranch, promptFile, runId],
-          {
-            cwd: DASHBOARD_DIR,
-            windowsHide: true,
-            detached: true,
-            stdio: 'ignore',
-            env: dispatchEnv,
-          }
-        );
-        child.unref();
-        child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
-
-        sendJson(res, 202, { ok: true, runId, agent, repo, branch: safeBranch, note: 'started; poll /api/runs for completion' });
-      }).catch((err) => sendJson(res, 500, { ok: false, error: `dispatch failed: ${err.message}` }));
+      spawnAgentDispatch({ agent, repo, repoPath, branch, task })
+        .then((result) => sendJson(res, 202, { ok: true, ...result, note: 'started; poll /api/runs for completion' }))
+        .catch((err) => sendJson(res, 500, { ok: false, error: `dispatch failed: ${err.message}` }));
     });
     return;
   }
+  // ── Phase 3: Automated Agency Watchdog & Patrol Routes ──
+  if (req.url.startsWith('/api/patrol/mantis') && req.method === 'POST') {
+    const actor = getReqUserNode(req);
+    const dispatchAuth = rebac.canAccess(actor, 'dispatch:run', 'resource:agent_runner');
+    if (!dispatchAuth.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: dispatch:run required', path: dispatchAuth.path });
+    }
+    const repo = path.basename(DASHBOARD_DIR);
+    const repoPath = DASHBOARD_DIR;
+    const task = "Automated security sweep: audit API authorization, verify ReBAC boundaries, and check tenant memory isolation.";
+    const branch = `patrol/mantis-${Date.now()}`;
+    spawnAgentDispatch({ agent: 'mantis', repo, repoPath, branch, task })
+      .then((result) => {
+        // Record in episodic memory
+        try {
+          memory.storeMemory({
+            title: `Automated Mantis Security Sweep (${result.runId})`,
+            content: `Mantis AppSec scan executed against repository ${repo}. Verification of ReBAC authorization and tenant isolation underway.`,
+            category: 'security_audit',
+            tenantId: actor.includes('drisyon') ? 'tenant:drisyon_core' : 'tenant:default',
+            projectId: repo
+          });
+        } catch (_) {}
+        sendJson(res, 202, {
+          ok: true,
+          ...result,
+          note: 'Mantis security sweep initiated; poll /api/runs for completion'
+        });
+      })
+      .catch((err) => sendJson(res, 500, { ok: false, error: `Mantis sweep failed: ${err.message}` }));
+    return;
+  }
+
+  if (req.url.startsWith('/api/patrol/digest') && req.method === 'POST') {
+    const actor = getReqUserNode(req);
+    const dispatchAuth = rebac.canAccess(actor, 'dispatch:run', 'resource:agent_runner');
+    if (!dispatchAuth.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: dispatch:run required', path: dispatchAuth.path });
+    }
+    const since = Date.now() - DIGEST_DAYS * 24 * 60 * 60 * 1000;
+    const recent = (runs) => runs.filter((r) => Date.parse(r.started_at) >= since);
+    const runsP = teamStore
+      ? teamStore.teamRuns().then((b) => b.runs).catch(() => readRuns(RUNS_FILE, 1000).runs || [])
+      : Promise.resolve(readRuns(RUNS_FILE, 1000).runs || []);
+    Promise.all([computeCosts(DIGEST_DAYS, true), runsP])
+      .then(([costs, runs]) => {
+        const digestText = buildDigest({ costs, runs: recent(runs) });
+        const pubScript = path.join(DASHBOARD_DIR, 'buzz-bridge', 'publish-once.js');
+        let broadcast = false;
+        if (fs.existsSync(pubScript)) {
+          const child = require('child_process').spawn('node', [pubScript, digestText], {
+            cwd: path.join(DASHBOARD_DIR, 'buzz-bridge'),
+            stdio: 'ignore',
+            detached: true
+          });
+          child.unref();
+          child.on('error', (err) => console.error('digest broadcast spawn failed:', err.message));
+          broadcast = true;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          broadcast,
+          text: digestText,
+          message: broadcast ? 'Weekly digest generated and broadcast initiated to Buzz channels.' : 'Weekly digest generated (broadcast script not found).'
+        });
+      })
+      .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
+    return;
+  }
+
+  if (req.url.startsWith('/api/patrol/status')) {
+    const allRuns = (readRuns(RUNS_FILE, 100).runs || []);
+    const mantisRuns = allRuns.filter(r => r.agent === 'mantis');
+    const latestMantis = mantisRuns.length ? mantisRuns[0] : null;
+    return sendJson(res, 200, {
+      ok: true,
+      buzzDigestEnabled: process.env.BUZZ_DIGEST === 'true',
+      latestMantisRun: latestMantis,
+      timestamp: new Date().toISOString()
+    });
+  }
+
   // ── Buzz Integration: Message Receiver ──
   // Deprecated (FR-SEC-05): Nostr bridge connects directly to relays (wss://drisyon-ai.communities.buzz.xyz)
   if (req.url.startsWith('/api/buzz/events')) {
