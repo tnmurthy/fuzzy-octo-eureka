@@ -66,6 +66,40 @@ All human directives enter through the **Main Agent (🧭 Arunachala Ramana)**, 
 
 ---
 
+## 💬 2b. How to Talk to the Team & Monitor Operations
+
+### 1. Direct Communicator (`/` → Agents Board)
+In the **👥 Agents Board** tab, select any persona card to start an interactive discussion. Prompts are processed locally on the **Apple Silicon Metal GPU** via `/api/agent/chat` (backed by `gemma3:4b` with zero cloud token cost):
+* **🧭 Product Owner (`po`):** `"Review our current sprint progress and prioritize the top 3 backlog tasks for client sign-off."`
+* **💼 Revenue Lead (`bizdev`):** `"Draft an enterprise statement of work for an AppSec audit and continuous PM2 monitoring retainer."`
+* **📢 Growth Marketing (`marketing`):** `"Compose a technical case study on how we achieved 99.8% gross margins using local Apple Silicon Metal GPU."`
+* **📊 Unit Economics (`cfo`):** `"Audit our ai-calls.jsonl ledger for today and verify our gross margin on the latest deliverable."`
+* **💻 Tech Lead (`tech`):** `"Refactor the session authentication middleware to validate HMAC tokens across both domains."`
+* **🧪 QA Lead (`qa`):** `"Run the full regression test suite (npm test) and verify zero regressions before commit."`
+* **🛡️ Mantis Lead (`sec`):** `"Execute a 19-skill security scan against server.js and report any ReBAC authorization bypasses."`
+* **🛠️ DevOps Lead (`infra`):** `"Inspect PM2 process health, check memory usage, and confirm cloudflared tunnel uptime."`
+
+### 2. Quick Dispatch (Autonomous Git Worktrees)
+In the **🧭 Agent Runs** tab, use the Quick Dispatch form to assign real engineering work to autonomous runners (`mantis`, `auto`, `claude`, `codex`, `hermes`):
+* **Isolated Worktrees:** Every job runs in an isolated worktree (`buzz/<timestamp>`) so uncommitted work is protected.
+* **Automated Regression Gate (`auto`):** Runs local models first; escalates to Claude Sonnet only if local unit tests fail.
+* **Live Terminal Streaming:** Click any active run to tail its execution stdout/stderr in real time.
+
+### 3. Full Observability & Monitoring Matrix
+| Operational Layer | Ingress / Endpoint | What to Inspect |
+| :--- | :--- | :--- |
+| **📌 Kanban Board** | `/` (Tab: Kanban) | Real-time task board synced bi-directionally with `TASKS.md`. |
+| **👐 OpenHands Canvas** | `/canvas/` (`:8000`) | Visual coding sandbox, interactive terminal, and browser preview. |
+| **🗂️ Team Org Chart** | [`/team.html`](/team.html) | 5-Tier hierarchy showing live status dots and runtime toolchains. |
+| **🛡️ Patrol Watchdog** | [`/api/patrol/status`](/api/patrol/status) | PM2 Process #7 running 6h Mantis AppSec sweeps and Mon 09:00 IST digests. |
+| **💼 Client Portal** | [`/invoicing.html`](/invoicing.html) | Cryptographic milestone audit hashes (`SHA256:...`) and printable PDF invoices. |
+| **💰 Costing Portal** | [`/costing.html`](/costing.html) | M5 Max power draw (~68W), token ledger, and interactive margin calculator. |
+
+### 4. Interactive Micro-Tooltips
+Hover over any sidebar button, metric tile, agent card, or status dot in the Operations Center to view its underlying port, runtime model, or command shortcut.
+
+---
+
 ## 💼 3. Agency Business Model & Unit Economics
 
 Drisyon AI operates on an **asymmetric margin model**: by executing code generation, refactoring, and test sweeps locally on the **Apple Silicon M5 Max Metal GPU**, delivery cost is virtually zero, generating **85–95% gross profit margins** on software deliverables.

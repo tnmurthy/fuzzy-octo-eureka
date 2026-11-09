@@ -221,6 +221,7 @@
       <button class="filter-pill active" onclick="filterSection('all')">🌟 All Topics</button>
       <button class="filter-pill" onclick="filterSection('portals')">🔑 Portals & Access</button>
       <button class="filter-pill" onclick="filterSection('agents')">🧭 Agents & Delegation</button>
+      <button class="filter-pill" onclick="filterSection('usage')">💬 Team Chat & Monitoring</button>
       <button class="filter-pill" onclick="filterSection('business')">💼 Business & Unit Economics</button>
       <button class="filter-pill" onclick="filterSection('memory')">🧠 4-Tier Memory & Context</button>
       <button class="filter-pill" onclick="filterSection('aidev')">💻 AI Developers Playbook</button>
@@ -447,6 +448,132 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Section: How to Talk to the Team & Monitor Operations -->
+    <section class="wiki-card section-topic" id="sec-usage">
+      <h2><span>💬</span> How to Talk to the Team &amp; Monitor Operations</h2>
+      <p>The workspace provides multiple omni-channel interfaces to direct autonomous agents and maintain 100% operational visibility:</p>
+
+      <div class="inner-panel" style="margin-bottom: 20px;">
+        <h3 style="color: #38bdf8; margin-top: 0;">🗣️ 1. Direct Communicator (Agents Board)</h3>
+        <p>In the <strong>👥 Agents Board</strong> tab, select any persona card to open an active session. Prompts are processed locally on the Apple Silicon Metal GPU with zero external API latency or costs:</p>
+        <div class="table-wrap">
+          <table class="wiki-table">
+            <thead>
+              <tr>
+                <th>Agent Persona</th>
+                <th>Role in Agency</th>
+                <th>Example Directive to Send</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>🧭 Arunachala Ramana (<code>po</code>)</strong></td>
+                <td>Product Owner &amp; Strategy</td>
+                <td><code>"Review our current sprint progress and prioritize the top 3 backlog tasks for client sign-off."</code></td>
+              </tr>
+              <tr>
+                <td><strong>💼 Vikram Patel (<code>bizdev</code>)</strong></td>
+                <td>Revenue &amp; Client Deals</td>
+                <td><code>"Draft an enterprise statement of work for an AppSec audit and continuous PM2 monitoring retainer."</code></td>
+              </tr>
+              <tr>
+                <td><strong>📢 Priya Nair (<code>marketing</code>)</strong></td>
+                <td>DevRel &amp; Growth</td>
+                <td><code>"Compose a technical case study on how we achieved 99.8% gross margins using local Apple Silicon Metal GPU."</code></td>
+              </tr>
+              <tr>
+                <td><strong>📊 Ananya Sundaram (<code>cfo</code>)</strong></td>
+                <td>Unit Economics &amp; Margins</td>
+                <td><code>"Audit our ai-calls.jsonl ledger for today and verify our gross margin on the latest deliverable."</code></td>
+              </tr>
+              <tr>
+                <td><strong>💻 Tech Lead (<code>tech</code>)</strong></td>
+                <td>Architecture &amp; Code</td>
+                <td><code>"Refactor the session authentication middleware to validate HMAC tokens across both domains."</code></td>
+              </tr>
+              <tr>
+                <td><strong>🧪 QA Lead (<code>qa</code>)</strong></td>
+                <td>Verification &amp; Tests</td>
+                <td><code>"Run the full regression test suite (npm test) and verify zero regressions before commit."</code></td>
+              </tr>
+              <tr>
+                <td><strong>🛡️ Mantis Lead (<code>sec</code>)</strong></td>
+                <td>AppSec &amp; Exploits</td>
+                <td><code>"Execute a 19-skill security scan against server.js and report any ReBAC authorization bypasses."</code></td>
+              </tr>
+              <tr>
+                <td><strong>🛠️ DevOps Lead (<code>infra</code>)</strong></td>
+                <td>PM2 &amp; Infrastructure</td>
+                <td><code>"Inspect PM2 process health, check memory usage, and confirm cloudflared tunnel uptime."</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="inner-panel" style="margin-bottom: 20px;">
+        <h3 style="color: #00e676; margin-top: 0;">⚡ 2. Quick Dispatch (Autonomous Git Worktrees)</h3>
+        <p>Under the <strong>🧭 Agent Runs</strong> tab, the <strong>Quick Dispatch</strong> form allows you to assign actionable coding or auditing tasks directly to autonomous engines (<code>mantis</code>, <code>auto</code>, <code>claude</code>, <code>codex</code>, <code>hermes</code>):</p>
+        <ul>
+          <li><strong>Isolated Worktrees:</strong> Each run forks into an isolated git worktree (e.g. <code>buzz/&lt;timestamp&gt;</code>) so uncommitted changes never collide.</li>
+          <li><strong>Automated Test Gate (<code>auto</code>):</strong> Executes code changes on local models first; escalates to Claude Sonnet only if unit tests fail.</li>
+          <li><strong>Live Output Streaming:</strong> Click on any active run in the table to tail stdout/stderr execution logs in real time.</li>
+        </ul>
+      </div>
+
+      <div class="inner-panel" style="margin-bottom: 20px;">
+        <h3 style="color: #f59e0b; margin-top: 0;">👁️ 3. Full Operational Observability Suite</h3>
+        <div class="table-wrap">
+          <table class="wiki-table">
+            <thead>
+              <tr>
+                <th>View / Portal</th>
+                <th>Access Link</th>
+                <th>What You Can Inspect &amp; Control</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>📌 Kanban Board</strong></td>
+                <td><a href="/">Dashboard → Kanban</a></td>
+                <td>Interactive drag-and-drop board synced bi-directionally with local <code>TASKS.md</code>.</td>
+              </tr>
+              <tr>
+                <td><strong>👐 OpenHands Canvas</strong></td>
+                <td><a href="/canvas/">Dashboard → Canvas</a></td>
+                <td>Interactive visual coding sandbox and terminal on port 8000.</td>
+              </tr>
+              <tr>
+                <td><strong>🗂️ Team Org Chart</strong></td>
+                <td><a href="/team.html">/team.html</a></td>
+                <td>5-Tier agency org chart showing active status indicators and tool dependencies.</td>
+              </tr>
+              <tr>
+                <td><strong>🛡️ Patrol Watchdog</strong></td>
+                <td><a href="/api/patrol/status">/api/patrol/status</a></td>
+                <td>Live telemetry from PM2 Process #7 running 6-hour Mantis sweeps and Monday 09:00 IST digests.</td>
+              </tr>
+              <tr>
+                <td><strong>💼 Client Portal &amp; Invoicing</strong></td>
+                <td><a href="/invoicing.html">/invoicing.html</a></td>
+                <td>Cryptographically verified milestones (<code>SHA256:...</code>), Mantis security badges, and printable PDF invoices.</td>
+              </tr>
+              <tr>
+                <td><strong>💰 Costing &amp; ROI Portal</strong></td>
+                <td><a href="/costing.html">/costing.html</a></td>
+                <td>Hardware power draw (~68W active), local vs cloud token matrix, and interactive ROI simulator.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="inner-panel">
+        <h3 style="color: #38bdf8; margin-top: 0;">💡 4. Interactive Micro-Tooltips</h3>
+        <p>Every major button, metric card, sidebar tab, and status indicator in the Operations Dashboard features interactive hover tooltips (<code>data-tooltip</code>). Simply hover over any element to view its underlying system capability, port number, or keyboard shortcut.</p>
       </div>
     </section>
 

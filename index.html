@@ -27,49 +27,49 @@
 
           <nav>
             <ul class="nav-list">
-              <li class="nav-item active" onclick="switchTab('dashboard')"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
-              <li class="nav-item" onclick="switchTab('kanban')"><span class="nav-link" id="id-nav-kanban">📌 Kanban Board</span></li>
-              <li class="nav-item" onclick="switchTab('agents')"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
-              <li class="nav-item" onclick="switchTab('canvas')"><span class="nav-link" id="id-nav-canvas">👐 Agent Canvas</span></li>
-              <li class="nav-item" onclick="switchTab('infra')"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
-              <li class="nav-item" onclick="switchTab('logs')"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
-              <li class="nav-item" onclick="switchTab('runs')"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
-              <li class="nav-item" onclick="switchTab('costs')"><span class="nav-link" id="id-nav-costs">💰 Costs</span></li>
-              <li class="nav-item" onclick="location.href='/costing.html'"><span class="nav-link" id="id-nav-costing">📊 Drisyon Costing & ROI</span></li>
-              <li class="nav-item" onclick="location.href='/invoicing.html'"><span class="nav-link" id="id-nav-invoicing">💼 Client Portal & Invoicing</span></li>
-              <li class="nav-item" onclick="location.href='/team.html'"><span class="nav-link" id="id-nav-team">🗂️ Team (Org Chart)</span></li>
-              <li class="nav-item" onclick="location.href='/wiki.html'"><span class="nav-link" id="id-nav-wiki">📚 Agency Wiki</span></li>
-              <li class="nav-item" onclick="location.href='/logout'"><span class="nav-link" style="color:var(--status-red);">🚪 Sign Out</span></li>
+              <li class="nav-item active" onclick="switchTab('dashboard')" data-tooltip="Overview of local AI stack, host telemetry, and service health" data-tooltip-pos="right"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
+              <li class="nav-item" onclick="switchTab('kanban')" data-tooltip="Sprint backlog & task board synced directly with TASKS.md" data-tooltip-pos="right"><span class="nav-link" id="id-nav-kanban">📌 Kanban Board</span></li>
+              <li class="nav-item" onclick="switchTab('agents')" data-tooltip="Talk directly with PO, BizDev, Marketing, CFO, Dev, QA, and Mantis" data-tooltip-pos="right"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
+              <li class="nav-item" onclick="switchTab('canvas')" data-tooltip="OpenHands interactive coding IDE and terminal workspace on port 8000" data-tooltip-pos="right"><span class="nav-link" id="id-nav-canvas">👐 Agent Canvas</span></li>
+              <li class="nav-item" onclick="switchTab('infra')" data-tooltip="Inspect system hardware specs, memory usage, and PM2 background processes" data-tooltip-pos="right"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
+              <li class="nav-item" onclick="switchTab('logs')" data-tooltip="Live event stream, console output, and telemetry logs" data-tooltip-pos="right"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
+              <li class="nav-item" onclick="switchTab('runs')" data-tooltip="Inspect active and completed autonomous agent executions & stdout logs" data-tooltip-pos="right"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
+              <li class="nav-item" onclick="switchTab('costs')" data-tooltip="AI token consumption, spend breakdown, and optimization advice" data-tooltip-pos="right"><span class="nav-link" id="id-nav-costs">💰 Costs</span></li>
+              <li class="nav-item" onclick="location.href='/costing.html'" data-tooltip="Apple Silicon Metal compute economics, power wattage, and margin calculator" data-tooltip-pos="right"><span class="nav-link" id="id-nav-costing">📊 Drisyon Costing & ROI</span></li>
+              <li class="nav-item" onclick="location.href='/invoicing.html'" data-tooltip="Verifiable milestone deliverable registry and printable PDF invoices" data-tooltip-pos="right"><span class="nav-link" id="id-nav-invoicing">💼 Client Portal & Invoicing</span></li>
+              <li class="nav-item" onclick="location.href='/team.html'" data-tooltip="5-Tier agency hierarchy and agent delegation tree" data-tooltip-pos="right"><span class="nav-link" id="id-nav-team">🗂️ Team (Org Chart)</span></li>
+              <li class="nav-item" onclick="location.href='/wiki.html'" data-tooltip="Comprehensive operations manual, SOPs, and unit economics playbook" data-tooltip-pos="right"><span class="nav-link" id="id-nav-wiki">📚 Agency Wiki</span></li>
+              <li class="nav-item" onclick="location.href='/logout'" data-tooltip="Sign out of operator session" data-tooltip-pos="right"><span class="nav-link" style="color:var(--status-red);">🚪 Sign Out</span></li>
             </ul>
           </nav>
 
           <div class="system-status-widget">
             <div class="system-status-title">Active Services</div>
 
-            <div class="status-row">
+            <div class="status-row" data-tooltip="Local Metal GPU LLM runtime on port 11434 (gemma3:4b, qwen2.5-coder)" data-tooltip-pos="right">
               <span>Ollama Server</span>
               <span class="status-badge"><span class="status-dot green" id="id-ollama-dot"></span>Online</span>
             </div>
-            <div class="status-row">
+            <div class="status-row" data-tooltip="Agent tool router and MCP gateway on port 18789" data-tooltip-pos="right">
               <span>OpenClaw Gateway</span>
               <span class="status-badge"><span class="status-dot green" id="id-openclaw-dot"></span>Online</span>
             </div>
-            <div class="status-row">
+            <div class="status-row" data-tooltip="Fast code iteration and bug fix engine" data-tooltip-pos="right">
               <span>Hermes Service</span>
               <span class="status-badge"><span class="status-dot green" id="id-hermes-dot"></span>Ready</span>
             </div>
-            <div class="status-row">
+            <div class="status-row" data-tooltip="19 AppSec skills for vulnerability scanning & exploit proofing" data-tooltip-pos="right">
               <span>Google Mantis</span>
               <span class="status-badge"><span class="status-dot green" id="id-mantis-dot"></span>19 Skills</span>
             </div>
-            <div class="status-row">
+            <div class="status-row" data-tooltip="Interactive containerized coding environment on port 8000" data-tooltip-pos="right">
               <span>OpenHands Canvas</span>
               <span class="status-badge"><span class="status-dot green" id="id-openhands-dot"></span>Online</span>
             </div>
-            <div class="status-row">
+            <div class="status-row" data-tooltip="Automated container image update and lifecycle monitor" data-tooltip-pos="right">
               <span>Docker Watchtower</span>
               <span class="status-badge"><span class="status-dot green" id="id-watchtower-dot"></span>Online</span>
-            </div>            <div class="status-row">
+            </div>            <div class="status-row" data-tooltip="Nostr relay bridge connected to wss://drisyon-ai.communities.buzz.xyz" data-tooltip-pos="right">
               <span>Buzz Relay</span>
               <span class="status-badge"><span class="status-dot green" id="id-buzz-dot"></span>Online</span>
             </div>
@@ -390,7 +390,7 @@
               <!-- Left side: List of agents -->
               <div class="agent-grid" style="grid-template-columns: 1fr;">
 
-                <div class="agent-card" onclick="selectAgent('po')" style="border-color: var(--status-blue);">
+                <div class="agent-card" onclick="selectAgent('po')" style="border-color: var(--status-blue);" data-tooltip="Direct high-level strategy, task priorities, and sprint backlogs with Arunachala Ramana">
                   <div class="agent-card-header">
                     <div class="agent-name">🧭 Arunachala Ramana</div>
                     <div class="agent-badge active">Active</div>
@@ -399,7 +399,34 @@
                   <div class="agent-desc">Orchestrates business strategy, maintains backlog, and coordinates subagents.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('tech')">
+                <div class="agent-card" onclick="selectAgent('bizdev')" data-tooltip="Evaluate client RFPs, draft commercial proposals, and structure milestone pricing with Vikram Patel">
+                  <div class="agent-card-header">
+                    <div class="agent-name">💼 Vikram Patel</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">Revenue & Client Deals Lead</div>
+                  <div class="agent-desc">Drafts SOWs, milestone contracts, and manages client onboarding partitions.</div>
+                </div>
+
+                <div class="agent-card" onclick="selectAgent('marketing')" data-tooltip="Publish technical teardowns, case studies, and drive community outreach on Nostr/Buzz with Priya Nair">
+                  <div class="agent-card-header">
+                    <div class="agent-name">📢 Priya Nair</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">DevRel & Growth Marketing</div>
+                  <div class="agent-desc">Translates engineering milestones into public case studies and thought leadership.</div>
+                </div>
+
+                <div class="agent-card" onclick="selectAgent('cfo')" data-tooltip="Audit token consumption, enforce cost ceilings, and review 85%+ gross profit margins with Ananya Sundaram">
+                  <div class="agent-card-header">
+                    <div class="agent-name">📊 Ananya Sundaram</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">AI Unit Economics & CFO</div>
+                  <div class="agent-desc">Audits local-first compute vs frontier burn and calculates client profitability.</div>
+                </div>
+
+                <div class="agent-card" onclick="selectAgent('tech')" data-tooltip="Assign system architecture design, component refactoring, and code implementation to the Tech Lead">
                   <div class="agent-card-header">
                     <div class="agent-name">💻 Tech Lead & Architect</div>
                     <div class="agent-badge idle">Idle</div>
@@ -408,7 +435,7 @@
                   <div class="agent-desc">Designs architecture, handles complex code changes, refactors components.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('qa')">
+                <div class="agent-card" onclick="selectAgent('qa')" data-tooltip="Trigger regression sweeps, lint checks, and pre-commit verification gates with the QA Lead">
                   <div class="agent-card-header">
                     <div class="agent-name">🧪 QA &amp; Verification Specialist</div>
                     <div class="agent-badge idle">Idle</div>
@@ -417,7 +444,7 @@
                   <div class="agent-desc">Runs linting, Vitest sweeps, checks regressions before commits.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('sec')">
+                <div class="agent-card" onclick="selectAgent('sec')" data-tooltip="Run 19 Google Mantis AppSec security skills, vulnerability scans, and exploit proofs">
                   <div class="agent-card-header">
                     <div class="agent-name">🛡️ AppSec Lead (Mantis)</div>
                     <div class="agent-badge idle">Idle</div>
@@ -426,7 +453,7 @@
                   <div class="agent-desc">Runs 19 Google Mantis AppSec skills, ReBAC boundary auditing, and security reviews.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('infra')">
+                <div class="agent-card" onclick="selectAgent('infra')" data-tooltip="Inspect Docker containers, PM2 background daemons, and host hardware specs with DevOps">
                   <div class="agent-card-header">
                     <div class="agent-name">🛠️ DevOps &amp; Infrastructure</div>
                     <div class="agent-badge idle">Idle</div>
@@ -435,7 +462,7 @@
                   <div class="agent-desc">Manages Docker, Ollama GPU/Metal acceleration, container runtime, and workspace health.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('doc')">
+                <div class="agent-card" onclick="selectAgent('doc')" data-tooltip="Record episodic memories, maintain architecture runbooks, and track daily completions">
                   <div class="agent-card-header">
                     <div class="agent-name">📝 Documentation Specialist</div>
                     <div class="agent-badge idle">Idle</div>
@@ -444,7 +471,7 @@
                   <div class="agent-desc">Tracks task completions, logs changes, updates daily memory entries.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('hermes')">
+                <div class="agent-card" onclick="selectAgent('hermes')" data-tooltip="Assign fast iterative autonomous bug fix loops to Hermes on local Ollama models">
                   <div class="agent-card-header">
                     <div class="agent-name">🐍 Hermes Local Reasoning</div>
                     <div class="agent-badge active">Active</div>
@@ -453,7 +480,7 @@
                   <div class="agent-desc">Executes fast iterative code-fix loops entirely on local Ollama models with zero token costs.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('openhands')">
+                <div class="agent-card" onclick="selectAgent('openhands')" data-tooltip="Open containerized visual IDE canvas and interactive code editor on port 8000">
                   <div class="agent-card-header">
                     <div class="agent-name">👐 OpenHands Sandbox</div>
                     <div class="agent-badge active">Active</div>
@@ -538,8 +565,8 @@
                         </div>
                       </div>
                       <div class="agent-chat-input-row">
-                        <input type="text" class="agent-chat-input" id="id-agent-chat-input" placeholder="Message the agent..." onkeydown="handleAgentChatKey(event)">
-                        <button class="agent-chat-send" onclick="sendAgentMessage()">Send</button>
+                        <input type="text" class="agent-chat-input" id="id-agent-chat-input" placeholder="Message the agent..." onkeydown="handleAgentChatKey(event)" data-tooltip="Type your directive or prompt to the selected agent and press Enter" data-tooltip-pos="top">
+                        <button class="agent-chat-send" onclick="sendAgentMessage()" data-tooltip="Dispatch prompt to local model via /api/agent/chat" data-tooltip-pos="top">Send</button>
                       </div>
                     </div>
                   </div>
@@ -878,7 +905,7 @@
               </div>
               <form id="quick-dispatch-form" onsubmit="handleQuickDispatch(event)" style="display:flex; flex-direction:column; gap:0.75rem; padding:1.25rem;">
                 <div style="display:flex; gap:1rem; flex-wrap:wrap;">
-                  <div style="flex:1; min-width:160px;">
+                  <div style="flex:1; min-width:160px;" data-tooltip="Choose execution engine: local-first Hermes/Mantis or cloud frontier models" data-tooltip-pos="top">
                     <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Agent</label>
                     <select id="dispatch-agent" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem;">
                       <option value="auto" selected>auto (Local Hermes first, Claude if tests fail)</option>
@@ -890,22 +917,22 @@
                       <option value="openhands">openhands (OpenHands container sandbox)</option>
                     </select>
                   </div>
-                  <div style="flex:1; min-width:180px;">
+                  <div style="flex:1; min-width:180px;" data-tooltip="Target repository folder within workspace" data-tooltip-pos="top">
                     <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Repository</label>
                     <input id="dispatch-repo" type="text" value="fuzzy-octo-eureka" placeholder="Repository folder name" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem;" required />
                   </div>
-                  <div style="flex:1; min-width:160px;">
+                  <div style="flex:1; min-width:160px;" data-tooltip="Isolated branch and worktree directory for autonomous execution" data-tooltip-pos="top">
                     <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Branch (optional)</label>
                     <input id="dispatch-branch" type="text" placeholder="buzz/auto-generated" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem;" />
                   </div>
                 </div>
-                <div>
+                <div data-tooltip="Specific engineering instructions for the autonomous agent to execute" data-tooltip-pos="top">
                   <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px; font-weight:600;">Task Prompt</label>
                   <textarea id="dispatch-task" rows="2" placeholder="e.g. Run tests and clean up unused console logs" style="width:100%; padding:0.6rem; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:0.85rem; resize:vertical; font-family:inherit;" required></textarea>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.25rem;">
                   <span id="dispatch-status" style="font-size:0.8rem; color:#94a3b8;"></span>
-                  <button type="submit" id="dispatch-btn" style="padding:0.6rem 1.5rem; background:#3b82f6; color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:0.85rem;">Dispatch Task</button>
+                  <button type="submit" id="dispatch-btn" style="padding:0.6rem 1.5rem; background:#3b82f6; color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:0.85rem;" data-tooltip="Spawn background detached runner; monitor output in Agent Runs" data-tooltip-pos="top">Dispatch Task</button>
                 </div>
               </form>
             </section>
