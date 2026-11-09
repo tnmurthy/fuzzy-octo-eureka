@@ -1,8 +1,37 @@
 {
-  "updatedAt": "2026-09-16T03:57:14.970Z",
-  "episodicCount": 13,
+  "updatedAt": "2026-11-09T05:52:42.318Z",
+  "episodicCount": 14,
   "alignmentsCount": 2,
   "episodicMemory": [
+    {
+      "id": "mem_1e92ba8d0f60",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "buzz_integration",
+      "category": "operator_directive",
+      "title": "Directive from Buzz: bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84",
+      "content": "Status check on active runners",
+      "vector": {
+        "status": 1,
+        "check": 1,
+        "active": 1,
+        "runners": 1,
+        "directive": 1,
+        "from": 1,
+        "buzz": 2,
+        "bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84": 2,
+        "dispatcher": 1
+      },
+      "tags": [
+        "buzz",
+        "dispatcher",
+        "bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84"
+      ],
+      "metadata": {
+        "source": "buzz_events",
+        "sender": "bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84"
+      },
+      "createdAt": "2026-11-09T05:52:42.318Z"
+    },
     {
       "id": "mem_13fbfde699c8",
       "tenantId": "tenant:drisyon_core",

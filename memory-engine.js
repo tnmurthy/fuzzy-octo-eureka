@@ -145,12 +145,14 @@ class DrisyonMemoryEngine {
     return this.searchEntries(this.episodicMemory, query, options);
   }
 
-  // Tenant / project / category rules shared by every search. Non-core
-  // tenants only see their own memories (ReBAC / multi-tenancy).
+  // Tenant / project / category rules shared by every search.
+  // When STRICT_TENANT_ISOLATION=true, core tenant queries only see their own
+  // and global entries. Non-core tenants always only see their own.
   filterEntries(entries, options = {}) {
     const { tenantId = 'tenant:drisyon_core', projectId = null, category = null } = options;
+    const strict = process.env.STRICT_TENANT_ISOLATION === 'true';
     return entries.filter((mem) =>
-      (tenantId === 'tenant:drisyon_core' || mem.tenantId === tenantId) &&
+      (!strict && tenantId === 'tenant:drisyon_core' ? true : (tenantId === '*' || mem.tenantId === 'all' || mem.tenantId === 'global' || mem.tenantId === tenantId)) &&
       (!projectId || mem.projectId === 'all' || mem.projectId === 'global' || mem.projectId === projectId) &&
       (!category || mem.category === category));
   }

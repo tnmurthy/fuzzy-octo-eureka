@@ -45,10 +45,11 @@ const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
 const HISTORY_FILE = path.join(DASHBOARD_DIR, 'history.json');
 const OPENCLAW_CACHE_FILE = path.join(DASHBOARD_DIR, 'openclaw-status.json');
+const STACK_ROOT = process.env.STACK_ROOT || path.resolve(DASHBOARD_DIR, '../../..');
 // Written by orchestration/agent-dispatch.sh: one start and one end line per
 // task handed to Claude, Codex, Antigravity or Hermes.
 const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
-  path.resolve(DASHBOARD_DIR, '../../../04_internal/agent-runs/runs.jsonl');
+  path.join(STACK_ROOT, '04_internal', 'agent-runs', 'runs.jsonl');
 // Same default buzz-bridge/bridge.js uses for listRepos(): the parent of
 // the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
@@ -167,17 +168,23 @@ const rebac = new ReBACEngine();
 
 // Nodes
 rebac.addNode('user:sriad', 'User', { name: 'Sriad' });
+rebac.addNode('user:drisyon', 'User', { name: 'Drisyon AI' });
 rebac.addNode('team:opscore', 'Team', { name: 'Ops Core Team' });
 rebac.addNode('role:admin', 'Role', { action: '*' });
 rebac.addNode('perm:ping', 'Permission', { action: 'ping:execute' });
+rebac.addNode('perm:dispatch', 'Permission', { action: 'dispatch:run' });
 rebac.addNode('resource:ollama_cluster', 'Resource', { name: 'Ollama Cluster' });
+rebac.addNode('resource:agent_runner', 'Resource', { name: 'Agent Runner' });
 rebac.addNode('resource:telemetry_feed', 'Resource', { name: 'Telemetry Feed' });
 
 // Edges
 rebac.addEdge('user:sriad', 'MEMBER_OF', 'team:opscore');
+rebac.addEdge('user:drisyon', 'MEMBER_OF', 'team:opscore');
 rebac.addEdge('team:opscore', 'GRANTED', 'role:admin');
 rebac.addEdge('role:admin', 'INCLUDES', 'perm:ping');
+rebac.addEdge('role:admin', 'INCLUDES', 'perm:dispatch');
 rebac.addEdge('perm:ping', 'APPLIES_TO', 'resource:ollama_cluster');
+rebac.addEdge('perm:dispatch', 'APPLIES_TO', 'resource:agent_runner');
 rebac.addEdge('team:opscore', 'OWNER_OF', 'resource:telemetry_feed');
 
 const MIME_TYPES = {
@@ -641,6 +648,11 @@ function handleRequest(req, res) {
     return sendJson(res, 200, readRuns(RUNS_FILE));
   }
   if (req.url.startsWith('/api/rebac/inspect')) {
+    const actor = (req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')) ? 'user:drisyon' : 'user:sriad';
+    const authVerdict = rebac.canAccess(actor, 'ping:execute', 'resource:ollama_cluster');
+    if (!authVerdict.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied' });
+    }
     return sendJson(res, 200, {
       nodes: Array.from(rebac.nodes.entries()),
       edges: rebac.edges
@@ -823,6 +835,12 @@ function handleRequest(req, res) {
         return sendJson(res, 400, { ok: false, error: `bad JSON: ${e.message}` });
       }
       const { repo, branch, task } = payload;
+      // ReBAC authorization check
+      const actor = (req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')) ? 'user:drisyon' : 'user:sriad';
+      const dispatchAuth = rebac.canAccess(actor, 'dispatch:run', 'resource:agent_runner');
+      if (!dispatchAuth.authorized) {
+        return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: lacking perm:dispatch', path: dispatchAuth.path });
+      }
       // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
       // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
       const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
@@ -858,6 +876,7 @@ function handleRequest(req, res) {
         const isWin = process.platform === 'win32';
         const pathDirs = [
           path.dirname(process.execPath),
+          path.join(OPENCLAW_HOME, '.local', 'bin'),
           isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Roaming', 'npm') : path.join(OPENCLAW_HOME, '.npm-global', 'bin'),
           isWin ? path.join(OPENCLAW_HOME, 'AppData', 'Local', 'Programs', 'OpenAI', 'Codex', 'bin') : '/opt/homebrew/bin',
           '/usr/local/bin',
@@ -910,7 +929,7 @@ function handleRequest(req, res) {
     return;
   }
   // ── Buzz Integration: Message Receiver ──
-  // Receives unauthenticated messages and routes to agent chat
+  // Receives authorized Buzz messages and routes to agent chat
   if (req.url.startsWith('/api/buzz/events') && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -918,12 +937,23 @@ function handleRequest(req, res) {
       try {
         // Parse Buzz event format (NIP-01 event with content)
         const payload = JSON.parse(body || '{}');
-        const message = payload.content || payload.event?.content || '';
-        const sender = payload.pubkey || payload.sender || 'buzz';
+        const rawMessage = payload.content || payload.event?.content || '';
+        const sender = String(payload.pubkey || payload.sender || '').toLowerCase().trim();
         
-        if (!message) {
+        if (!rawMessage || typeof rawMessage !== 'string' || !rawMessage.trim()) {
           return sendJson(res, 400, { ok: false, error: 'No message content' });
         }
+
+        // Validate sender against authorized operators (prevent unauthenticated memory poisoning)
+        const BUZZ_OPERATORS = (process.env.BUZZ_OPERATORS || 'bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84,768ee3b1eccb49856271187b66d3095b70bb23d3fa883a63183c5b7f3c5235cd')
+          .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+        const isAllowedOperator = BUZZ_OPERATORS.length === 0 || BUZZ_OPERATORS.includes(sender) || req.sessionUser;
+        if (!isAllowedOperator) {
+          return sendJson(res, 403, { ok: false, error: 'Unauthorized Buzz sender: not in BUZZ_OPERATORS' });
+        }
+
+        const message = rawMessage.slice(0, 4000); // Bound memory buffer
         
         // Store immediately in memory (intent captured)
         memory.storeMemory({

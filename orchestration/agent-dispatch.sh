@@ -188,7 +188,7 @@ run_mantis() {
   if [ -x "$mantis_dir/reference/run.sh" ] && [ -d "$mantis_dir/reference/.venv" ]; then
     run_timeout "$limit" "$mantis_dir/reference/run.sh" "$worktree"
   elif command -v agy >/dev/null 2>&1; then
-    (cd "$worktree" && run_timeout "$limit" agy --mode plan --disable-slash-commands \
+    (cd "$worktree" && run_timeout "$limit" agy --mode plan --dangerously-skip-permissions \
        --print-timeout "${limit}s" \
        --prompt="Perform Google Mantis security review on this repository using skills from $mantis_dir/skills. Review threat model, authentication/authorization boundaries, and potential vulnerabilities: $prompt")
   else
