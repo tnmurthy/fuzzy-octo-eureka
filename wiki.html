@@ -219,6 +219,7 @@
       <button class="filter-pill active" onclick="filterSection('all')">🌟 All Topics</button>
       <button class="filter-pill" onclick="filterSection('portals')">🔑 Portals & Access</button>
       <button class="filter-pill" onclick="filterSection('agents')">🧭 Agents & Delegation</button>
+      <button class="filter-pill" onclick="filterSection('business')">💼 Business & Unit Economics</button>
       <button class="filter-pill" onclick="filterSection('memory')">🧠 4-Tier Memory & Context</button>
       <button class="filter-pill" onclick="filterSection('aidev')">💻 AI Developers Playbook</button>
       <button class="filter-pill" onclick="filterSection('devops')">🛠️ DevOps & Runtime</button>
@@ -344,6 +345,27 @@
           <p><strong>Best For:</strong> Quick scratchpad calculations, local-first code sanity checks, zero-cost fast iterations.</p>
         </div>
 
+        <div class="inner-panel">
+          <h3 style="color: #34d399; margin-top: 0;">💰 Revenue & Deals Lead (<code>bizdev</code>)</h3>
+          <p><strong>Responsibility:</strong> Inbound client RFP evaluation, Statement of Work (SOW) drafting, project milestone pricing, and client onboarding into isolated tenant partitions.</p>
+          <p><strong>Model:</strong> <code>gemma3:4b</code> (128k context).</p>
+          <p><strong>Best For:</strong> Scoping client deliverables, drafting commercial proposals, structuring profitable agency contracts.</p>
+        </div>
+
+        <div class="inner-panel">
+          <h3 style="color: #f472b6; margin-top: 0;">📢 DevRel & Growth Marketing (<code>marketing</code>)</h3>
+          <p><strong>Responsibility:</strong> Translating engineering wins into public thought leadership, technical case studies, and driving inbound developer leads across Nostr, X, and LinkedIn.</p>
+          <p><strong>Model:</strong> <code>gemma3:4b</code>.</p>
+          <p><strong>Best For:</strong> Writing architecture teardowns, publishing proof-of-work case studies, community distribution.</p>
+        </div>
+
+        <div class="inner-panel">
+          <h3 style="color: #38bdf8; margin-top: 0;">📊 AI Unit Economics Controller (<code>cfo</code>)</h3>
+          <p><strong>Responsibility:</strong> Auditing token consumption, tracking local-first compute vs frontier API spend, and ensuring every client project maintains 80-90% gross profit margins.</p>
+          <p><strong>Model:</strong> <code>gemma3:4b</code>.</p>
+          <p><strong>Best For:</strong> Token spend auditing, unit economics modeling, client margin optimization.</p>
+        </div>
+
         <div class="inner-panel" style="grid-column: 1 / -1;">
           <h3 style="color: #38bdf8; margin-top: 0;">👐 OpenHands Canvas Sandbox (<code>openhands</code>)</h3>
           <p><strong>Responsibility:</strong> Containerized full-stack development sandbox with interactive web canvas on Port 8000.</p>
@@ -398,6 +420,24 @@
               <td>PM2 status dump + latency histogram + tunnel ingress table.</td>
             </tr>
             <tr>
+              <td><strong>💰 BizDev Lead (<code>bizdev</code>)</strong></td>
+              <td>Client RFP & SOW Scoping</td>
+              <td><code>"Analyze client requirements for an enterprise ReBAC auth system and generate a 14-day milestone SOW."</code></td>
+              <td>Structured Statement of Work (SOW) + milestone budget estimate.</td>
+            </tr>
+            <tr>
+              <td><strong>📢 Growth & DevRel (<code>marketing</code>)</strong></td>
+              <td>Proof-of-Work Distribution</td>
+              <td><code>"Draft an architectural teardown of our Apple Silicon M5 Max Metal GPU acceleration for Nostr and Twitter."</code></td>
+              <td>Technical blog post + multi-thread social broadcast bundle.</td>
+            </tr>
+            <tr>
+              <td><strong>📊 Finance Controller (<code>cfo</code>)</strong></td>
+              <td>Margin & Unit Economics</td>
+              <td><code>"Audit token consumption for client project alpha and calculate gross profit margin vs invoice amount."</code></td>
+              <td>Profitability ledger showing token burn vs revenue (target: &gt; 85% gross margin).</td>
+            </tr>
+            <tr>
               <td><strong>👐 OpenHands</strong></td>
               <td>Visual UI / Sandboxed Build</td>
               <td><code>"Build an interactive telemetry widget in the Canvas sandbox and preview on port 8000."</code></td>
@@ -405,6 +445,71 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Section: Business Model & Revenue Generation -->
+    <section class="wiki-card section-topic" id="sec-business">
+      <h2><span>💼</span> Agency Business Model & Unit Economics</h2>
+      <p>Drisyon AI operates on an <strong>asymmetric margin model</strong>: by executing code generation, refactoring, and test sweeps locally on the <strong>Apple Silicon M5 Max Metal GPU</strong>, delivery cost is virtually zero, generating <strong>85–95% gross profit margins</strong> on software deliverables.</p>
+
+      <div class="grid-2">
+        <div class="inner-panel">
+          <h3 style="color: #34d399; margin-top: 0;">💵 1. Revenue Streams</h3>
+          <ul>
+            <li><strong>Fixed-Scope Autonomous Sprints ($5,000 – $15,000):</strong> Turnkey delivery of APIs, auth layers, or refactors within 7–14 days.</li>
+            <li><strong>Dedicated Autonomous Engineering Pod ($8,000/mo retainer):</strong> Continuous sprint cycles with Tech Lead, QA, and Mantis AppSec dedicated to a client repo.</li>
+            <li><strong>Autonomous AppSec Audit Badge ($3,500/audit):</strong> Comprehensive 19-skill Google Mantis security scan + reproducible exploit diffs + verification certificate.</li>
+          </ul>
+        </div>
+
+        <div class="inner-panel">
+          <h3 style="color: #38bdf8; margin-top: 0;">⚡ 2. The Asymmetric Margin Advantage</h3>
+          <div class="table-wrap">
+            <table class="wiki-table">
+              <thead>
+                <tr>
+                  <th>Cost Factor</th>
+                  <th>Cloud-Only Agency</th>
+                  <th>Drisyon AI Mesh (Local-First)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Dev Iteration Spend</strong></td>
+                  <td>$500 – $2,000/sprint (OpenAI/Anthropic)</td>
+                  <td><strong>$0.00</strong> (Apple M5 Max Metal GPU)</td>
+                </tr>
+                <tr>
+                  <td><strong>Escalation Tokens</strong></td>
+                  <td>100% of all turns billed</td>
+                  <td>&lt; 8% (Only on test regression failure)</td>
+                </tr>
+                <tr>
+                  <td><strong>Gross Profit Margin</strong></td>
+                  <td>50% – 65%</td>
+                  <td><strong>88% – 96%</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 20px;">🔄 The $10,000 Project Delivery Lifecycle</h3>
+      <p>How an inbound client request moves from lead to cash in the bank:</p>
+      
+      <div class="inner-panel" style="margin: 14px 0; background: rgba(0,0,0,0.35);">
+        <ol style="margin-left: 20px; line-height: 1.8; font-size: 0.88rem;">
+          <li><strong>Client Brief Ingestion:</strong> <code>bizdev</code> parses client RFP and generates a 14-day milestone SOW.</li>
+          <li><strong>Human-in-the-Loop Approval:</strong> Operator reviews SOW and sends client contract; collects 50% upfront deposit ($5,000).</li>
+          <li><strong>Tenant Partitioning:</strong> <code>onboard</code> provisions <code>tenant:&lt;client_id&gt;</code> in memory with isolated ReBAC rules.</li>
+          <li><strong>Local-First Development:</strong> <code>tech</code> implements features on local <code>qwen2.5-coder:3b</code> ($0 token cost).</li>
+          <li><strong>Evidence Verification (DEC-005):</strong> <code>qa</code> runs automated test suite; <code>sec</code> runs Mantis vulnerability sweep. Code cannot merge without passing evidence log.</li>
+          <li><strong>Interactive Client Preview:</strong> Project runs inside OpenHands Canvas sandbox on Port 8000 for client browser inspection.</li>
+          <li><strong>Delivery & Sign-Off:</strong> Operator delivers git bundle; client pays remaining 50% ($5,000).</li>
+          <li><strong>Margin Audit:</strong> <code>cfo</code> logs total compute cost (~$25 in tokens) and confirms <strong>99.7% delivery margin</strong>.</li>
+        </ol>
       </div>
     </section>
 
