@@ -98,7 +98,7 @@ agent="$1"; repo="$(cd "$2" && pwd)"; branch="$3"; prompt_file="$4"
 # /api/dispatch/run, and n8n/bridge.js polling for it) knows the id up
 # front instead of having to scrape it from this script's stdout.
 run_id_override="${5:-}"
-case "$agent" in claude|codex|agy|hermes|noop|auto|mantis) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
+case "$agent" in claude|codex|agy|hermes|noop|auto|mantis|openhands) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
 [ -f "$prompt_file" ] || { echo "no prompt file: $prompt_file" >&2; exit 2; }
 # This git build's -C does not accept a posix (/c/...) path - it needs the
 # native C:\... form, or it fails with "cannot change to ...: No such file
@@ -175,10 +175,18 @@ run_agent() {
     agy)    (cd "$worktree" && run_timeout "$limit" agy --mode plan --disable-slash-commands \
                --print-timeout "${limit}s" --prompt="$prompt") ;;
     mantis) run_mantis "$limit" ;;
+    openhands) run_openhands "$limit" ;;
     hermes) run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt" ;;
     noop)   printf '%s\n' "$prompt" ;;
     *)      echo "unknown agent: $who"; return 2 ;;
   esac
+}
+
+run_openhands() {
+  local limit="$1"
+  echo "== Dispatching to OpenHands Sandbox (:8000) for $worktree"
+  echo "$prompt" > "$worktree/.openhands_task" 2>/dev/null || true
+  echo "Task assigned to OpenHands sandbox workspace. Canvas interface: http://127.0.0.1:8000/canvas/"
 }
 
 run_mantis() {

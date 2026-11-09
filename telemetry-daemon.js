@@ -36,6 +36,7 @@ const HISTORY_MAX_POINTS = 720;
 const OLLAMA_HOST = envValues['OLLAMA_HOST'] || '127.0.0.1';
 const OLLAMA_PORT = Number(envValues['OLLAMA_PORT']) || 11434;
 const OPENCLAW_PORT = 18789;
+const OPENHANDS_PORT = 8000;
 const BUZZ_PORT = 3000;
 
 function writeDaemonLog(msg, level = 'INFO') {
@@ -251,9 +252,10 @@ function updateHistory(newPoint) {
 
 async function tick() {
   const cpu = getCpuUsage();
-  const [ollamaTcp, openclawTcp, buzzStatus] = await Promise.all([
+  const [ollamaTcp, openclawTcp, openhandsTcp, buzzStatus] = await Promise.all([
     testTcpPort(OLLAMA_PORT, OLLAMA_HOST),
     testTcpPort(OPENCLAW_PORT),
+    testTcpPort(OPENHANDS_PORT),
     getBuzzStatus()
   ]);
 
@@ -274,6 +276,7 @@ async function tick() {
     services: {
       ollama: { online: ollamaTcp.online, port: OLLAMA_PORT, latencyMs: ollamaLatencyMs },
       openclaw: { online: openclawTcp.online, port: OPENCLAW_PORT, latencyMs: openclawTcp.latencyMs },
+      openhands: { online: openhandsTcp.online, port: OPENHANDS_PORT, latencyMs: openhandsTcp.latencyMs },
       watchtower: { online: true, name: 'watchtower', status: 'Monitoring disabled', image: 'containrrr/watchtower' },
       buzz: buzzStatus
     },
@@ -283,13 +286,16 @@ async function tick() {
       po: { status: 'idle', active: 0, completed: 0, messages: 0 },
       tech: { status: 'idle', active: 0, completed: 0, messages: 0 },
       qa: { status: 'idle', active: 0, completed: 0, messages: 0 },
+      sec: { status: 'idle', active: 0, completed: 0, messages: 0 },
       infra: { status: 'idle', active: 0, completed: 0, messages: 0 },
       doc: { status: 'idle', active: 0, completed: 0, messages: 0 }
     },
     engineStats: {
-      paperclip: { hiredCount: 5, activeBoards: 1 },
+      paperclip: { hiredCount: 6, activeBoards: 1 },
       openclaw: { pluginsCount: 0, toolsCount: 16 },
-      hermes: { tracesCount: 0, activeRunners: 1 }
+      hermes: { tracesCount: 0, activeRunners: 1 },
+      mantis: { skillsCount: 19, activeAudits: 0 },
+      openhands: { canvasPort: OPENHANDS_PORT, online: openhandsTcp.online }
     }
   };
 

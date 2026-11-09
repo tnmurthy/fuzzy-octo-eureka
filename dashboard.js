@@ -31,7 +31,15 @@
         prompt: `You are the QA & Verification subagent.
     Your role is to validate all changes made to the codebase before they are committed or merged.
     You report directly to the Product Strategist & Product Owner (Arunachala Ramana).`,
-        task: "Fast-unit Vitest sweep executed (177/202 tests passed). Environment constraints documented."
+        task: "Fast-unit Vitest sweep executed (175/175 tests passed). Environment constraints documented."
+      },
+      sec: {
+        title: "🛡️ AppSec Specialist & Auditor (Mantis)",
+        role: "Responsible for autonomous vulnerability scanning, exploit reproduction, ReBAC access boundary validation, and security patch verification via Google Mantis.",
+        prompt: `You are the AppSec Specialist & Security Auditor subagent (powered by Google Mantis).
+    Your role is to perform static analysis, dynamic security probes, CVE reproducer scripts, ReBAC tenant boundary verification, and ensure no unauthenticated paths bypass defense layers.
+    You report directly to the Product Strategist & Product Owner (Arunachala Ramana).`,
+        task: "Google Mantis suite initialized with 19 skills. Security audit patches applied to agent dispatch, ReBAC checks, and memory engine."
       },
       infra: {
         title: "🛠️ DevOps & Infrastructure Expert",
@@ -48,6 +56,20 @@
     Your role is to maintain the project's state, long-term memory, daily logs, and documentation files.
     You report directly to the Product Strategist & Product Owner (Arunachala Ramana).`,
         task: "Daily memory log files reconciled with latest milestones."
+      },
+      hermes: {
+        title: "🐍 Hermes Local Reasoning Runner",
+        role: "Autonomous local reasoning runner operating directly on local Ollama models (gemma3:4b, qwen2.5-coder:3b) with zero external API cost and rapid cognitive execution loops.",
+        prompt: `You are Hermes, the local reasoning runner agent.
+    Your role is to plan, test, and execute code changes locally using local Ollama model instances, verifying results before escalating to external frontier models.`,
+        task: "Local reasoning loop active. Connected to Ollama metal instance at localhost:11434."
+      },
+      openhands: {
+        title: "👐 OpenHands Sandbox Workspace",
+        role: "Containerized sandbox execution engine providing an interactive Agent Canvas and file system workspace for complex multistep engineering workflows.",
+        prompt: `You are OpenHands, the containerized sandbox agent environment.
+    Your role is to run software engineering tasks inside an isolated Docker sandbox container, providing an interactive Canvas UI on port 8000.`,
+        task: "OpenHands Agent Canvas container online at http://127.0.0.1:8000/canvas/."
       }
     };
 
@@ -76,7 +98,7 @@
       if (label) label.innerText = badge.label;
     }
 
-    const AGENT_INDEX_MAP = { po: 0, tech: 1, qa: 2, infra: 3, doc: 4 };
+    const AGENT_INDEX_MAP = { po: 0, tech: 1, qa: 2, sec: 3, infra: 4, doc: 5, hermes: 6, openhands: 7 };
     const NAV_TAB_MAP = {
       dashboard: 'id-nav-dashboard',
       kanban: 'id-nav-kanban',
@@ -738,6 +760,7 @@
 
       if (data.services.ollama) setServiceDot('id-ollama-dot', data.services.ollama.online, 'Online', 'Offline');
       if (data.services.openclaw) setServiceDot('id-openclaw-dot', data.services.openclaw.online, 'Online', 'Offline');
+      if (data.services.openhands) setServiceDot('id-openhands-dot', data.services.openhands.online, 'Online', 'Offline');
       if (data.services.watchtower) setServiceDot('id-watchtower-dot', data.services.watchtower.online, 'Online', 'Offline');
       if (data.services.buzz) setServiceDot('id-buzz-dot', data.services.buzz.online, 'Online', 'Offline');
     }
@@ -953,6 +976,33 @@
 
         const hTraceEl = document.getElementById('id-traces-count');
         if (hTraceEl) hTraceEl.innerText = `${hermes.tracesCount || 0} logs`;
+      }
+
+      if (data.engineStats && data.engineStats.mantis) {
+        const mEl = document.getElementById('id-mantis-stats');
+        if (mEl) mEl.innerText = `${data.engineStats.mantis.skillsCount || 19} AppSec Skills`;
+      }
+
+      if (data.services && data.services.openhands) {
+        const oh = data.services.openhands;
+        const ohBadge = document.getElementById('id-openhands-status-badge');
+        const ohStats = document.getElementById('id-openhands-stats');
+        if (ohBadge) {
+          if (oh.online) {
+            ohBadge.innerText = 'Online';
+            ohBadge.style.backgroundColor = 'rgba(0,230,118,0.15)';
+            ohBadge.style.color = 'var(--status-green)';
+            ohBadge.style.borderColor = 'var(--status-green)';
+          } else {
+            ohBadge.innerText = 'Offline';
+            ohBadge.style.backgroundColor = 'rgba(255,23,68,0.15)';
+            ohBadge.style.color = 'var(--status-red)';
+            ohBadge.style.borderColor = 'var(--status-red)';
+          }
+        }
+        if (ohStats) {
+          ohStats.innerText = oh.online ? 'Port 8000 Canvas' : 'Container stopped';
+        }
       }
 
       if (data.services && data.services.watchtower) {

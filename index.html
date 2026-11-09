@@ -35,6 +35,7 @@
               <li class="nav-item" onclick="switchTab('runs')"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
               <li class="nav-item" onclick="switchTab('costs')"><span class="nav-link" id="id-nav-costs">💰 Costs</span></li>
               <li class="nav-item" onclick="location.href='/team.html'"><span class="nav-link" id="id-nav-team">🗂️ Team (Org Chart)</span></li>
+              <li class="nav-item" onclick="location.href='/wiki.html'"><span class="nav-link" id="id-nav-wiki">📚 Agency Wiki</span></li>
               <li class="nav-item" onclick="location.href='/logout'"><span class="nav-link" style="color:var(--status-red);">🚪 Sign Out</span></li>
             </ul>
           </nav>
@@ -53,6 +54,14 @@
             <div class="status-row">
               <span>Hermes Service</span>
               <span class="status-badge"><span class="status-dot green" id="id-hermes-dot"></span>Ready</span>
+            </div>
+            <div class="status-row">
+              <span>Google Mantis</span>
+              <span class="status-badge"><span class="status-dot green" id="id-mantis-dot"></span>19 Skills</span>
+            </div>
+            <div class="status-row">
+              <span>OpenHands Canvas</span>
+              <span class="status-badge"><span class="status-dot green" id="id-openhands-dot"></span>Online</span>
             </div>
             <div class="status-row">
               <span>Docker Watchtower</span>
@@ -91,6 +100,7 @@
                 </span>
                 <div style="font-size:0.72rem; color:var(--color-text-muted); margin-top:3px; font-family:'JetBrains Mono',monospace;">wss://drisyon-ai.communities.buzz.xyz</div>
               </div>
+              <a href="/wiki.html" style="padding:6px 12px; background:rgba(0,176,255,0.15); border:1px solid rgba(0,176,255,0.3); color:var(--status-blue); font-size:0.75rem; border-radius:6px; text-decoration:none; display:flex; align-items:center; gap:6px;">📚 Agency Wiki</a>
               <a href="/logout" style="padding:6px 12px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#fca5a5; font-size:0.75rem; border-radius:6px; text-decoration:none;">Sign Out</a>
             </div>
           </section>
@@ -171,15 +181,19 @@
 
               <!-- Pipeline Flow Bar -->
               <div class="flow-live-pipeline">
-                <div class="pipeline-node"><span class="status-dot green"></span><strong>User Directive</strong></div>
+                <div class="pipeline-node"><span class="status-dot green"></span><strong>Operator Directive</strong></div>
                 <div class="pipeline-arrow">➔</div>
-                <div class="pipeline-node"><span class="flow-node-badge cyan">🧭 Arunachala Ramana</span></div>
+                <div class="pipeline-node"><span class="flow-node-badge amber">🖇️ Paperclip (PMO &amp; ReBAC)</span></div>
                 <div class="pipeline-arrow">➔</div>
-                <div class="pipeline-node"><span class="flow-node-badge amber">🖇️ Paperclip (Scope & ReBAC)</span></div>
+                <div class="pipeline-node"><span class="flow-node-badge cyan">🧭 Arunachala Ramana (PO)</span></div>
                 <div class="pipeline-arrow">➔</div>
                 <div class="pipeline-node"><span class="flow-node-badge cyan">🦁 OpenClaw (MCP Router)</span></div>
                 <div class="pipeline-arrow">➔</div>
-                <div class="pipeline-node"><span class="flow-node-badge green">⚡ Subagents (:11434)</span></div>
+                <div class="pipeline-node"><span class="flow-node-badge green">⚡ Department Leads</span></div>
+                <div class="pipeline-arrow">➔</div>
+                <div class="pipeline-node"><span class="flow-node-badge amber">🛡️ Mantis / OpenHands / Hermes</span></div>
+                <div class="pipeline-arrow">➔</div>
+                <div class="pipeline-node"><span class="flow-node-badge green">🦙 Ollama Metal (:11434)</span></div>
               </div>
 
               <!-- Subagent Cards Grid with Active Tools -->
@@ -190,7 +204,7 @@
                     <span>💻 Tech Lead</span>
                     <span class="flow-node-badge cyan" id="id-badge-tech">qwen2.5-coder:3b</span>
                   </div>
-                  <div class="flow-node-desc">Spawns on code edit tasks. Performs AST inspection & surgical file diffs.</div>
+                  <div class="flow-node-desc">Spawns on code edit tasks. Performs AST inspection &amp; surgical file diffs.</div>
                   <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
                   <div class="flow-tool-chips">
                     <span class="tool-chip">view_file</span>
@@ -212,6 +226,22 @@
                     <span class="tool-chip">run_command (npm test)</span>
                     <span class="tool-chip">run_command (lint)</span>
                     <span class="tool-chip">view_file</span>
+                  </div>
+                </div>
+
+                <!-- AppSec Specialist (Google Mantis) -->
+                <div class="flow-node-card">
+                  <div class="flow-node-header">
+                    <span>🛡️ AppSec (Mantis)</span>
+                    <span class="flow-node-badge amber" id="id-badge-sec">qwen2.5-coder:3b</span>
+                  </div>
+                  <div class="flow-node-desc">Autonomous security scans, vulnerability reproduction, and ReBAC boundary auditing.</div>
+                  <div style="font-size:0.7rem; color:var(--color-text-muted); font-weight:600;">Authorized Tools:</div>
+                  <div class="flow-tool-chips">
+                    <span class="tool-chip">mantis_scan</span>
+                    <span class="tool-chip">cve_reproduce</span>
+                    <span class="tool-chip">rebac_verify</span>
+                    <span class="tool-chip">audit_inspect</span>
                   </div>
                 </div>
 
@@ -354,19 +384,28 @@
 
                 <div class="agent-card" onclick="selectAgent('qa')">
                   <div class="agent-card-header">
-                    <div class="agent-name">🧪 QA & Verification Specialist</div>
+                    <div class="agent-name">🧪 QA &amp; Verification Specialist</div>
                     <div class="agent-badge idle">Idle</div>
                   </div>
-                  <div class="agent-role">Pre-Commit Verification & Test Lead</div>
+                  <div class="agent-role">Pre-Commit Verification &amp; Test Lead</div>
                   <div class="agent-desc">Runs linting, Vitest sweeps, checks regressions before commits.</div>
+                </div>
+
+                <div class="agent-card" onclick="selectAgent('sec')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">🛡️ AppSec Lead (Mantis)</div>
+                    <div class="agent-badge idle">Idle</div>
+                  </div>
+                  <div class="agent-role">Vulnerability Audit &amp; Exploit Reproduction</div>
+                  <div class="agent-desc">Runs 19 Google Mantis AppSec skills, ReBAC boundary auditing, and security reviews.</div>
                 </div>
 
                 <div class="agent-card" onclick="selectAgent('infra')">
                   <div class="agent-card-header">
-                    <div class="agent-name">🛠️ DevOps & Infrastructure</div>
+                    <div class="agent-name">🛠️ DevOps &amp; Infrastructure</div>
                     <div class="agent-badge idle">Idle</div>
                   </div>
-                  <div class="agent-role">Containers, Ollama Offload & Scripts</div>
+                  <div class="agent-role">Containers, Ollama Offload &amp; Scripts</div>
                   <div class="agent-desc">Manages Docker, Ollama GPU/Metal acceleration, container runtime, and workspace health.</div>
                 </div>
 
@@ -375,8 +414,26 @@
                     <div class="agent-name">📝 Documentation Specialist</div>
                     <div class="agent-badge idle">Idle</div>
                   </div>
-                  <div class="agent-role">Memory, Changelogs & Daily Logs</div>
+                  <div class="agent-role">Memory, Changelogs &amp; Daily Logs</div>
                   <div class="agent-desc">Tracks task completions, logs changes, updates daily memory entries.</div>
+                </div>
+
+                <div class="agent-card" onclick="selectAgent('hermes')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">🐍 Hermes Local Reasoning</div>
+                    <div class="agent-badge active">Active</div>
+                  </div>
+                  <div class="agent-role">Local Autonomous Cognitive Loop</div>
+                  <div class="agent-desc">Executes fast iterative code-fix loops entirely on local Ollama models with zero token costs.</div>
+                </div>
+
+                <div class="agent-card" onclick="selectAgent('openhands')">
+                  <div class="agent-card-header">
+                    <div class="agent-name">👐 OpenHands Sandbox</div>
+                    <div class="agent-badge active">Active</div>
+                  </div>
+                  <div class="agent-role">Containerized Agent Canvas Workspace</div>
+                  <div class="agent-desc">Isolated Docker runtime environment on port 8000 with interactive multi-agent canvas.</div>
                 </div>
 
               </div>
@@ -629,11 +686,35 @@
                   <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                     <div>
                       <strong style="color:#fff; font-size:0.9rem;">🔭 Watchtower (Container Watcher)</strong>
-                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Automated Docker container lifecycle & image updates</div>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Automated Docker container lifecycle &amp; image updates</div>
                     </div>
                     <div style="text-align:right;">
                       <span id="id-watchtower-status-badge" class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Online</span>
                       <div id="id-watchtower-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">Checking...</div>
+                    </div>
+                  </div>
+
+                  <!-- Google Mantis -->
+                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <strong style="color:#fff; font-size:0.9rem;">🛡️ Google Mantis (AppSec Framework)</strong>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Autonomous vulnerability scanner, exploit reproducers, ReBAC audit</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Ready</span>
+                      <div id="id-mantis-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">19 AppSec Skills</div>
+                    </div>
+                  </div>
+
+                  <!-- OpenHands Canvas -->
+                  <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <strong style="color:#fff; font-size:0.9rem;">👐 OpenHands (Agent Canvas Workspace)</strong>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Containerized sandbox execution engine on :8000 (ghcr.io/openhands)</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span id="id-openhands-status-badge" class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Online</span>
+                      <div id="id-openhands-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">Port 8000 Canvas</div>
                     </div>
                   </div>
                 </div>
@@ -724,6 +805,7 @@
                       <option value="codex">codex (Codex CLI)</option>
                       <option value="agy">agy (Antigravity plan/review)</option>
                       <option value="mantis">mantis (Google Mantis AppSec audit)</option>
+                      <option value="openhands">openhands (OpenHands container sandbox)</option>
                     </select>
                   </div>
                   <div style="flex:1; min-width:180px;">

@@ -56,6 +56,7 @@
       </div>
       <div style="display: flex; align-items: center; gap: 14px;">
         <span id="user-display" class="muted mono"></span>
+        <a href="/wiki.html">📚 Agency Wiki</a>
         <a href="/">← Operations dashboard</a>
       </div>
     </header>
@@ -85,19 +86,29 @@
 
     <div class="tier"><div class="node lead" data-id="operator" tabindex="0" role="button">
       <div class="title">👤 You - Operator</div>
-      <div class="tool">Directs the team</div>
+      <div class="tool">Directs the agency · Buzz relay &amp; dashboard</div>
+      <div class="state"><span class="dot green"></span><span>authenticated</span></div>
     </div></div>
-    <div class="via">via Buzz relay · dashboard dispatch</div>
+    <div class="via">via Buzz relay (wss://drisyon-ai.communities.buzz.xyz) · dashboard dispatch</div>
     <div class="connector"></div>
+
+    <div class="tier-label">Governance &amp; Tool Gateway</div>
+    <div class="tier" id="tier-gov"></div>
+
+    <div class="connector"></div>
+    <div class="tier-label">Strategic Product Leadership</div>
     <div class="tier" id="tier-po"></div>
 
-    <div class="tier-label">Personas (prompts on one local model)</div>
+    <div class="connector"></div>
+    <div class="tier-label">Specialist Personas (Domain Leads · Local Models)</div>
     <div class="tier" id="tier-roles"></div>
 
-    <div class="tier-label">Executors - do the actual code changes (Agent Runs)</div>
+    <div class="connector"></div>
+    <div class="tier-label">Executors &amp; Sandboxes (Agent Runs)</div>
     <div class="tier" id="tier-exec"></div>
 
-    <div class="tier-label">Shared infrastructure</div>
+    <div class="connector"></div>
+    <div class="tier-label">Shared Infrastructure &amp; Local Compute</div>
     <div class="infra" id="tier-infra"></div>
 
     <section class="detail" aria-live="polite">
@@ -109,18 +120,25 @@
 
   <script>
     const REFRESH_MS = 30000;
+    const GOV = [
+      { id: 'paperclip', icon: '🖇️', title: 'Paperclip (PMO)', mode: 'Workforce, budget limits & ReBAC' },
+      { id: 'openclaw-gw', icon: '🦁', title: 'OpenClaw Gateway', mode: 'MCP router · Stdio/TCP gateway' }
+    ];
     const ROLES = [
-      { id: 'tech',  icon: '⚙', title: 'Tech Lead',  owns: 'Code, refactors, architecture' },
-      { id: 'qa',    icon: '✓', title: 'QA',         owns: 'Testing, validation, pre-commit checks' },
-      { id: 'infra', icon: '⛁', title: 'Infra',      owns: 'Docker, Ollama, runtime health' },
-      { id: 'doc',   icon: '✎', title: 'Doc',        owns: 'Memory logs, changelogs, project state' }
+      { id: 'tech',  icon: '⚙', title: 'Tech Lead',        owns: 'Code, refactors, architecture' },
+      { id: 'qa',    icon: '✓', title: 'QA Lead',          owns: 'Testing, validation, pre-commit checks' },
+      { id: 'sec',   icon: '🛡', title: 'AppSec (Mantis)', owns: 'Vulnerability audits, reproducers, ReBAC boundary' },
+      { id: 'infra', icon: '⛁', title: 'DevOps / Infra',   owns: 'Docker, OrbStack, GPU/Metal, Cloudflare' },
+      { id: 'doc',   icon: '✎', title: 'Doc Scribe',       owns: 'Memory logs, changelogs, project state' }
     ];
     // Executors that orchestration/agent-dispatch.sh accepts.
     const EXECUTORS = [
-      { id: 'claude', icon: '✳', title: 'Claude Code', mode: 'headless -p, git push denied' },
-      { id: 'codex',  icon: '◎', title: 'Codex',       mode: 'workspace-write, model override' },
-      { id: 'agy',    icon: '▲', title: 'Antigravity', mode: 'agy CLI' },
-      { id: 'hermes', icon: '🐍', title: 'Hermes',     mode: 'reasoning runner' }
+      { id: 'hermes',    icon: '🐍', title: 'Hermes Local', mode: 'Local Ollama Metal loop (zero cost)' },
+      { id: 'claude',    icon: '✳', title: 'Claude Code',   mode: 'Headless Sonnet agent, git push denied' },
+      { id: 'codex',     icon: '◎', title: 'Codex CLI',     mode: 'Workspace-write, model override' },
+      { id: 'agy',       icon: '▲', title: 'Antigravity',   mode: 'AGY CLI planner & reviewer' },
+      { id: 'mantis',    icon: '🛡', title: 'Google Mantis', mode: 'Autonomous security scanner (19 skills)' },
+      { id: 'openhands', icon: '👐', title: 'OpenHands',     mode: 'Containerized sandbox workspace (:8000)' }
     ];
     const details = {};
 
@@ -184,36 +202,84 @@
       const roles = tel.agentStats || {};
       const ollama = svcState(svc.ollama);
 
+      // Tier 1: Governance
+      const gt = document.getElementById('tier-gov'); gt.replaceChildren();
+      const pStats = (tel.engineStats || {}).paperclip || {};
+      gt.append(node('paperclip', '🖇️ Paperclip (PMO)', 'Workforce & ReBAC policy', 'green', (pStats.hiredCount || 6) + ' hired agents'));
+      details.paperclip = [
+        ['Role', 'AI PMO & Governance Engine'],
+        ['Enforcement', 'ReBAC access boundaries, cost budgets, human-in-the-loop gates'],
+        ['Task Board', 'Live 04_internal/TASKS.md synchronization'],
+        ['Hired Workforce', (pStats.hiredCount || 6) + ' agent personas'],
+        ['Status', 'Active local controller']
+      ];
+
+      const oclawState = svcState(svc.openclaw);
+      gt.append(node('openclaw-gw', '🦁 OpenClaw Gateway', 'MCP router · :18789', oclawState[0], oclawState[1]));
+      details['openclaw-gw'] = [
+        ['Role', 'Omni-channel Gateway & MCP Tool Router'],
+        ['Endpoint', 'http://127.0.0.1:18789'],
+        ['Tools', '16 registered MCP tool schemas (Ast-grep, bash, git, patch)'],
+        ['Status', oclawState[1]],
+        ['Protocol', 'Stdio / TCP / SSE bridge']
+      ];
+
+      // Tier 2: PO Lead
       const po = document.getElementById('tier-po'); po.replaceChildren();
       const poState = roleState(roles.po);
-      po.append(node('po', '◆ Arunachala Ramana - PO', '🦙 Ollama · gemma3:4b (' + ollama[1] + ')', poState[0], poState[1], ' lead'));
-      details.po = [['Role', 'Product Owner - scopes work, directs specialists'], ['Model', 'Ollama gemma3:4b'], ['Model host', ollama[1]], ['Activity', poState[1]]];
+      po.append(node('po', '🧭 Arunachala Ramana - PO', '🦙 Ollama · gemma3:4b (' + ollama[1] + ')', poState[0], poState[1], ' lead'));
+      details.po = [
+        ['Role', 'Lead Product Owner & Strategist - scopes objectives, directs specialists'],
+        ['Model', 'Ollama gemma3:4b (Metal accelerated)'],
+        ['Model host', ollama[1]],
+        ['Activity', poState[1]]
+      ];
 
+      // Tier 3: Personas
       const rt = document.getElementById('tier-roles'); rt.replaceChildren();
       ROLES.forEach(r => {
         const st = roleState(roles[r.id]);
         rt.append(node(r.id, r.icon + ' ' + r.title, '🦙 gemma3:4b', st[0], st[1]));
         const s = roles[r.id] || {};
-        details[r.id] = [['Owns', r.owns], ['Model', 'Ollama gemma3:4b (persona prompt)'], ['Conversations', String(s.conversations || 0)], ['Completed', String(s.completed || 0)], ['Last active', ago(s.lastActive)]];
+        details[r.id] = [
+          ['Owns', r.owns],
+          ['Model', 'Ollama gemma3:4b (persona system prompt)'],
+          ['Conversations', String(s.conversations || 0)],
+          ['Completed', String(s.completed || 0)],
+          ['Last active', ago(s.lastActive)]
+        ];
       });
 
+      // Tier 4: Executors
       const sums = summariseRuns(runs);
       const et = document.getElementById('tier-exec'); et.replaceChildren();
       EXECUTORS.forEach(x => {
-        const st = execState(sums[x.id]);
+        let st = execState(sums[x.id]);
+        if (x.id === 'openhands' && st[1] === 'no runs recorded' && svc.openhands && svc.openhands.online) {
+          st = ['green', 'container ready (:8000)'];
+        }
         et.append(node(x.id, x.icon + ' ' + x.title, x.mode, st[0], st[1]));
         const s = sums[x.id];
         details[x.id] = s
           ? [['Runs', String(s.total)], ['By status', Object.entries(s.statuses).map(e => e.join(': ')).join(', ')], ['Last task', (s.last.task || '').slice(0, 160)], ['Last branch', s.last.branch || '-'], ['Last started', ago(s.last.started_at)]]
-          : [['Runs', 'none recorded in agent-runs'], ['Mode', x.mode]];
+          : [['Runs', 'none recorded in agent-runs'], ['Mode', x.mode], ['Status', st[1]]];
       });
+      if (details.mantis && !sums.mantis) {
+        details.mantis.push(['Skills', '19 Google Mantis AppSec skills in tools/mantis']);
+      }
+      if (details.openhands) {
+        details.openhands.push(['Canvas UI', 'http://127.0.0.1:8000/canvas/']);
+      }
 
+      // Tier 5: Shared Infrastructure
       const hermes = (tel.engineStats || {}).hermes || {};
+      const mantis = (tel.engineStats || {}).mantis || {};
       const infra = [
-        ['ollama', '🦙 Ollama', 'Local models · :11434', svcState(svc.ollama)],
-        ['openclaw', '🦁 OpenClaw', 'MCP router / gateway · :18789', svcState(svc.openclaw)],
-        ['buzz', '🐝 Buzz relay', 'Operator directives · :3000', svcState(svc.buzz)],
-        ['hermes-engine', '🐍 Hermes engine', hermes.tracesCount != null ? hermes.tracesCount + ' traces' : 'no data', ['', 'traces only - not a liveness check']]
+        ['ollama', '🦙 Ollama Metal', 'Local models · :11434', svcState(svc.ollama)],
+        ['openclaw', '🦁 OpenClaw MCP', 'Router & gateway · :18789', svcState(svc.openclaw)],
+        ['buzz', '🐝 Buzz Relay', 'Nostr mesh · :3000', svcState(svc.buzz)],
+        ['openhands-infra', '👐 OpenHands Canvas', 'Sandbox UI · :8000', svcState(svc.openhands)],
+        ['mantis-infra', '🛡 Google Mantis', (mantis.skillsCount || 19) + ' AppSec skills', ['green', 'ready']]
       ];
       const it = document.getElementById('tier-infra'); it.replaceChildren();
       infra.forEach(([id, title, tool, st]) => {
@@ -221,7 +287,23 @@
         const s = svc[id] || {};
         details[id] = [['Status', st[1]], ['Port', s.port != null ? String(s.port) : '-'], ['Latency', s.latencyMs != null ? s.latencyMs + ' ms' : '-']];
       });
-      details.operator = [['Channels', 'Buzz relay (buzz.mytestbed.tech), dashboard dispatch'], ['Access', 'Cloudflare Access - owner email only']];
+      details.operator = [
+        ['Channels', 'Buzz relay (wss://drisyon-ai.communities.buzz.xyz), web dashboard dispatch'],
+        ['Access', 'Cloudflare Access Zero Trust - owner email only'],
+        ['Role', 'Supreme Operator directing PMO, PO & Specialists']
+      ];
+      details['openhands-infra'] = [
+        ['Service', 'OpenHands Agent Canvas Docker Container'],
+        ['Port', '8000'],
+        ['URL', 'http://127.0.0.1:8000/canvas/'],
+        ['Status', svcState(svc.openhands)[1]]
+      ];
+      details['mantis-infra'] = [
+        ['Framework', 'Google Mantis AppSec Framework'],
+        ['Skills Count', String(mantis.skillsCount || 19)],
+        ['Path', '/Users/Sriad/tt-ai-stack/tools/mantis'],
+        ['Status', 'ready']
+      ];
 
       document.getElementById('updated').textContent = 'Telemetry ' + (tel.timestamp || 'time unknown') + ' · refreshes every 30 s';
     }

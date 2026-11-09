@@ -18,6 +18,7 @@ const PERSONAS = {
   po: 'Arunachala Ramana, Product Owner: scope, priorities, plans, coordinating the team',
   tech: 'Tech Lead and Architect: code design, implementation approach, refactoring, architecture',
   qa: 'QA and Verification: tests, validation, pre-commit checks, whether something works',
+  sec: 'AppSec and Security Auditor (Google Mantis): vulnerability audits, threat modeling, ReBAC verification',
   infra: 'DevOps and Infrastructure: Docker, Ollama, services, tunnels, runtime health',
   doc: 'Documentation: changelogs, project state, memory logs, writing things down',
 };
@@ -28,6 +29,7 @@ const EXECUTORS = {
   agy: 'Antigravity: reviews code and plans without changing files',
   hermes: 'Hermes: local model, small reasoning or scripting tasks, no cloud cost',
   mantis: 'Google Mantis: autonomous security audit, threat-modeling, and vulnerability review',
+  openhands: 'OpenHands: containerized sandbox execution workspace on port 8000',
 };
 
 function buildRequest({ message, thread, repos, recentRuns }) {

@@ -229,6 +229,8 @@ function serveJsonFile(res, filePath, emptyValue) {
 function serveStaticFile(req, res) {
   let urlPath = req.url.split('?')[0];
   if (urlPath === '/') urlPath = '/index.html';
+  if (urlPath === '/wiki') urlPath = '/wiki.html';
+  if (urlPath === '/team') urlPath = '/team.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
@@ -844,7 +846,7 @@ function handleRequest(req, res) {
       // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
       // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
       const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
-      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto', 'mantis']);
+      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto', 'mantis', 'openhands']);
       if (!allowedAgents.has(agent)) {
         return sendJson(res, 400, { ok: false, error: `unknown agent: ${agent}` });
       }
