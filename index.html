@@ -355,8 +355,31 @@
           <div id="agents" class="tab-content">
             <section class="header-panel">
               <div class="header-title">
-                <h2>Hired Workforce Matrix</h2>
-                <p>Inspect active agent personas, system prompts, role boundaries, and runtime assignments.</p>
+                <h2>Hired Workforce Matrix &amp; Institutional Memory</h2>
+                <p>Inspect active agent personas, system prompts, role boundaries, and query local vector memory.</p>
+              </div>
+              <div class="action-group">
+                <button class="btn btn-secondary" onclick="toggleMemorySearchModal()">🧠 Semantic Memory Search</button>
+              </div>
+            </section>
+
+            <!-- Semantic Memory Search Widget (Phase 1) -->
+            <section class="card" id="id-memory-search-panel" style="margin-bottom: 24px; display: none;">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="card-title-icon">🧠</span>
+                  <h3>Semantic Memory Search (Local nomic-embed-text RAG)</h3>
+                </div>
+                <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 3px 10px;" onclick="toggleMemorySearchModal()">✕ Close</button>
+              </div>
+              <div style="padding: 16px 20px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+                  <input type="text" id="id-memory-search-input" placeholder="Search directives, runbooks, memories, or decisions..." 
+                         style="flex: 1; min-width: 260px; padding: 9px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 6px; color: #fff; font-size: 0.85rem;"
+                         onkeydown="if(event.key==='Enter') executeDashboardMemorySearch()">
+                  <button class="btn btn-primary" onclick="executeDashboardMemorySearch()">Search Memory</button>
+                </div>
+                <div id="id-memory-search-results" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem;"></div>
               </div>
             </section>
 

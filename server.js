@@ -70,7 +70,8 @@ const teamStore = require('./team-store').createTeamStore(process.env, {
   memoryStateFile: path.join(DASHBOARD_DIR, 'logs', 'memory-sync-state.json'),
 });
 if (teamStore) teamStore.start();
-const { parseTasksMd } = require('./tasks-md');
+const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require('./tasks-md');
+const { validateDispatchSafety } = require('./safety-filter');
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 
 // Ollama connection details (can be local or remote, e.g. a Mac Studio on LAN/VPN)
@@ -173,9 +174,13 @@ rebac.addNode('team:opscore', 'Team', { name: 'Ops Core Team' });
 rebac.addNode('role:admin', 'Role', { action: '*' });
 rebac.addNode('perm:ping', 'Permission', { action: 'ping:execute' });
 rebac.addNode('perm:dispatch', 'Permission', { action: 'dispatch:run' });
+rebac.addNode('perm:chat', 'Permission', { action: 'chat:interact' });
+rebac.addNode('perm:memory_store', 'Permission', { action: 'memory:store' });
+rebac.addNode('perm:memory_read', 'Permission', { action: 'memory:read' });
 rebac.addNode('resource:ollama_cluster', 'Resource', { name: 'Ollama Cluster' });
 rebac.addNode('resource:agent_runner', 'Resource', { name: 'Agent Runner' });
 rebac.addNode('resource:telemetry_feed', 'Resource', { name: 'Telemetry Feed' });
+rebac.addNode('resource:memory_engine', 'Resource', { name: 'Memory Engine' });
 
 // Edges
 rebac.addEdge('user:sriad', 'MEMBER_OF', 'team:opscore');
@@ -183,9 +188,29 @@ rebac.addEdge('user:drisyon', 'MEMBER_OF', 'team:opscore');
 rebac.addEdge('team:opscore', 'GRANTED', 'role:admin');
 rebac.addEdge('role:admin', 'INCLUDES', 'perm:ping');
 rebac.addEdge('role:admin', 'INCLUDES', 'perm:dispatch');
+rebac.addEdge('role:admin', 'INCLUDES', 'perm:chat');
+rebac.addEdge('role:admin', 'INCLUDES', 'perm:memory_store');
+rebac.addEdge('role:admin', 'INCLUDES', 'perm:memory_read');
 rebac.addEdge('perm:ping', 'APPLIES_TO', 'resource:ollama_cluster');
+rebac.addEdge('perm:chat', 'APPLIES_TO', 'resource:ollama_cluster');
 rebac.addEdge('perm:dispatch', 'APPLIES_TO', 'resource:agent_runner');
+rebac.addEdge('perm:memory_store', 'APPLIES_TO', 'resource:memory_engine');
+rebac.addEdge('perm:memory_read', 'APPLIES_TO', 'resource:memory_engine');
 rebac.addEdge('team:opscore', 'OWNER_OF', 'resource:telemetry_feed');
+
+function getReqUserNode(req) {
+  if (req.headers && req.headers['x-rebac-actor']) {
+    return String(req.headers['x-rebac-actor']).trim();
+  }
+  const user = req.sessionUser || auth.getSessionUser(req);
+  if (user) {
+    const clean = String(user).toLowerCase().trim();
+    if (clean === 'drisyon' || clean.includes('drisyon')) return 'user:drisyon';
+    if (clean === 'sriad' || clean.includes('sriad')) return 'user:sriad';
+    return `user:${clean}`;
+  }
+  return 'user:sriad';
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -415,14 +440,14 @@ function readJsonBody(req, limit) {
 // POST /api/tasks, move with PATCH /api/tasks/<id>); otherwise, or if the
 // team board can't be reached, the read-only 04_internal/TASKS.md.
 function handleTasks(req, res) {
+  const tasksFile = resolveTasksFile(DASHBOARD_DIR);
   const readLocal = (note) => {
-    const tasksFile = process.env.TASKS_FILE || path.resolve(DASHBOARD_DIR, '../../../04_internal/TASKS.md');
     fs.readFile(tasksFile, 'utf8', (err, data) => {
       if (err) {
         return sendJson(res, 200, { ok: false, error: 'TASKS.md not found', columns: { backlog: [], in_progress: [], done: [] } });
       }
       try {
-        sendJson(res, 200, { ok: true, source: 'local', ...(note ? { note } : {}), columns: parseTasksMd(data) });
+        sendJson(res, 200, { ok: true, source: 'local', file: tasksFile, ...(note ? { note } : {}), columns: parseTasksMd(data) });
       } catch (e) {
         sendJson(res, 500, { ok: false, error: e.message });
       }
@@ -436,28 +461,43 @@ function handleTasks(req, res) {
       .catch((err) => readLocal(`team board unavailable: ${err.message}`));
     return;
   }
-  if (!teamStore) {
-    return sendJson(res, 409, { ok: false, error: 'team board not configured: set SUPABASE_* and TEAM_ID in .env' });
-  }
   const id = req.url.split('?')[0].split('/')[3];
   if (req.method === 'POST' && !id) {
     readJsonBody(req, MAX_TASK_BODY_BYTES)
       .then((input) => {
         const v = validateNewTask(input);
         if (!v.ok) return sendJson(res, 400, { ok: false, error: v.error });
-        return teamStore.createTask(v.task).then((task) => sendJson(res, 201, { ok: true, task }));
+        if (teamStore) {
+          return teamStore.createTask(v.task).then((task) => sendJson(res, 201, { ok: true, task }));
+        }
+        try {
+          const task = addLocalTask(tasksFile, v.task);
+          return sendJson(res, 201, { ok: true, source: 'local', task });
+        } catch (e) {
+          return sendJson(res, 500, { ok: false, error: e.message });
+        }
       })
       .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
     return;
   }
   if (req.method === 'PATCH' && id) {
-    if (!UUID_RE.test(id)) return sendJson(res, 400, { ok: false, error: 'task id must be a UUID' });
     readJsonBody(req, MAX_TASK_BODY_BYTES)
       .then((input) => {
         if (!validateStatus(input.status)) return sendJson(res, 400, { ok: false, error: 'status must be backlog, in_progress or done' });
-        return teamStore.moveTask(id, input.status).then((task) => (task
-          ? sendJson(res, 200, { ok: true, task })
-          : sendJson(res, 404, { ok: false, error: 'no such task on your team board' })));
+        if (teamStore) {
+          if (!UUID_RE.test(id)) return sendJson(res, 400, { ok: false, error: 'task id must be a UUID' });
+          return teamStore.moveTask(id, input.status).then((task) => (task
+            ? sendJson(res, 200, { ok: true, task })
+            : sendJson(res, 404, { ok: false, error: 'no such task on your team board' })));
+        }
+        try {
+          const task = moveLocalTask(tasksFile, id, input.status);
+          return task
+            ? sendJson(res, 200, { ok: true, source: 'local', task })
+            : sendJson(res, 404, { ok: false, error: `no such task found: ${id}` });
+        } catch (e) {
+          return sendJson(res, 500, { ok: false, error: e.message });
+        }
       })
       .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
     return;
@@ -664,6 +704,11 @@ function handleRequest(req, res) {
     return handleTasks(req, res);
   }
   if (req.url.startsWith('/api/agent/chat') && req.method === 'POST') {
+    const actor = getReqUserNode(req);
+    const authVerdict = rebac.canAccess(actor, 'chat:interact', 'resource:ollama_cluster');
+    if (!authVerdict.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: chat:interact required', path: authVerdict.path });
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
@@ -769,12 +814,18 @@ function handleRequest(req, res) {
     return sendJson(res, 200, { ok: true, invariants: memory.proceduralInvariants });
   }
   if (req.url.startsWith('/api/memory/search')) {
+    const actor = getReqUserNode(req);
+    const authVerdict = rebac.canAccess(actor, 'memory:read', 'resource:memory_engine');
+    if (!authVerdict.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: memory:read required', path: authVerdict.path });
+    }
     const parsedUrl = new URL(req.url, 'http://localhost:8787');
     const query = parsedUrl.searchParams.get('q') || '';
     const options = {
       tenantId: parsedUrl.searchParams.get('tenant') || 'tenant:drisyon_core',
       projectId: parsedUrl.searchParams.get('project') || null,
-      topK: 10,
+      category: parsedUrl.searchParams.get('category') || null,
+      topK: Number(parsedUrl.searchParams.get('topK')) || 10,
     };
     const wantTeam = teamStore && parsedUrl.searchParams.get('scope') === 'team';
     // ?scope=team: every teammate's memory (local if the team store fails).
@@ -792,6 +843,11 @@ function handleRequest(req, res) {
     return;
   }
   if (req.url.startsWith('/api/memory/store') && req.method === 'POST') {
+    const actor = getReqUserNode(req);
+    const authVerdict = rebac.canAccess(actor, 'memory:store', 'resource:memory_engine');
+    if (!authVerdict.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: memory:store required', path: authVerdict.path });
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
@@ -806,13 +862,28 @@ function handleRequest(req, res) {
     return;
   }
   if (req.url.startsWith('/api/team/dispatch') && req.method === 'POST') {
+    const actor = getReqUserNode(req);
+    const authVerdict = rebac.canAccess(actor, 'dispatch:run', 'resource:agent_runner');
+    if (!authVerdict.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: dispatch:run required', path: authVerdict.path });
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
         const payload = JSON.parse(body || '{}');
+        const taskText = payload.task || payload.prompt || payload.directive || '';
+        const safetyCheck = validateDispatchSafety(taskText, payload);
+        if (!safetyCheck.ok) {
+          return sendJson(res, 400, safetyCheck);
+        }
         const ingested = memory.ingestOperatorDispatch(payload);
-        sendJson(res, 200, { ok: true, message: 'Operator dispatch delivered and ingested into Drisyon Memory', record: ingested });
+        sendJson(res, 200, {
+          ok: true,
+          message: 'Operator dispatch delivered and ingested into Drisyon Memory',
+          record: ingested,
+          ...(safetyCheck.confirmed ? { safetyWarning: safetyCheck.warning } : {})
+        });
       } catch (e) {
         sendJson(res, 400, { ok: false, error: e.message });
       }
@@ -861,6 +932,10 @@ function handleRequest(req, res) {
       }
       if (typeof task !== 'string' || !task.trim()) {
         return sendJson(res, 400, { ok: false, error: 'task text is required' });
+      }
+      const safetyCheck = validateDispatchSafety(task, payload);
+      if (!safetyCheck.ok) {
+        return sendJson(res, 400, safetyCheck);
       }
       const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
       const runId = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
@@ -931,101 +1006,13 @@ function handleRequest(req, res) {
     return;
   }
   // ── Buzz Integration: Message Receiver ──
-  // Receives authorized Buzz messages and routes to agent chat
-  if (req.url.startsWith('/api/buzz/events') && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        // Parse Buzz event format (NIP-01 event with content)
-        const payload = JSON.parse(body || '{}');
-        const rawMessage = payload.content || payload.event?.content || '';
-        const sender = String(payload.pubkey || payload.sender || '').toLowerCase().trim();
-        
-        if (!rawMessage || typeof rawMessage !== 'string' || !rawMessage.trim()) {
-          return sendJson(res, 400, { ok: false, error: 'No message content' });
-        }
-
-        // Validate sender against authorized operators (prevent unauthenticated memory poisoning)
-        const BUZZ_OPERATORS = (process.env.BUZZ_OPERATORS || 'bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84,768ee3b1eccb49856271187b66d3095b70bb23d3fa883a63183c5b7f3c5235cd')
-          .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-        const isAllowedOperator = BUZZ_OPERATORS.length === 0 || BUZZ_OPERATORS.includes(sender) || req.sessionUser;
-        if (!isAllowedOperator) {
-          return sendJson(res, 403, { ok: false, error: 'Unauthorized Buzz sender: not in BUZZ_OPERATORS' });
-        }
-
-        const message = rawMessage.slice(0, 4000); // Bound memory buffer
-        
-        // Store immediately in memory (intent captured)
-        memory.storeMemory({
-          tenantId: 'tenant:drisyon_core',
-          projectId: 'buzz_integration',
-          category: 'operator_directive',
-          title: `Directive from Buzz: ${sender}`,
-          content: message,
-          tags: ['buzz', 'dispatcher', sender],
-          metadata: { source: 'buzz_events', sender }
-        });
-        
-        // Forward to agent chat (route to PO for autonomous agent spawning)
-        const ollamaReqData = JSON.stringify({
-          model: PERSONA_MODEL,
-          messages: [
-            { role: 'system', content: 'You are Arunachala Ramana. Process Buzz directives as operator commands and respond with clear, actionable next steps.' },
-            { role: 'user', content: `Buzz directive from ${sender}: ${message}` }
-          ],
-          stream: false,
-          options: { temperature: 0.3, num_predict: PERSONA_MAX_TOKENS }
-        });
-        
-        const ollamaReq = http.request({
-          host: OLLAMA_HOST,
-          port: OLLAMA_PORT,
-          path: '/api/chat',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(ollamaReqData)
-          },
-          timeout: 45000
-        }, (ollamaRes) => {
-          let resData = '';
-          ollamaRes.on('data', chunk => { resData += chunk; });
-          ollamaRes.on('end', () => {
-            try {
-              const parsed = JSON.parse(resData);
-              recordPersonaCall('buzz_event', parsed);
-              // Handle different model response formats
-              let reply = 'Agent spawning initiated.';
-              if (parsed.message && parsed.message.content) {
-                reply = parsed.message.content;
-              } else if (parsed.choices && parsed.choices[0] && parsed.choices[0].text) {
-                reply = parsed.choices[0].text;
-              } else if (typeof parsed === 'string') {
-                reply = parsed;
-              }
-              sendJson(res, 200, { ok: true, reply, agent: 'po', stored: true });
-            } catch (e) {
-              recordPersonaCall('buzz_event', null, false);
-              sendJson(res, 200, { ok: true, reply: resData.slice(0, 500), raw: true });
-            }
-          });
-        });
-        
-        ollamaReq.on('error', (e) => {
-          recordPersonaCall('buzz_event', null, false);
-          // Intent already stored above
-          sendJson(res, 200, { ok: true, reply: 'Agent spawning initiated', stored: true, from: sender });
-        });
-        
-        ollamaReq.write(ollamaReqData);
-        ollamaReq.end();
-      } catch (err) {
-        sendJson(res, 400, { ok: false, error: err.message });
-      }
+  // Deprecated (FR-SEC-05): Nostr bridge connects directly to relays (wss://drisyon-ai.communities.buzz.xyz)
+  if (req.url.startsWith('/api/buzz/events')) {
+    return sendJson(res, 410, {
+      ok: false,
+      status: 'gone',
+      error: 'Endpoint deprecated (FR-SEC-05). Directives are handled natively via Nostr relay (wss://drisyon-ai.communities.buzz.xyz) or authenticated dashboard dispatch (/api/dispatch/run).'
     });
-    return;
   }
   // ── END Buzz Integration ──
   return serveStaticFile(req, res);

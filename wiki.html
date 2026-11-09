@@ -196,6 +196,24 @@
       </div>
     </header>
 
+    <!-- Semantic Memory Search Card (Phase 1) -->
+    <div class="wiki-card" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(30, 41, 59, 0.75) 100%); border-color: rgba(14, 165, 233, 0.35);">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+        <h2 style="font-size: 1.15rem; margin-bottom: 0;"><span>🔍</span> Semantic Memory &amp; Knowledge Search</h2>
+        <span style="font-size: 0.75rem; color: var(--status-blue); font-family: 'JetBrains Mono', monospace;">Powered by Ollama nomic-embed-text (Local RAG)</span>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <input type="text" id="wiki-search-input" placeholder="Query memory, directives, runbooks, or decisions (e.g. 'runner status', 'tenant isolation', 'rebac')..." 
+               style="flex: 1; min-width: 260px; padding: 11px 16px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; font-size: 0.9rem;"
+               onkeydown="if(event.key==='Enter') executeSemanticSearch()">
+        <button onclick="executeSemanticSearch()" 
+                style="background: var(--status-blue); color: #fff; border: none; padding: 11px 22px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: var(--transition-smooth);">
+          Search Memory
+        </button>
+      </div>
+      <div id="wiki-search-results" style="margin-top: 16px; display: none;"></div>
+    </div>
+
     <!-- Navigation Pills -->
     <div class="filter-pills">
       <button class="filter-pill active" onclick="filterSection('all')">🌟 All Topics</button>
@@ -252,12 +270,26 @@
 
     <!-- Section: Agents & Hierarchy -->
     <section class="wiki-card section-topic" id="sec-agents">
-      <h2><span>🧭</span> Main Agent & Subagent Hierarchy</h2>
-      <p>All human directives enter through the <strong>Main Agent (🧭 Arunachala Ramana)</strong>, who decomposes instructions and delegates work across the specialized engineering personas and execution runners:</p>
+      <h2><span>🧭</span> Main Agent &amp; Subagent Hierarchy</h2>
+      <p>All human directives enter through the <strong>Main Agent (🧭 Arunachala Ramana)</strong> and are coordinated through the governance layer before delegation to specialized personas and execution engines:</p>
 
       <div class="grid-2">
         <div class="inner-panel">
-          <h3 style="color: #67e8f9; margin-top: 0;">🧭 Arunachala Ramana (Main Agent & PO)</h3>
+          <h3 style="color: #f59e0b; margin-top: 0;">🖇️ Paperclip (PMO &amp; Governance)</h3>
+          <p><strong>Responsibility:</strong> Workforce matrix, token cost caps, human-in-the-loop gates, task Kanban synchronization with <code>04_internal/TASKS.md</code>, and ReBAC boundary enforcement.</p>
+          <p><strong>Engine:</strong> Local Node.js controller &amp; Supabase session bridge.</p>
+          <p><strong>Best For:</strong> Enforcing budget limits, validating operator authorization, managing hired workforce state.</p>
+        </div>
+
+        <div class="inner-panel">
+          <h3 style="color: #38bdf8; margin-top: 0;">🦁 OpenClaw (Gateway &amp; MCP Router)</h3>
+          <p><strong>Responsibility:</strong> Omni-channel communication bridge, MCP tool protocol router, Stdio/TCP execution sandbox on port 18789.</p>
+          <p><strong>Config:</strong> <code>openclaw.json</code> (16 registered tool schemas).</p>
+          <p><strong>Best For:</strong> Sandboxing tool execution, routing requests across CLI and MCP endpoints.</p>
+        </div>
+
+        <div class="inner-panel">
+          <h3 style="color: #67e8f9; margin-top: 0;">🧭 Arunachala Ramana (Main Agent &amp; PO)</h3>
           <p><strong>Persona:</strong> Calm, strategic, practical, precise.</p>
           <p><strong>Responsibility:</strong> High-level system strategy, backlog prioritization, gating decisions, subagent orchestration, and human operator communication.</p>
           <p><strong>Model:</strong> <code>gemma3:4b</code> (128k context) via local Ollama Metal acceleration.</p>
@@ -265,7 +297,7 @@
         </div>
 
         <div class="inner-panel">
-          <h3 style="color: #60a5fa; margin-top: 0;">💻 Tech Lead & Architect (<code>tech</code>)</h3>
+          <h3 style="color: #60a5fa; margin-top: 0;">💻 Tech Lead &amp; Architect (<code>tech</code>)</h3>
           <p><strong>Responsibility:</strong> System architectures, code implementation, surgical refactors, AST diff analysis, and debugging.</p>
           <p><strong>Model:</strong> <code>qwen2.5-coder:3b</code> (32k context, tool calling enabled).</p>
           <p><strong>Tools:</strong> <code>view_file</code>, <code>replace_file_content</code>, <code>grep_search</code>, <code>find_by_name</code>.</p>
@@ -273,7 +305,7 @@
         </div>
 
         <div class="inner-panel">
-          <h3 style="color: #4ade80; margin-top: 0;">🧪 QA Lead & Verification (<code>qa</code>)</h3>
+          <h3 style="color: #4ade80; margin-top: 0;">🧪 QA Lead &amp; Verification (<code>qa</code>)</h3>
           <p><strong>Responsibility:</strong> Pre-commit checks, automated unit test execution, regression suites, lint sweeps.</p>
           <p><strong>Model:</strong> <code>qwen2.5-coder:3b</code>.</p>
           <p><strong>Tools:</strong> <code>run_command (npm test)</code>, <code>view_file</code>, <code>test_evaluator</code>.</p>
@@ -289,11 +321,19 @@
         </div>
 
         <div class="inner-panel">
-          <h3 style="color: #facc15; margin-top: 0;">🛠️ DevOps & Infrastructure (<code>infra</code>)</h3>
+          <h3 style="color: #facc15; margin-top: 0;">🛠️ DevOps &amp; Infrastructure (<code>infra</code>)</h3>
           <p><strong>Responsibility:</strong> Container lifecycle, Ollama Metal GPU mappings, PM2 process supervision, and Cloudflare tunnels.</p>
           <p><strong>Model:</strong> <code>gemma3:4b</code>.</p>
           <p><strong>Tools:</strong> <code>docker-compose</code>, <code>cloudflared</code>, <code>pm2</code>, <code>bash / zsh</code>.</p>
           <p><strong>Best For:</strong> PM2 daemon restarts, Cloudflare tunnel routing, Metal GPU telemetry, port collision resolution.</p>
+        </div>
+
+        <div class="inner-panel">
+          <h3 style="color: #ec4899; margin-top: 0;">📝 Doc Scribe (<code>doc</code>)</h3>
+          <p><strong>Responsibility:</strong> Project memory maintenance, changelog logs, task completion tracking, and keeping daily diary files up to date.</p>
+          <p><strong>Model:</strong> <code>gemma3:4b</code>.</p>
+          <p><strong>Tools:</strong> <code>write_to_file</code>, <code>view_file</code>, <code>list_dir</code>.</p>
+          <p><strong>Best For:</strong> Updating <code>MEMORY.md</code>, daily milestone logs, architectural decision records.</p>
         </div>
 
         <div class="inner-panel">
@@ -590,6 +630,37 @@ curl -s http://127.0.0.1:8787/api/rebac/inspect | jq .
           c.style.display = 'none';
         }
       });
+    }
+    async function executeSemanticSearch() {
+      const q = document.getElementById('wiki-search-input').value.trim();
+      const resultsEl = document.getElementById('wiki-search-results');
+      if (!q) return;
+      resultsEl.style.display = 'block';
+      resultsEl.innerHTML = '<div style="color: var(--color-text-muted); font-size: 0.85rem; padding: 6px 0;">Searching episodic and procedural memory with local embeddings...</div>';
+      try {
+        const res = await fetch(`/api/memory/search?q=${encodeURIComponent(q)}&tenant=*&topK=6`);
+        const data = await res.json();
+        if (!data.ok || !data.memories || data.memories.length === 0) {
+          resultsEl.innerHTML = '<div style="color: var(--color-text-muted); font-size: 0.85rem; padding: 8px 0;">No matching memories found for this query.</div>';
+          return;
+        }
+        let html = `<div style="font-size: 0.8rem; color: var(--status-green); margin-bottom: 10px; font-weight: 600;">Found ${data.count} memories (Ranker: ${data.ranker}):</div>`;
+        data.memories.forEach(m => {
+          html += `
+            <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <strong style="color: #67e8f9; font-size: 0.9rem;">${m.title || m.id}</strong>
+                <span style="background: rgba(34, 197, 94, 0.15); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace;">Score: ${m.score}</span>
+              </div>
+              <div style="font-size: 0.85rem; color: #e2e8f0; line-height: 1.5;">${m.content}</div>
+              <div style="margin-top: 6px; font-size: 0.72rem; color: var(--color-text-muted); font-family: 'JetBrains Mono', monospace;">Category: ${m.category || 'general'} · Tenant: ${m.tenantId || '-'} · Project: ${m.projectId || '-'}</div>
+            </div>
+          `;
+        });
+        resultsEl.innerHTML = html;
+      } catch (err) {
+        resultsEl.innerHTML = `<div style="color: var(--status-red); font-size: 0.85rem;">Search failed: ${err.message}</div>`;
+      }
     }
   </script>
 </body>

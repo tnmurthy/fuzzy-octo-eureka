@@ -1384,6 +1384,55 @@
         .catch((err) => renderCosts({ ok: false, error: `Could not load costs: ${err.message}` }));
     }
 
+    // ---------------------------------------------------------------------------
+    // Semantic Memory Search (Phase 1)
+    // ---------------------------------------------------------------------------
+    function toggleMemorySearchModal() {
+      const panel = document.getElementById('id-memory-search-panel');
+      if (!panel) return;
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      if (panel.style.display === 'block') {
+        const input = document.getElementById('id-memory-search-input');
+        if (input) input.focus();
+      }
+    }
+
+    async function executeDashboardMemorySearch() {
+      const input = document.getElementById('id-memory-search-input');
+      const resultsEl = document.getElementById('id-memory-search-results');
+      if (!input || !resultsEl) return;
+      const q = input.value.trim();
+      if (!q) return;
+
+      resultsEl.innerHTML = '<div style="color:var(--color-text-muted); font-style:italic; font-size:0.8rem;">Searching memories via embeddings...</div>';
+      try {
+        const res = await fetch(`/api/memory/search?q=${encodeURIComponent(q)}&tenant=*&topK=5`);
+        const data = await res.json();
+        if (!data.ok || !data.memories || data.memories.length === 0) {
+          resultsEl.innerHTML = '<div style="color:var(--color-text-muted); font-size:0.8rem;">No matching memories found.</div>';
+          return;
+        }
+        let html = `<div style="font-size:0.75rem; color:var(--status-green); font-weight:600; margin-bottom:4px;">Ranked via ${data.ranker} (${data.count} results):</div>`;
+        data.memories.forEach(m => {
+          html += `
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:6px; padding:10px 12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <strong style="color:var(--status-blue); font-size:0.85rem;">${m.title || m.id}</strong>
+                <span class="status-badge" style="font-size:0.65rem; padding:1px 6px;">Score: ${m.score}</span>
+              </div>
+              <div style="color:#cfd8dc; font-size:0.8rem; line-height:1.4;">${m.content}</div>
+              <div style="font-size:0.7rem; color:var(--color-text-muted); margin-top:4px; font-family:'JetBrains Mono', monospace;">Category: ${m.category || 'general'} · Tenant: ${m.tenantId || '-'}</div>
+            </div>
+          `;
+        });
+        resultsEl.innerHTML = html;
+      } catch (err) {
+        resultsEl.innerHTML = `<div style="color:var(--status-red); font-size:0.8rem;">Search failed: ${err.message}</div>`;
+      }
+    }
+
+    window.toggleMemorySearchModal = toggleMemorySearchModal;
+    window.executeDashboardMemorySearch = executeDashboardMemorySearch;
     window.loadCosts = loadCosts;
     window.switchTab = switchTab;
     window.selectAgent = selectAgent;
