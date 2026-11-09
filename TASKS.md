@@ -21,6 +21,8 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 |---|---|---|---|---|
 | TASK-103 | Apple Silicon Metal GPU generation benchmark suite | perf | Hermes / Infra | autonomous |
 
+| TASK-3483 | Build a status check endpoint for the auth service | fuzzy-octo-eureka | auto | autonomous |
+| TASK-4608 | Audit the security of the API endpoints and check ReBAC boundaries | fuzzy-octo-eureka | mantis | autonomous |
 ## 4. Evals & AppSec Verification
 
 | ID | Task | Project | Owner | Decision |

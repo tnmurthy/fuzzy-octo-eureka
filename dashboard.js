@@ -605,6 +605,34 @@
     // ---------------------------------------------------------------------------
     // Agent Direct Communicator
     // ---------------------------------------------------------------------------
+    function formatChatMarkdown(raw) {
+      if (!raw) return '';
+      let text = escapeHtml(raw);
+      // Fenced code blocks
+      text = text.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+        return `<pre style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:10px; margin:8px 0; overflow-x:auto;"><code class="language-${lang}" style="font-family:'JetBrains Mono',monospace; font-size:0.8rem; color:#e2e8f0;">${code}</code></pre>`;
+      });
+      // Inline code
+      text = text.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08); padding:1px 5px; border-radius:3px; font-family:\'JetBrains Mono\',monospace; font-size:0.85em; color:#38bdf8;">$1</code>');
+      // Bold
+      text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // Italic
+      text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      // Headers
+      text = text.replace(/^### (.*$)/gim, '<h4 style="margin:8px 0 4px; color:#38bdf8; font-size:0.92rem;">$1</h4>');
+      text = text.replace(/^## (.*$)/gim, '<h3 style="margin:10px 0 6px; color:#60a5fa; font-size:1.02rem;">$1</h3>');
+      // List items
+      text = text.replace(/^\s*[-•]\s+(.*$)/gim, '<li style="margin-left:16px; margin-bottom:2px;">$1</li>');
+      // Horizontal rules
+      text = text.replace(/^---$/gim, '<hr style="border:0; border-top:1px solid rgba(255,255,255,0.12); margin:10px 0;">');
+      // Newlines to <br> (except inside <pre>)
+      const parts = text.split(/(<pre[\s\S]*?<\/pre>)/);
+      for (let i = 0; i < parts.length; i += 2) {
+        parts[i] = parts[i].replace(/\n/g, '<br>');
+      }
+      return parts.join('');
+    }
+
     function handleAgentChatKey(e) {
       if (e.key === 'Enter') {
         sendAgentMessage();
@@ -647,7 +675,43 @@
 
           const agentBubble = document.createElement('div');
           agentBubble.className = 'chat-bubble agent';
-          agentBubble.innerHTML = `<strong>${agentProfiles[currentSelectedAgent].title}:</strong> ${data.reply || 'Task acknowledged.'}`;
+          const formattedReply = formatChatMarkdown(data.reply || 'Task acknowledged.');
+          agentBubble.innerHTML = `<strong>${agentProfiles[currentSelectedAgent].title}:</strong><div style="margin-top:6px; line-height:1.5;">${formattedReply}</div>`;
+
+          if (data.spawned && data.spawned.runId) {
+            const card = document.createElement('div');
+            card.className = 'agent-dispatch-card';
+            card.style.cssText = 'background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 10px 14px; margin-top: 10px; font-size: 0.82rem;';
+            card.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-weight:700; color:#34d399; display:flex; align-items:center; gap:6px;">
+                  <span class="status-dot green" style="box-shadow: 0 0 8px #10b981;"></span>
+                  Subagent Dispatched: <code style="color:#a7f3d0; background:#064e3b; padding:1px 6px; border-radius:4px;">${escapeHtml(data.spawned.agent)}</code>
+                </span>
+                <span style="font-size:0.75rem; color:#94a3b8; font-family:'JetBrains Mono',monospace;">Run ${escapeHtml(data.spawned.runId)}</span>
+              </div>
+              <div style="color:#cbd5e1; font-size:0.78rem; margin-bottom:8px; display:flex; gap:12px; flex-wrap:wrap;">
+                <span>Branch: <code style="color:#38bdf8;">${escapeHtml(data.spawned.branch)}</code></span>
+                <span>Repo: <code style="color:#cbd5e1;">${escapeHtml(data.spawned.repo)}</code></span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button onclick="switchTab('runs')" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:0.75rem; cursor:pointer; font-weight:600; display:flex; align-items:center; gap:4px;">
+                  🧭 View in Agent Runs
+                </button>
+                <button onclick="switchTab('kanban')" style="background:#334155; color:#cbd5e1; border:none; border-radius:4px; padding:4px 10px; font-size:0.75rem; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                  📋 View Kanban Board
+                </button>
+              </div>
+            `;
+            agentBubble.appendChild(card);
+            showToast(`🚀 Dispatched ${data.spawned.agent} (Run: ${data.spawned.runId})`, 'success', '🤖');
+            setAgentSessionBadge('active');
+            setTimeout(() => {
+              loadAgentRuns();
+              loadKanbanTasks();
+            }, 600);
+          }
+
           messagesEl.appendChild(agentBubble);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         })

@@ -113,6 +113,23 @@ let activeEvent = null; // the event currently being handled, for registerPendin
 
 const dispatch = {
   trigger: async ({ agent, repo, task }) => {
+    // 1. Direct local dashboard dispatch on port 8787
+    try {
+      const res = await fetch(DASHBOARD + '/api/dispatch/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent, repo, task }),
+        signal: AbortSignal.timeout(DISPATCH_TRIGGER_TIMEOUT_MS),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.runId) {
+        return { runId: body.runId };
+      }
+    } catch (_) {
+      // Fall through to n8n if dashboard dispatch fails
+    }
+
+    // 2. Fallback to n8n dispatch webhook
     const res = await fetch(N8N_DISPATCH_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -120,7 +137,7 @@ const dispatch = {
       signal: AbortSignal.timeout(DISPATCH_TRIGGER_TIMEOUT_MS),
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok || !body.runId) throw new Error(body.error || `n8n webhook HTTP ${res.status}`);
+    if (!res.ok || !body.runId) throw new Error(body.error || `dispatch HTTP ${res.status}`);
     return { runId: body.runId };
   },
   registerPending: (runId) => pendingDispatch.set(runId, activeEvent),

@@ -710,6 +710,58 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
   });
 }
 
+function detectActionableTask(message, agentKey) {
+  if (!message || typeof message !== 'string') return { actionable: false };
+  const text = message.trim();
+  if (text.length < 3) return { actionable: false };
+
+  // Explicit directive prefix patterns
+  const directivePrefixRegex = /^(?:task|todo|do|assign|directive|instruction|command|run|dispatch):\s*(.+)$/i;
+  const prefixMatch = text.match(directivePrefixRegex);
+  const taskContent = prefixMatch ? prefixMatch[1].trim() : text;
+
+  // Conversational / greeting patterns that should NOT trigger dispatch on their own
+  const conversationalRegex = /^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|who\s+are\s+you\??|what\s+can\s+you\s+do\??|what\s+is\s+your\s+role\??|are\s+you\s+(there|up|ready)\??|status\??|help\??|test)$/i;
+  if (!prefixMatch && taskContent.length < 35 && conversationalRegex.test(taskContent)) {
+    return { actionable: false };
+  }
+
+  // Action verbs / imperative keywords indicating real work
+  const actionVerbRegex = /\b(build|fix|implement|create|add|update|refactor|audit|test|scan|write|deploy|generate|delete|remove|patch|repair|clean|setup|configure|verify|inspect|run|investigate|execute|dispatch|benchmark|monitor|migrate|resolve|develop|scaffold|optimize|automate)\b/i;
+
+  if (prefixMatch || actionVerbRegex.test(taskContent)) {
+    // Determine target subagent
+    let targetAgent = 'auto'; // default: local hermes first with claude fallback
+    const lower = taskContent.toLowerCase();
+
+    if (agentKey === 'sec' || lower.includes('security') || lower.includes('audit') || lower.includes('vulnerability') || lower.includes('mantis') || lower.includes('rebac') || lower.includes('cve') || lower.includes('penetration') || lower.includes('pentest') || lower.includes('exploit') || lower.includes('access control')) {
+      targetAgent = 'mantis';
+    } else if (agentKey === 'qa' || lower.includes('test') || lower.includes('unit test') || lower.includes('e2e') || lower.includes('lint') || lower.includes('pre-commit') || lower.includes('coverage') || lower.includes('verification') || lower.includes('vitest')) {
+      targetAgent = 'auto';
+    } else if (agentKey === 'hermes' || lower.includes('hermes') || lower.includes('local model')) {
+      targetAgent = 'hermes';
+    } else if (agentKey === 'openhands' || lower.includes('canvas') || lower.includes('openhands')) {
+      targetAgent = 'openhands';
+    } else if (lower.includes('@claude') || lower.includes('claude')) {
+      targetAgent = 'claude';
+    } else if (lower.includes('@codex') || lower.includes('codex')) {
+      targetAgent = 'codex';
+    } else if (lower.includes('@mantis')) {
+      targetAgent = 'mantis';
+    } else if (lower.includes('@hermes')) {
+      targetAgent = 'hermes';
+    }
+
+    return {
+      actionable: true,
+      task: taskContent,
+      targetAgent
+    };
+  }
+
+  return { actionable: false };
+}
+
 function handleRequest(req, res) {
   // ── OpenHands Canvas Proxy (Phase 2) ──
   if (req.url.startsWith('/canvas') || req.url.startsWith('/vscode')) {
@@ -922,6 +974,66 @@ function handleRequest(req, res) {
           doc: "You are Documentation Specialist for tt-ai-stack. You maintain memory logs, changelogs, and project state."
         };
 
+        const targetRepo = payload.repo || path.basename(DASHBOARD_DIR);
+        const targetRepoPath = resolveRepoPath(targetRepo);
+
+        // Detect if the directive is actionable
+        const taskInfo = (payload.dispatch === true)
+          ? { actionable: true, task: userMessage, targetAgent: payload.targetAgent || 'auto' }
+          : detectActionableTask(userMessage, agentKey);
+
+        let dispatchPromise = Promise.resolve(null);
+        let dispatchWarning = null;
+
+        if (taskInfo.actionable) {
+          const safetyCheck = validateDispatchSafety(taskInfo.task, payload);
+          if (!safetyCheck.ok) {
+            dispatchWarning = safetyCheck.error;
+          } else {
+            const branch = `${agentKey}/${taskInfo.targetAgent}-${Date.now().toString(36)}`;
+            dispatchPromise = spawnAgentDispatch({
+              agent: taskInfo.targetAgent,
+              repo: targetRepo,
+              repoPath: targetRepoPath,
+              branch,
+              task: taskInfo.task
+            }).then((dispatchRes) => {
+              // Record in episodic memory
+              try {
+                memory.storeMemory({
+                  title: `Task Dispatched: [${taskInfo.targetAgent.toUpperCase()}] ${taskInfo.task.slice(0, 50)}`,
+                  content: `Strategist (${agentKey}) dispatched subagent ${taskInfo.targetAgent} on branch ${branch} for repository ${targetRepo}. Task: "${taskInfo.task}". Run ID: ${dispatchRes.runId}.`,
+                  category: 'task_dispatch',
+                  tenantId: actor.includes('drisyon') ? 'tenant:drisyon_core' : 'tenant:default',
+                  projectId: targetRepo
+                });
+              } catch (_) {}
+
+              // Record in task board (TASKS.md / teamStore)
+              try {
+                const tasksFile = resolveTasksFile(DASHBOARD_DIR);
+                const taskObj = {
+                  title: taskInfo.task,
+                  project: targetRepo,
+                  owner: taskInfo.targetAgent,
+                  status: 'in_execution',
+                  decision: 'autonomous'
+                };
+                if (teamStore) {
+                  teamStore.createTask(taskObj).catch(() => {});
+                } else {
+                  addLocalTask(tasksFile, taskObj);
+                }
+              } catch (_) {}
+
+              return dispatchRes;
+            }).catch((err) => {
+              console.error('Task dispatch spawn failed:', err.message);
+              return { error: err.message };
+            });
+          }
+        }
+
         const systemPrompt = agentSystemPrompts[agentKey] || agentSystemPrompts.po;
         const ollamaReqData = JSON.stringify({
           model: PERSONA_MODEL,
@@ -946,7 +1058,7 @@ function handleRequest(req, res) {
         }, (ollamaRes) => {
           let resData = '';
           ollamaRes.on('data', chunk => { resData += chunk; });
-          ollamaRes.on('end', () => {
+          ollamaRes.on('end', async () => {
             try {
               const parsed = JSON.parse(resData);
               recordPersonaCall('persona', parsed);
@@ -959,17 +1071,52 @@ function handleRequest(req, res) {
               } else if (typeof parsed === 'string') {
                 reply = parsed;
               }
-              sendJson(res, 200, { ok: true, reply, agent: agentKey });
+
+              const dispatchResult = await dispatchPromise;
+              if (dispatchResult && dispatchResult.runId) {
+                reply += `\n\n---\n🚀 **Autonomous Subagent Dispatched**\n- **Subagent:** \`${dispatchResult.agent}\`\n- **Run ID:** \`${dispatchResult.runId}\`\n- **Branch:** \`${dispatchResult.branch}\`\n- **Repository:** \`${dispatchResult.repo}\`\n- **Status:** Active in isolated git worktree. Live tracking in the **Agent Runs** tab.`;
+              } else if (dispatchWarning) {
+                reply += `\n\n---\n⚠️ **Dispatch Notice:** ${dispatchWarning}`;
+              }
+
+              sendJson(res, 200, {
+                ok: true,
+                reply,
+                agent: agentKey,
+                spawned: (dispatchResult && dispatchResult.runId) ? dispatchResult : null
+              });
             } catch (e) {
               recordPersonaCall('persona', null, false);
-              sendJson(res, 200, { ok: false, reply: `[Local model error]: ${resData.slice(0, 150)}` });
+              const dispatchResult = await dispatchPromise.catch(() => null);
+              let reply = `[Local model error]: ${resData.slice(0, 150)}`;
+              if (dispatchResult && dispatchResult.runId) {
+                reply += `\n\n🚀 **Autonomous Subagent Dispatched:** Run ID \`${dispatchResult.runId}\` on branch \`${dispatchResult.branch}\`.`;
+              }
+              sendJson(res, 200, {
+                ok: true,
+                reply,
+                agent: agentKey,
+                spawned: (dispatchResult && dispatchResult.runId) ? dispatchResult : null
+              });
             }
           });
         });
 
-        ollamaReq.on('error', (e) => {
+        ollamaReq.on('error', async (e) => {
           recordPersonaCall('persona', null, false);
-          sendJson(res, 200, { ok: true, reply: `[Offline fallback response]: Hello ${OPERATOR_NAME}! I am Arunachala Ramana. Received: "${userMessage}". Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.` });
+          const dispatchResult = await dispatchPromise.catch(() => null);
+          let reply = `Hello ${OPERATOR_NAME}! I am Arunachala Ramana. Received: "${userMessage}".`;
+          if (dispatchResult && dispatchResult.runId) {
+            reply += `\n\nStrategic priority established: Task dispatched directly to subagent \`${dispatchResult.agent}\` in an isolated git worktree.\n\n---\n🚀 **Autonomous Subagent Dispatched**\n- **Subagent:** \`${dispatchResult.agent}\`\n- **Run ID:** \`${dispatchResult.runId}\`\n- **Branch:** \`${dispatchResult.branch}\`\n- **Repository:** \`${dispatchResult.repo}\`\n- **Status:** Active. Live tracking in the **Agent Runs** tab.`;
+          } else {
+            reply += ` Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.`;
+          }
+          sendJson(res, 200, {
+            ok: true,
+            reply,
+            agent: agentKey,
+            spawned: (dispatchResult && dispatchResult.runId) ? dispatchResult : null
+          });
         });
 
         ollamaReq.write(ollamaReqData);
