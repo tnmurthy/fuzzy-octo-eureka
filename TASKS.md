@@ -49,3 +49,4 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 | Dual Cloudflare Tunnel routing for team and drisyon domains | 2026-11-08 |
 
 | Verify automated unit tests pass | 2026-11-09 |
+| Audit API authentication boundaries and tenant ReBAC isolation | 2026-11-09 |

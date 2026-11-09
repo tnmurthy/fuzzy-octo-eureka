@@ -439,6 +439,44 @@ function readJsonBody(req, limit) {
   });
 }
 
+const TASK_AUDIT_LOG = path.join(DASHBOARD_DIR, 'logs', 'task-audit.jsonl');
+
+function recordTaskTransitionAudit(taskId, task, newStatus, actor) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    taskId: taskId || (task && task.id),
+    title: (task && (task.task || task.title)) || taskId,
+    status: newStatus,
+    actor: actor || 'user:operator',
+    decisionRights: newStatus === 'human_review' ? 'sovereign' : (newStatus === 'planning' ? 'copilot' : 'autonomous')
+  };
+
+  fs.appendFile(TASK_AUDIT_LOG, JSON.stringify(entry) + '\n', (err) => {
+    if (err) console.error('Failed to append task audit log:', err.message);
+  });
+
+  // If entering Sovereign Review, trigger alert webhook (e.g. n8n or Buzz bridge)
+  if (newStatus === 'human_review') {
+    const alertPayload = {
+      event: 'sovereign_review_required',
+      taskId: entry.taskId,
+      title: entry.title,
+      timestamp: entry.timestamp,
+      actor: entry.actor,
+      url: 'http://127.0.0.1:8787/#kanban'
+    };
+    const webhookUrl = process.env.N8N_ALERT_WEBHOOK_URL || 'http://127.0.0.1:5678/webhook/sovereign-alert';
+    try {
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(alertPayload),
+        signal: AbortSignal.timeout(1500)
+      }).catch(() => {});
+    } catch {}
+  }
+}
+
 // Task Board. With team-store on, the shared board in Supabase (create with
 // POST /api/tasks, move with PATCH /api/tasks/<id>); otherwise, or if the
 // team board can't be reached, the read-only 04_internal/TASKS.md.
@@ -457,24 +495,43 @@ function handleTasks(req, res) {
     });
   };
 
-  if (req.method === 'GET') {
-    if (!teamStore) return readLocal();
-    teamStore.teamTasks()
-      .then((body) => sendJson(res, 200, body))
-      .catch((err) => readLocal(`team board unavailable: ${err.message}`));
-    return;
-  }
   const id = req.url.split('?')[0].split('/')[3];
+
+  if (req.method === 'GET') {
+    if (id === 'audit') {
+      return fs.readFile(TASK_AUDIT_LOG, 'utf8', (err, data) => {
+        if (err) return sendJson(res, 200, { ok: true, audit: [] });
+        const entries = data.trim().split('\n').filter(Boolean).map(l => {
+          try { return JSON.parse(l); } catch { return null; }
+        }).filter(Boolean).reverse().slice(0, 50);
+        return sendJson(res, 200, { ok: true, audit: entries });
+      });
+    }
+    if (!id) {
+      if (!teamStore) return readLocal();
+      teamStore.teamTasks()
+        .then((body) => sendJson(res, 200, body))
+        .catch((err) => readLocal(`team board unavailable: ${err.message}`));
+      return;
+    }
+  }
+
+  const actor = (req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')) ? 'user:drisyon' : 'user:sriad';
+
   if (req.method === 'POST' && !id) {
     readJsonBody(req, MAX_TASK_BODY_BYTES)
       .then((input) => {
         const v = validateNewTask(input);
         if (!v.ok) return sendJson(res, 400, { ok: false, error: v.error });
         if (teamStore) {
-          return teamStore.createTask(v.task).then((task) => sendJson(res, 201, { ok: true, task }));
+          return teamStore.createTask(v.task).then((task) => {
+            recordTaskTransitionAudit(task.id, task, task.status, actor);
+            return sendJson(res, 201, { ok: true, task });
+          });
         }
         try {
           const task = addLocalTask(tasksFile, v.task);
+          recordTaskTransitionAudit(task.id, task, task.status, actor);
           return sendJson(res, 201, { ok: true, source: 'local', task });
         } catch (e) {
           return sendJson(res, 500, { ok: false, error: e.message });
@@ -483,18 +540,22 @@ function handleTasks(req, res) {
       .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
     return;
   }
-  if (req.method === 'PATCH' && id) {
+  if (req.method === 'PATCH' && id && id !== 'audit') {
     readJsonBody(req, MAX_TASK_BODY_BYTES)
       .then((input) => {
         if (!validateStatus(input.status)) return sendJson(res, 400, { ok: false, error: 'status must be backlog, in_progress or done' });
         if (teamStore) {
           if (!UUID_RE.test(id)) return sendJson(res, 400, { ok: false, error: 'task id must be a UUID' });
-          return teamStore.moveTask(id, input.status).then((task) => (task
-            ? sendJson(res, 200, { ok: true, task })
-            : sendJson(res, 404, { ok: false, error: 'no such task on your team board' })));
+          return teamStore.moveTask(id, input.status).then((task) => {
+            if (task) recordTaskTransitionAudit(id, task, input.status, actor);
+            return task
+              ? sendJson(res, 200, { ok: true, task })
+              : sendJson(res, 404, { ok: false, error: 'no such task on your team board' });
+          });
         }
         try {
           const task = moveLocalTask(tasksFile, id, input.status);
+          if (task) recordTaskTransitionAudit(id, task, input.status, actor);
           return task
             ? sendJson(res, 200, { ok: true, source: 'local', task })
             : sendJson(res, 404, { ok: false, error: `no such task found: ${id}` });
