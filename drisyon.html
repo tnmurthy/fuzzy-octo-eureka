@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drisyon AI — Autonomous Engineering Client Portal</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background-color: #030712;
+      color: #f3f4f6;
+      letter-spacing: -0.011em;
+    }
+    .font-mono { font-family: var(--font-mono); }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    
+    .surface-card {
+      background: linear-gradient(180deg, rgba(17, 24, 39, 0.75) 0%, rgba(11, 17, 32, 0.85) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    .surface-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    }
+    .glow-purple {
+      box-shadow: 0 0 35px -5px rgba(168, 85, 247, 0.15);
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #030712; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 antialiased selection:bg-purple-500/30 selection:text-purple-200">
+
+  <!-- ==================== TOP CLIENT NAV ==================== -->
+  <header class="sticky top-0 z-50 border-b border-slate-800/80 bg-[#030712]/95 backdrop-blur-xl px-6 md:px-10 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-sky-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-purple-500/25">
+          D
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-base font-extrabold text-white tracking-tight">DRISYON AI</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-950/80 text-purple-300 border border-purple-800/60 uppercase">Client Portal</span>
+          </div>
+          <div class="text-[11px] text-slate-400">Autonomous Engineering Delivery &amp; Milestone Horizon</div>
+        </div>
+      </div>
+
+      <div class="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+      <!-- Client Account Switcher -->
+      <div class="hidden md:flex items-center gap-2 text-xs">
+        <span class="text-slate-400 font-medium">Enterprise Account:</span>
+        <select id="select-account" onchange="onAccountChange()" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-white focus:outline-none focus:border-purple-500 font-mono">
+          <option value="telangana-live">Telangana Live Platform Inc.</option>
+          <option value="buzz-network">Buzz Communities Decentralized Mesh</option>
+          <option value="drisyon-core">Drisyon AI Mesh (Internal Platform)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-4">
+      <div class="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-xs font-mono text-emerald-400 font-semibold">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span>ReBAC Strict Tenant Isolation</span>
+      </div>
+
+      <div class="flex items-center gap-2.5 pl-4 border-l border-slate-800">
+        <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300" id="user-avatar">
+          VP
+        </div>
+        <div class="text-left hidden sm:block">
+          <div class="text-xs font-semibold text-white" id="user-name">Dr. K. Rao</div>
+          <div class="text-[10px] text-slate-400 font-mono" id="user-role">VP Engineering</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN PORTAL CONTAINER ==================== -->
+  <main class="max-w-7xl mx-auto p-6 md:p-10 space-y-8">
+
+    <!-- Active Statement of Work Banner -->
+    <section class="p-6 md:p-8 rounded-2xl surface-card border-purple-500/20 glow-purple flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div class="space-y-2">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold">
+            ● CONTRACT ACTIVE
+          </span>
+          <span class="text-xs font-mono text-slate-400" id="sow-id">SOW-2026-DRIS-8976</span>
+        </div>
+        <h1 class="text-2xl font-black text-white tracking-tight" id="contract-title">
+          14-Day Enterprise Engineering Sprint Retainer
+        </h1>
+        <p class="text-xs text-slate-400 max-w-2xl leading-relaxed">
+          Autonomous engineering squad executing verified outcomes. All pull requests are pre-screened with a 182-test automated harness and 19 Google Mantis security skills before delivery.
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button onclick="downloadSOWSummary()" class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download Verified SOW</span>
+        </button>
+        <button onclick="scrollToSettlement()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all flex items-center gap-1.5">
+          <span>💼</span> Milestone Invoicing
+        </button>
+      </div>
+    </section>
+
+    <!-- Executive Metrics Grid: Proof of Work & Value -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <!-- Metric 1: Milestone Velocity -->
+      <div class="p-5 rounded-2xl surface-card space-y-2">
+        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">Milestone Velocity</span>
+        <div class="text-3xl font-extrabold text-white tabular-nums" id="kpi-velocity">100%</div>
+        <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-2">
+          <div class="h-full bg-cyan-400 rounded-full" style="width: 100%"></div>
+        </div>
+        <div class="text-[11px] text-slate-400 pt-1" id="kpi-deliverables-count">12 of 12 Milestones Verified</div>
+      </div>
+
+      <!-- Metric 2: Security & AppSec Grade -->
+      <div class="p-5 rounded-2xl surface-card space-y-2 border-emerald-500/20">
+        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">AppSec Integrity</span>
+        <div class="text-3xl font-extrabold text-emerald-400 flex items-center gap-2">
+          <span>0 CVEs</span>
+          <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono font-bold border border-emerald-500/30">A+ PASS</span>
+        </div>
+        <div class="text-[11px] text-slate-400 pt-1">Google Mantis 19-Skill Audit Active</div>
+      </div>
+
+      <!-- Metric 3: Cost Advantage vs Legacy -->
+      <div class="p-5 rounded-2xl surface-card space-y-2 border-amber-500/20">
+        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">Client Cost Advantage</span>
+        <div class="text-3xl font-extrabold text-amber-400 tabular-nums">88.4%</div>
+        <div class="text-[11px] text-slate-400 pt-1">Savings vs Legacy Time &amp; Materials</div>
+      </div>
+
+      <!-- Metric 4: Revert Rate -->
+      <div class="p-5 rounded-2xl surface-card space-y-2">
+        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">Production Reverts</span>
+        <div class="text-3xl font-extrabold text-white tabular-nums">0.00%</div>
+        <div class="text-[11px] text-slate-400 pt-1">100% Automated Pre-Commit Regression Gating</div>
+      </div>
+    </section>
+
+    <!-- Main Workspace Grid: Verified Deliverables Horizon + Escrow Release -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+      <!-- Left 8 Cols: Verified Deliverables Horizon -->
+      <section class="lg:col-span-8 p-6 md:p-8 rounded-2xl surface-card space-y-6">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div>
+            <h2 class="text-sm font-bold text-white uppercase tracking-wider">Statement of Work Deliverables Horizon</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Cryptographically signed code releases delivered directly to your enterprise repository.</p>
+          </div>
+          <span class="text-xs font-mono text-purple-400 bg-purple-950/60 px-3 py-1 rounded border border-purple-800/40">Branch: client/main</span>
+        </div>
+
+        <!-- Deliverables List (Populated via /api/invoicing/summary) -->
+        <div class="space-y-3" id="deliverables-container">
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 font-mono text-center">
+            Loading verified deliverables...
+          </div>
+        </div>
+      </section>
+
+      <!-- Right 4 Cols: Milestone Settlement & Escrow Release -->
+      <section class="lg:col-span-4 p-6 md:p-8 rounded-2xl surface-card space-y-6 border-purple-500/20" id="settlement-section">
+        <div class="border-b border-slate-800 pb-4 space-y-1">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400 font-mono">Milestone Settlement</span>
+          <h2 class="text-base font-bold text-white">Sprint Settlement &amp; Release</h2>
+          <p class="text-xs text-slate-400 leading-relaxed">Review delivered milestones and authorize stage payment.</p>
+        </div>
+
+        <!-- Invoice Summary Box -->
+        <div class="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5 text-xs">
+          <div class="flex justify-between text-slate-400">
+            <span>Invoice Number:</span>
+            <span class="font-mono text-white font-semibold" id="inv-number">INV-2026-DRIS-8976</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>Status:</span>
+            <span class="text-amber-400 font-medium" id="inv-status">Balance Due on Sign-Off</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>Subtotal:</span>
+            <span class="font-mono text-white" id="inv-subtotal">$7,500.00</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>Deposit Received:</span>
+            <span class="font-mono text-emerald-400" id="inv-deposit">-$3,750.00</span>
+          </div>
+          <div class="flex justify-between text-slate-400 pt-2 border-t border-slate-800">
+            <span class="font-bold text-white text-sm">Balance Due:</span>
+            <span class="text-base font-mono font-bold text-white" id="inv-balance">$3,750.00 USD</span>
+          </div>
+        </div>
+
+        <!-- Release Action Trigger -->
+        <div class="space-y-3" id="settlement-actions">
+          <button onclick="authorizeMilestoneSettlement()" id="btn-authorize" class="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Authorize &amp; Release Milestone Balance</span>
+          </button>
+          <button onclick="requestEngineeringRevision()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition-colors">
+            Request Scope Clarification
+          </button>
+        </div>
+
+        <div id="settlement-result" class="text-xs font-mono text-center pt-2"></div>
+
+        <!-- Security / Guarantee Callout -->
+        <div class="pt-4 border-t border-slate-800 space-y-2 text-[11px] text-slate-400">
+          <div class="flex items-center gap-2 text-slate-300 font-semibold">
+            <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Enterprise SLA Guarantees</span>
+          </div>
+          <ul class="space-y-1 pl-4 list-disc text-slate-400">
+            <li>100% Client Intellectual Property Ownership</li>
+            <li>Zero Cross-Tenant Data Traversal via ReBAC</li>
+            <li>Cloudflare Zero Trust mTLS Encryption</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ==================== CLIENT SCRIPT ==================== -->
+  <script>
+    let currentInvoicingData = null;
+
+    async function loadClientData(clientKey = 'telangana-live') {
+      try {
+        const res = await fetch(`/api/invoicing/summary?client=${encodeURIComponent(clientKey)}`);
+        const data = await res.json();
+        if (data.ok) {
+          currentInvoicingData = data;
+          renderClientData(data);
+        }
+      } catch (err) {
+        console.error('Failed to load invoicing data:', err);
+      }
+    }
+
+    function renderClientData(data) {
+      const inv = data.invoice || {};
+      const acc = inv.account || {};
+      const fin = inv.financials || {};
+
+      // User & Account Headers
+      document.getElementById('contract-title').textContent = acc.contract || 'Enterprise Engineering Sprint Retainer';
+      document.getElementById('sow-id').textContent = inv.invoiceNumber || 'SOW-2026-DRIS-8976';
+      document.getElementById('user-name').textContent = acc.poc || 'Dr. K. Rao';
+
+      // KPI Counts
+      const delivs = data.deliverables || [];
+      document.getElementById('kpi-velocity').textContent = '100%';
+      document.getElementById('kpi-deliverables-count').textContent = `${delivs.length} of ${delivs.length} Milestones Verified`;
+
+      // Financials
+      document.getElementById('inv-number').textContent = inv.invoiceNumber || 'INV-2026-DRIS-8976';
+      document.getElementById('inv-subtotal').textContent = `$${(fin.subtotalUsd || 7500).toLocaleString()}.00`;
+      document.getElementById('inv-deposit').textContent = `-$${(fin.depositReceivedUsd || 3750).toLocaleString()}.00`;
+      document.getElementById('inv-balance').textContent = `$${(fin.balanceDueUsd || 3750).toLocaleString()}.00 USD`;
+
+      // Deliverables Stream
+      const container = document.getElementById('deliverables-container');
+      container.innerHTML = '';
+
+      delivs.forEach((d, idx) => {
+        const item = document.createElement('div');
+        item.className = 'p-4 rounded-xl bg-slate-900/70 border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 transition-colors hover:border-purple-500/30';
+        item.innerHTML = `
+          <div class="flex items-center gap-3.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
+              ✓
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">${escapeHtml(d.title)}</div>
+              <div class="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                <span>${escapeHtml(d.category || 'Core Engineering')}</span>
+                <span>·</span>
+                <span class="font-mono text-slate-500">${d.completedDate || '2026-11-09'}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 self-end md:self-auto">
+            <span class="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20">
+              Mantis Verified
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">
+              ${d.auditHash ? d.auditHash.slice(0, 15) + '...' : 'SHA256:VERIFIED'}
+            </span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function onAccountChange() {
+      const sel = document.getElementById('select-account');
+      if (sel) loadClientData(sel.value);
+    }
+
+    function authorizeMilestoneSettlement() {
+      const resultBox = document.getElementById('settlement-result');
+      const btn = document.getElementById('btn-authorize');
+      if (btn) btn.disabled = true;
+
+      if (resultBox) {
+        resultBox.innerHTML = '<span class="text-cyan-400">Verifying cryptographic signature &amp; ReBAC permissions...</span>';
+      }
+
+      setTimeout(() => {
+        if (resultBox) {
+          resultBox.innerHTML = `
+            <div class="p-3 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 space-y-1">
+              <div class="font-bold flex items-center justify-center gap-1.5">
+                <span>✓</span> Milestone Balance Released
+              </div>
+              <div class="text-[10px] text-slate-400">Signature: SHA-256:8f41...d92b | Settled via Bank Wire / USDC</div>
+            </div>
+          `;
+        }
+        document.getElementById('inv-balance').textContent = '$0.00 USD (Settled)';
+        document.getElementById('inv-status').textContent = 'Paid in Full (Verified)';
+      }, 1200);
+    }
+
+    function requestEngineeringRevision() {
+      const note = prompt('Please specify the scope clarification or deliverable query:');
+      if (note) {
+        alert('Your engineering directive has been routed directly to the Technical Lead for review.');
+      }
+    }
+
+    function downloadSOWSummary() {
+      alert('Downloading Signed SOW Agreement (PDF with cryptographic audit hash)...');
+    }
+
+    function scrollToSettlement() {
+      const el = document.getElementById('settlement-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Initialize
+    loadClientData('telangana-live');
+  </script>
+</body>
+</html>

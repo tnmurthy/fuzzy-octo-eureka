@@ -254,11 +254,13 @@ function serveJsonFile(res, filePath, emptyValue) {
 
 function serveStaticFile(req, res) {
   let urlPath = req.url.split('?')[0];
-  if (urlPath === '/') urlPath = '/index.html';
+  const isDrisyon = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
+  if (urlPath === '/') urlPath = isDrisyon ? '/drisyon.html' : '/index.html';
+  if (urlPath === '/drisyon' || urlPath === '/portal') urlPath = '/drisyon.html';
   if (urlPath === '/wiki') urlPath = '/wiki.html';
   if (urlPath === '/team') urlPath = '/team.html';
   if (urlPath === '/costing') urlPath = '/costing.html';
-  if (urlPath === '/invoicing' || urlPath === '/portal') urlPath = '/invoicing.html';
+  if (urlPath === '/invoicing') urlPath = '/invoicing.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
