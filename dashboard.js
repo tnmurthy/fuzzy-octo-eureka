@@ -349,10 +349,84 @@
         });
     }
 
+    function openAuditModal() {
+      const modal = document.getElementById('audit-trail-modal');
+      if (modal) modal.style.display = 'flex';
+      loadTaskAuditTrail();
+    }
+
+    function closeAuditModal() {
+      const modal = document.getElementById('audit-trail-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function loadTaskAuditTrail() {
+      const listEl = document.getElementById('audit-trail-list');
+      if (!listEl) return;
+      listEl.innerHTML = '<div style="font-size:0.8rem; color:#94a3b8; padding:10px; text-align:center;">Loading audit records...</div>';
+
+      fetch('/api/tasks/audit')
+        .then(res => res.json())
+        .then(data => {
+          const records = (data && data.audit) || [];
+          listEl.innerHTML = '';
+          if (records.length === 0) {
+            listEl.innerHTML = '<div style="font-size:0.8rem; color:#94a3b8; padding:16px; text-align:center;">No audit records found yet.</div>';
+            return;
+          }
+
+          records.forEach(r => {
+            const item = document.createElement('div');
+            item.style.cssText = 'background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:4px;';
+
+            let decisionBadge = '<span class="decision-badge autonomous">🟢 Autonomous</span>';
+            if (r.decisionRights === 'sovereign') {
+              decisionBadge = '<span class="decision-badge sovereign">🔴 Sovereign</span>';
+            } else if (r.decisionRights === 'copilot') {
+              decisionBadge = '<span class="decision-badge copilot">🟡 Co-Pilot</span>';
+            }
+
+            const dateStr = r.timestamp ? new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+            const stageColorMap = {
+              intake: '#94a3b8',
+              planning: '#f59e0b',
+              in_execution: '#00b0ff',
+              verification: '#a855f7',
+              human_review: '#ef4444',
+              done: '#10b981'
+            };
+            const stageColor = stageColorMap[r.status] || '#94a3b8';
+
+            item.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-weight:700; color:#38bdf8; font-size:0.85rem;">#${r.taskId || 'TASK'}</span>
+                  <span style="font-size:0.75rem; font-weight:600; padding:2px 8px; border-radius:4px; background:${stageColor}22; color:${stageColor}; border:1px solid ${stageColor}44;">${r.status}</span>
+                  ${decisionBadge}
+                </div>
+                <span style="font-size:0.72rem; color:#64748b; font-family:'JetBrains Mono',monospace;">${dateStr}</span>
+              </div>
+              <div style="font-size:0.82rem; color:#f1f5f9; margin-top:2px;">${escapeHtml(r.title || '')}</div>
+              <div style="font-size:0.72rem; color:#94a3b8; display:flex; justify-content:space-between; margin-top:2px;">
+                <span>Actor: <code style="color:#cbd5e1;">${escapeHtml(r.actor || 'operator')}</code></span>
+              </div>
+            `;
+            listEl.appendChild(item);
+          });
+        })
+        .catch(err => {
+          listEl.innerHTML = `<div style="font-size:0.8rem; color:#f87171; padding:10px;">Failed to load audit records: ${err.message}</div>`;
+        });
+    }
+
     document.addEventListener('click', (e) => {
       const modal = document.getElementById('add-task-modal');
       if (modal && e.target === modal) {
         closeAddTaskModal();
+      }
+      const auditModal = document.getElementById('audit-trail-modal');
+      if (auditModal && e.target === auditModal) {
+        closeAuditModal();
       }
     });
 
@@ -1750,6 +1824,9 @@
     window.dispatchCardTask = dispatchCardTask;
     window.openAddTaskModal = openAddTaskModal;
     window.closeAddTaskModal = closeAddTaskModal;
+    window.openAuditModal = openAuditModal;
+    window.closeAuditModal = closeAuditModal;
+    window.loadTaskAuditTrail = loadTaskAuditTrail;
     window.handleCreateKanbanTask = handleCreateKanbanTask;
     window.showToast = showToast;
 

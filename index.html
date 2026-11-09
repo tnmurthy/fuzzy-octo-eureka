@@ -305,8 +305,9 @@
                 <p>6-Stage Autonomous Execution &amp; Bain Decision-Rights Flow parsed from <code>TASKS.md</code>.</p>
               </div>
               <div class="action-group" style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary" onclick="openAuditModal()">📜 Audit Trail</button>
                 <button class="btn btn-primary" onclick="openAddTaskModal()">➕ New Task</button>
-                <button class="btn btn-secondary" onclick="loadKanbanTasks()">🔄 Refresh Tasks</button>
+                <button class="btn btn-secondary" onclick="loadKanbanTasks()">🔄 Refresh</button>
               </div>
             </section>
 
@@ -452,6 +453,28 @@
                     <button type="submit" style="padding:8px 18px; background:var(--status-blue); color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:0.85rem;">Create Task</button>
                   </div>
                 </form>
+              </div>
+            </div>
+
+            <!-- Stage Audit Trail Modal -->
+            <div id="audit-trail-modal" class="kanban-modal-backdrop">
+              <div class="kanban-modal-dialog" style="max-width: 680px; max-height: 80vh; display: flex; flex-direction: column;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                  <h3 style="font-size:1.1rem; font-weight:600; display:flex; align-items:center; gap:8px;">
+                    <span>📜</span> Stage Transition Audit Trail
+                  </h3>
+                  <button type="button" onclick="closeAuditModal()" style="background:none; border:none; color:#94a3b8; font-size:1.3rem; cursor:pointer;">&times;</button>
+                </div>
+                <div class="muted" style="font-size:0.78rem; margin-bottom:12px; color:#94a3b8;">
+                  Immutable audit records from <code>logs/task-audit.jsonl</code> capturing stage transitions, actors, and decision tiers.
+                </div>
+                <div id="audit-trail-list" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; padding-right:4px;">
+                  <!-- Populated dynamically via loadTaskAuditTrail() -->
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px; border-top:1px solid #334155;">
+                  <button type="button" onclick="loadTaskAuditTrail()" style="padding:7px 14px; background:#1e293b; color:#38bdf8; border:1px solid #334155; border-radius:6px; cursor:pointer; font-size:0.8rem;">🔄 Refresh Audit</button>
+                  <button type="button" onclick="closeAuditModal()" style="padding:7px 16px; background:#334155; color:#cbd5e1; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem;">Close</button>
+                </div>
               </div>
             </div>
           </div>
