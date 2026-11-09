@@ -125,11 +125,14 @@
       { id: 'openclaw-gw', icon: '🦁', title: 'OpenClaw Gateway', mode: 'MCP router · Stdio/TCP gateway' }
     ];
     const ROLES = [
-      { id: 'tech',  icon: '⚙', title: 'Tech Lead',        owns: 'Code, refactors, architecture' },
-      { id: 'qa',    icon: '✓', title: 'QA Lead',          owns: 'Testing, validation, pre-commit checks' },
-      { id: 'sec',   icon: '🛡', title: 'AppSec (Mantis)', owns: 'Vulnerability audits, reproducers, ReBAC boundary' },
-      { id: 'infra', icon: '⛁', title: 'DevOps / Infra',   owns: 'Docker, OrbStack, GPU/Metal, Cloudflare' },
-      { id: 'doc',   icon: '✎', title: 'Doc Scribe',       owns: 'Memory logs, changelogs, project state' }
+      { id: 'bizdev',    icon: '💰', title: 'Revenue & Deals',   owns: 'Client RFPs, SOW drafting, scope estimation, pricing' },
+      { id: 'marketing', icon: '📢', title: 'DevRel & Marketing', owns: 'Technical teardowns, proof-of-work case studies, distribution' },
+      { id: 'tech',      icon: '💻', title: 'Tech Lead',          owns: 'Code, refactors, architecture' },
+      { id: 'qa',        icon: '🧪', title: 'QA Lead',            owns: 'Testing, validation, pre-commit checks' },
+      { id: 'sec',       icon: '🛡️', title: 'AppSec (Mantis)',   owns: 'Vulnerability audits, reproducers, ReBAC boundary' },
+      { id: 'cfo',       icon: '📊', title: 'Finance & Margins', owns: 'Token spend auditing, unit economics, client margin optimization' },
+      { id: 'infra',     icon: '🛠️', title: 'DevOps / Infra',     owns: 'PM2, Docker, GPU/Metal, Cloudflare tunnels' },
+      { id: 'doc',       icon: '📝', title: 'Doc Scribe',         owns: '4-tier memory, changelogs, project state' }
     ];
     // Executors that orchestration/agent-dispatch.sh accepts.
     const EXECUTORS = [
