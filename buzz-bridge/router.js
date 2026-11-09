@@ -27,6 +27,7 @@ const EXECUTORS = {
   codex: 'Codex: builds focused code changes in a repo',
   agy: 'Antigravity: reviews code and plans without changing files',
   hermes: 'Hermes: local model, small reasoning or scripting tasks, no cloud cost',
+  mantis: 'Google Mantis: autonomous security audit, threat-modeling, and vulnerability review',
 };
 
 function buildRequest({ message, thread, repos, recentRuns }) {

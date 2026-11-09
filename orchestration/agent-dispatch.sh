@@ -98,7 +98,7 @@ agent="$1"; repo="$(cd "$2" && pwd)"; branch="$3"; prompt_file="$4"
 # /api/dispatch/run, and n8n/bridge.js polling for it) knows the id up
 # front instead of having to scrape it from this script's stdout.
 run_id_override="${5:-}"
-case "$agent" in claude|codex|agy|hermes|noop|auto) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
+case "$agent" in claude|codex|agy|hermes|noop|auto|mantis) ;; *) echo "unknown agent: $agent" >&2; usage ;; esac
 [ -f "$prompt_file" ] || { echo "no prompt file: $prompt_file" >&2; exit 2; }
 # This git build's -C does not accept a posix (/c/...) path - it needs the
 # native C:\... form, or it fails with "cannot change to ...: No such file
@@ -174,10 +174,26 @@ run_agent() {
                ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
     agy)    (cd "$worktree" && run_timeout "$limit" agy --mode plan --disable-slash-commands \
                --print-timeout "${limit}s" --prompt="$prompt") ;;
+    mantis) run_mantis "$limit" ;;
     hermes) run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt" ;;
     noop)   printf '%s\n' "$prompt" ;;
     *)      echo "unknown agent: $who"; return 2 ;;
   esac
+}
+
+run_mantis() {
+  local limit="$1"
+  local mantis_dir="${MANTIS_HOME:-/Users/Sriad/tt-ai-stack/tools/mantis}"
+  echo "== Running Google Mantis security analysis on $worktree"
+  if [ -x "$mantis_dir/reference/run.sh" ] && [ -d "$mantis_dir/reference/.venv" ]; then
+    run_timeout "$limit" "$mantis_dir/reference/run.sh" "$worktree"
+  elif command -v agy >/dev/null 2>&1; then
+    (cd "$worktree" && run_timeout "$limit" agy --mode plan --disable-slash-commands \
+       --print-timeout "${limit}s" \
+       --prompt="Perform Google Mantis security review on this repository using skills from $mantis_dir/skills. Review threat model, authentication/authorization boundaries, and potential vulnerabilities: $prompt")
+  else
+    echo "Mantis skills loaded from $mantis_dir. Worktree: $worktree"
+  fi
 }
 
 # claude prints JSON (--output-format json) so its usage and cost can be
