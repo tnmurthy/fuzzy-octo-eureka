@@ -1,30 +1,38 @@
 # CLAUDE.md - Arunachala Operations Center
 
-## Runtime: NSSM services, not loose processes
+## Runtime: PM2 Supervision (macOS Apple Silicon & Cross-Platform)
 
-NSSM Windows services run this stack. **Never kill their PIDs** - NSSM respawns
-them within milliseconds, which looks like processes "surviving" a kill and
-leads to duplicate unsupervised copies.
+The production stack runs on an **Apple Silicon Mac Studio (Apple M5 Max, 18 cores, 36GB unified RAM, Metal GPU Assist)** supervised by **PM2**.
 
-| Service | Runs |
-|---|---|
-| `ArunachalaTelemetry` | `telemetry-daemon.ps1` |
-| `ArunachalaDashboard` | `server.js` (port 8787) |
-| `ArunachalaBuzzBridge` | `buzz-bridge/bridge.js` - installed by `install-buzz-bridge.ps1` (elevated) |
+**Never kill daemon PIDs directly** with `kill -9` - PM2 will respawn them. Always manage via the PM2 CLI:
 
-Restart (elevated only):
+| ID | Service Name | Entry Point | Port / Role |
+|---|---|---|---|
+| `0` | `ArunachalaDashboard` | `server.js` | Port 8787 (`https://team.mytestbed.tech`) |
+| `1` | `ArunachalaBuzzBridge` | `buzz-bridge/bridge.js` | Nostr relay bridge (`@arunachala`) |
+| `2` | `ArunachalaTelemetry` | `telemetry-daemon.js` | Real-time CPU, GPU & TCP telemetry |
+| `3` | `OpenClawGateway` | `openclaw` | Gateway runner (Port 18789) |
+| `4` | `ArunachalaDrisyonBridge` | `drisyon-bridge.js` | Drisyon Nostr relay bridge |
+| `5` | `DrisyonDashboard` | `server.js` (PORT=8788) | Port 8788 (`https://drisyon.mytestbed.tech`) |
+| `6` | `CloudflareTunnelDrisyon` | `cloudflared` | Zero Trust tunnel ingress (`d23b354e...`) |
 
-```powershell
-.\restart-arunachala.ps1
-# or: Restart-Service ArunachalaTelemetry, ArunachalaDashboard -Force
+### Service Management Commands
+
+```bash
+# Check status of all running daemons
+pm2 ls
+
+# Restart specific services with updated environment variables
+pm2 restart ArunachalaDashboard DrisyonDashboard ArunachalaTelemetry --update-env
+
+# Restart entire stack and persist state
+pm2 restart all --update-env && pm2 save
+
+# View live daemon logs
+pm2 logs ArunachalaDashboard --lines 50
 ```
 
-Both services run as Administrator. An unelevated shell sees blank
-`Win32_Process.CommandLine` for them, so any filter on command line silently
-returns nothing - do not conclude from that that they are not running.
-
-All three services run as **LocalSystem** (a service logon as the user fails:
-Microsoft account with Windows Hello-only sign-in).
+*(Note: Legacy Windows setups used NSSM services `ArunachalaTelemetry`, `ArunachalaDashboard`, and `ArunachalaBuzzBridge` under LocalSystem. Cross-platform discovery in `host-specs.js` detects the host automatically).*
 
 ## Per-person config (.env)
 
@@ -359,23 +367,17 @@ above before it reaches the service.
 
 ## Open items
 
-- `POST /api/buzz/events` is an unauthenticated-by-design webhook (see API
-  surface table) that nothing calls - the Buzz bridge replaced its purpose.
-  Delete it once the bridge's dispatch step lands.
-- ReBAC (`rebac-engine.js`) currently authorizes only `/api/ping`. If the
-  intent is to protect the Drisyon/agent/team-dispatch endpoints too, they
-  need explicit `canAccess()` calls added - right now the graph exists but
-  doesn't gate them.
+- DONE 2026-11-09: `POST /api/buzz/events` deprecated with HTTP 410 Gone (FR-SEC-05); Nostr bridge directly communicates with relays (`wss://drisyon-ai.communities.buzz.xyz`).
+- DONE 2026-11-09: ReBAC (`rebac-engine.js`) extended to gate all protected endpoints: `/api/ping`, `/api/dispatch/run`, `/api/agent/chat`, `/api/team/dispatch`, `/api/memory/store`, `/api/memory/search`, and `/api/rebac/inspect`.
+- DONE 2026-11-09: Risky dispatch guardrail (`FR-CHAT-07`) active: pre-flight filter halts destructive commands (`git reset --hard`, `git push -f`, `rm -rf`, `DROP TABLE`, `chmod 777`) unless confirmed by operator (`confirmed: true`).
+- DONE 2026-11-09: `/api/tasks` fallback to local `TASKS.md` with local task creation and section moves when Supabase is not connected (`FR-CHAT-08`).
+- DONE 2026-11-08: Cross-platform hardware discovery (`host-specs.js`) detecting Apple Silicon M5 Max, Metal GPU Assist, and unified memory.
+- DONE 2026-11-08: Dual portal architecture with Cloudflare Tunnel ingress routing: `team.mytestbed.tech` (:8787) and `drisyon.mytestbed.tech` (:8788).
 - Drisyon memory `search()`'s `tenant:drisyon_core` default bypasses the
   per-tenant filter (see Drisyon memory engine section) - confirm that's
   intentional before relying on it as real multi-tenant isolation.
-- `/api/tasks` depends on `C:\tt-ai-stack\04_internal\TASKS.md`, a file
-  outside this repo, with no documented behavior if that path is renamed or
-  moved beyond returning empty columns.
 - `BUZZ_REQUIRE_RELAY_MEMBERSHIP` is still `false` - revisit now that the relay
   is internet-facing.
-- DONE 2026-10-20: Cloudflare Access in front of `team.mytestbed.tech`, then restore its ingress
-  rule so the dashboard is remotely reachable again.
 - Second clone at `C:\tt-ai-stack\buzz` is stale; the live one is under
   `01_projects\active\buzz`.
 - `PLAN.md`'s checklist (Phase 2-5) hasn't been touched since Sep 8 and

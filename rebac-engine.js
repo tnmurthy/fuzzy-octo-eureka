@@ -74,3 +74,4 @@ class ReBACEngine {
 }
 
 module.exports = ReBACEngine;
+module.exports.ReBACEngine = ReBACEngine;

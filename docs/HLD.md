@@ -1,14 +1,14 @@
 # Arunachala Operations Center - High-Level Design
 
-Arunachala lets a small team run an AI workforce from chat: each person's
-Windows machine hosts a dashboard, a Buzz chat bridge, local models and a
-dispatcher that hands coding tasks to agents, while the team shares its
-context (agent runs, AI call ledger, memory, task board) through Supabase.
-Local models do the high-volume work; frontier models run only when a task
-needs them.
+Arunachala lets a small team run an AI workforce from chat and unified dashboards:
+the host environment (Apple Silicon Mac Studio with Metal GPU acceleration, or Windows rigs)
+runs the operations dashboard, Drisyon agency workspace, a Buzz Nostr chat bridge, local Ollama models,
+and an autonomous dispatcher that hands coding tasks to agents, while the team shares context
+(agent runs, AI call ledger, 4-tier memory, task board) through Supabase and local storage.
+Local models do high-volume work; frontier models run only when a task needs escalation.
 
-As of 2026-11-05. Setup: [`SETUP.md`](../SETUP.md). Working notes for agents
-editing this repo: [`CLAUDE.md`](../CLAUDE.md).
+As of November 2026. Setup: [`SETUP.md`](../SETUP.md). Working notes for agents
+editing this repo: [`CLAUDE.md`](../CLAUDE.md). Agency Wiki: [`docs/WIKI.md`](WIKI.md).
 
 ---
 
@@ -17,27 +17,29 @@ editing this repo: [`CLAUDE.md`](../CLAUDE.md).
 ```mermaid
 flowchart LR
     subgraph People
-        OP["Operator / teammate<br/>Buzz desktop"]
-        BR["Browser<br/>dashboard"]
+        OP["Operator / Teammate<br/>Buzz Desktop"]
+        BR["Browser<br/>Dashboard & Wiki"]
     end
 
-    subgraph Laptop["Each teammate's Windows machine"]
-        ARU["Arunachala<br/>dashboard + bridge + dispatcher"]
-        LLM["Ollama<br/>local models"]
-        AG["Agent CLIs<br/>claude, codex, hermes, agy"]
+    subgraph Host["Host Node (Mac Studio M5 Max / Rig)"]
+        ARU["Arunachala Dashboard :8787<br/>+ Drisyon Dashboard :8788"]
+        BRG["Buzz Bridge + Nostr Relay<br/>NIP-42 Auth"]
+        LLM["Ollama Metal GPU (:11434)<br/>gemma3:4b, qwen2.5-coder:3b"]
+        AG["Agent Mesh<br/>Tech, QA, Mantis, Infra, OpenHands"]
+        SAFE["Safety Filter & ReBAC<br/>FR-CHAT-07 Guardrails"]
     end
 
-    subgraph Shared["Shared services"]
-        BUZZ["Buzz relay<br/>buzz.mytestbed.tech"]
-        SB[("Supabase - Talia project<br/>arunachala_* tables")]
-        CF["Cloudflare Tunnel + Access"]
+    subgraph Shared["Shared Services"]
+        BUZZ["Buzz Relay<br/>wss://drisyon-ai.communities.buzz.xyz"]
+        SB[("Supabase - Talia Project<br/>arunachala_* tables")]
+        CF["Cloudflare Tunnels<br/>team.mytestbed.tech<br/>drisyon.mytestbed.tech"]
     end
 
     OP -- "@mention bot" --> BUZZ
-    BUZZ <-- "websocket, NIP-42" --> ARU
-    BR -- "team.mytestbed.tech" --> CF --> ARU
+    BUZZ <-- "websocket, NIP-42" --> BRG
+    BR -- "HTTPS" --> CF --> ARU
+    ARU --> SAFE --> AG
     ARU -- "route, chat, embed" --> LLM
-    ARU -- "dispatch" --> AG
     ARU <-- "sync as own user, RLS" --> SB
 ```
 

@@ -1,8 +1,31 @@
 {
-  "updatedAt": "2026-11-09T05:52:42.318Z",
-  "episodicCount": 14,
-  "alignmentsCount": 2,
+  "updatedAt": "2026-11-09T07:03:12.906Z",
+  "episodicCount": 15,
+  "alignmentsCount": 3,
   "episodicMemory": [
+    {
+      "id": "mem_7566cd1f7594",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "all",
+      "category": "operator_directive",
+      "title": "Directive from Operator",
+      "vector": {
+        "undefined": 1,
+        "directive": 1,
+        "from": 1,
+        "operator": 1,
+        "dispatch": 1,
+        "human_in_loop": 1,
+        "normal": 1
+      },
+      "tags": [
+        "dispatch",
+        "human_in_loop",
+        "NORMAL"
+      ],
+      "metadata": {},
+      "createdAt": "2026-11-09T07:03:12.906Z"
+    },
     {
       "id": "mem_1e92ba8d0f60",
       "tenantId": "tenant:drisyon_core",
@@ -537,6 +560,15 @@
     }
   ],
   "operatorAlignments": [
+    {
+      "id": "align_1794207792906",
+      "sender": "Operator",
+      "target": "Team",
+      "tenantId": "tenant:drisyon_core",
+      "priority": "NORMAL",
+      "timestamp": "2026-11-09T07:03:12.906Z",
+      "vector": {}
+    },
     {
       "id": "align_1789531034970",
       "sender": "Operator",

@@ -43,8 +43,8 @@ billing, a UI for creating or moving tasks (API only for now).
 | FR-CHAT-04 | Answer status questions without a model | Reply built from telemetry and runs | Built | `handler.test.js` |
 | FR-CHAT-05 | Answer persona questions | Reply from one of 5 personas on a local model | Built | live check 2026-11-05 |
 | FR-CHAT-06 | Reply in the original thread | Every reply, including run results, threads under the triggering message | Built | live test 2026-11-04 |
-| FR-CHAT-07 | Confirm before risky dispatches | A risky task waits for explicit operator confirmation | **Not built** (described only) | - |
-| FR-CHAT-08 | Add tasks from chat | "add a task ..." creates a board task | **Not built** (described only) | - |
+| FR-CHAT-07 | Confirm before risky dispatches | Destructive commands (git reset --hard, push -f, rm -rf, drop table) halt and require operator confirmation | Built | `safety-filter.test.js` |
+| FR-CHAT-08 | Add tasks from chat & local board | Tasks can be added and moved in local TASKS.md or team-store | Built | `tasks-local.test.js` |
 | FR-CHAT-09 | Bridge config has no personal defaults | Empty `BUZZ_OPERATORS` stops the bridge at start | Built | `bridge.js` startup check |
 
 ### 3.2 Dispatch
@@ -116,7 +116,7 @@ billing, a UI for creating or moving tasks (API only for now).
 | FR-SEC-02 | Bind locally | Server and bridge notify port listen on 127.0.0.1 only | Built | `server.js`, `bridge.js` |
 | FR-SEC-03 | Keep secrets out of git | `.env` files gitignored; installer types the password hidden | Built | `.gitignore`, installer |
 | FR-SEC-04 | Limit request bodies | Task routes cap bodies at 10 KB; task ids must be UUIDs | Built | `server.js` |
-| FR-SEC-05 | Remove the open webhook | `POST /api/buzz/events` deleted | **Not built** | `CLAUDE.md` open item |
+| FR-SEC-05 | Remove the open webhook | `POST /api/buzz/events` deprecated with HTTP 410 Gone; Nostr relay bridge used | Built | `server.js` |
 
 ### 3.8 Install and operations
 
