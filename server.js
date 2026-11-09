@@ -552,6 +552,26 @@ function handleDigest(req, res) {
 }
 
 function handleRequest(req, res) {
+  // ── OpenHands Canvas Proxy (Phase 2) ──
+  if (req.url.startsWith('/canvas') || req.url.startsWith('/vscode')) {
+    const proxyReq = http.request({
+      host: '127.0.0.1',
+      port: 8000,
+      path: req.url,
+      method: req.method,
+      headers: { ...req.headers, host: '127.0.0.1:8000' }
+    }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (err) => {
+      res.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<h3>502 Bad Gateway: OpenHands container unreachable on port 8000</h3><p>${err.message}</p>`);
+    });
+    req.pipe(proxyReq);
+    return;
+  }
+
   // ── Auth & Team Management Endpoints ──
   if (req.url.startsWith('/login')) {
     const user = auth.getSessionUser(req);
@@ -1026,9 +1046,10 @@ const server = http.createServer(async (req, res) => {
                        urlPath === '/api/auth/status' || 
                        urlPath === '/api/auth/logout';
   const isStaticAsset = /\.(css|js|jpg|jpeg|png|gif|svg|ico|woff|woff2|ttf|map)$/i.test(urlPath);
+  const isOpenHandsAsset = urlPath.startsWith('/canvas/assets/') || urlPath.startsWith('/vscode/assets/');
 
   // 1. Allow public auth pages and static assets
-  if (isPublicAuth || isStaticAsset) {
+  if (isPublicAuth || isStaticAsset || isOpenHandsAsset) {
     return handleRequest(req, res);
   }
 
@@ -1063,6 +1084,31 @@ const server = http.createServer(async (req, res) => {
   const redirectParam = encodeURIComponent(req.url);
   res.writeHead(302, { Location: `/login?redirect=${redirectParam}` });
   return res.end();
+});
+
+// Proxy WebSocket connections for OpenHands live canvas & terminal
+server.on('upgrade', (req, socket, head) => {
+  if (req.url.startsWith('/canvas') || req.url.startsWith('/vscode')) {
+    const proxyReq = http.request({
+      host: '127.0.0.1',
+      port: 8000,
+      path: req.url,
+      method: 'GET',
+      headers: { ...req.headers, host: '127.0.0.1:8000' }
+    });
+    proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      socket.write(
+        `HTTP/1.1 101 Switching Protocols\r\n` +
+        Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
+        `\r\n\r\n`
+      );
+      if (proxyHead && proxyHead.length) socket.write(proxyHead);
+      proxySocket.pipe(socket);
+      socket.pipe(proxySocket);
+    });
+    proxyReq.on('error', () => socket.destroy());
+    proxyReq.end();
+  }
 });
 
 server.listen(PORT, HOST, () => {

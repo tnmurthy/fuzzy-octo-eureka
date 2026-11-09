@@ -183,7 +183,7 @@ async function getBuzzStatus() {
 
   let res = await httpGetJson(`http://127.0.0.1:${BUZZ_PORT}/health`, 2000);
   if (!res.ok) {
-    const relayHttp = (envValues['BUZZ_RELAY_URL'] || envValues['BRIDGE_RELAY_URL'] || 'https://buzz.mytestbed.tech').replace(/^ws/, 'http');
+    const relayHttp = (envValues['BUZZ_RELAY_URL'] || envValues['BRIDGE_RELAY_URL'] || 'https://drisyon-ai.communities.buzz.xyz').replace(/^ws/, 'http');
     try {
       const t0 = Date.now();
       const r = await fetch(`${relayHttp}/health`, { signal: AbortSignal.timeout(2500) });
