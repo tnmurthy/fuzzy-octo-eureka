@@ -1334,6 +1334,62 @@
       });
     };
 
+    window.triggerMantisPatrol = function() {
+      const status = document.getElementById('patrol-status');
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = '#38bdf8';
+        status.textContent = '🛡️ Dispatching automated Google Mantis AppSec security audit...';
+      }
+      fetch('/api/patrol/mantis', { method: 'POST' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!status) return;
+          if (data.ok) {
+            status.style.color = '#34d399';
+            status.innerHTML = `✅ <strong>Mantis Security Audit Dispatched:</strong> Run ID <code>${data.runId}</code> on branch <code>${data.branch}</code>. Audit logged to episodic memory.`;
+            setTimeout(() => loadAgentRuns(), 1000);
+          } else {
+            status.style.color = '#f87171';
+            status.textContent = `❌ Mantis Patrol Failed: ${data.error || 'Unknown error'}`;
+          }
+        })
+        .catch((err) => {
+          if (status) {
+            status.style.color = '#f87171';
+            status.textContent = `❌ Network Error: ${err.message}`;
+          }
+        });
+    };
+
+    window.triggerWeeklyDigest = function() {
+      const status = document.getElementById('patrol-status');
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = '#818cf8';
+        status.textContent = '📊 Compiling 7-day AI operations ledger and broadcasting to Buzz...';
+      }
+      fetch('/api/patrol/digest', { method: 'POST' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!status) return;
+          if (data.ok) {
+            status.style.color = '#a7f3d0';
+            const preview = data.text ? data.text.split('\n').slice(0, 3).join(' | ') : '';
+            status.innerHTML = `✅ <strong>Weekly Digest Broadcast:</strong> ${data.message || 'Broadcast sent to Buzz channels.'}<div style="margin-top:4px; font-family:monospace; font-size:0.75rem; color:#cbd5e1;">${preview}</div>`;
+          } else {
+            status.style.color = '#f87171';
+            status.textContent = `❌ Digest Failed: ${data.error || 'Unknown error'}`;
+          }
+        })
+        .catch((err) => {
+          if (status) {
+            status.style.color = '#f87171';
+            status.textContent = `❌ Network Error: ${err.message}`;
+          }
+        });
+    };
+
     setInterval(() => {
       const tab = document.getElementById('runs');
       if (tab && tab.classList.contains('active')) loadAgentRuns();
