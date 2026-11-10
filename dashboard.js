@@ -590,15 +590,8 @@
         cards[AGENT_INDEX_MAP[key]].style.borderColor = 'var(--status-blue)';
       }
 
-      // Reset chat greetings for selected agent
-      const chatMessages = document.getElementById('id-agent-chat-messages');
-      if (chatMessages) {
-        chatMessages.innerHTML = `
-          <div class="chat-bubble agent">
-            <strong>${profile.title}:</strong> Greetings ${operatorName}. I am ready. What task or directive would you like to assign?
-          </div>
-        `;
-      }
+      // Load persistent chat history & timeline for selected agent
+      loadAgentChatHistory(key);
 
       if (lastTelemetryData) {
         updateTelemetryUI(lastTelemetryData);
@@ -728,6 +721,175 @@
           messagesEl.appendChild(errorBubble);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         });
+    }
+
+    // ---------------------------------------------------------------------------
+    // Chat Transcripts & Timeline History Management
+    // ---------------------------------------------------------------------------
+    function loadAgentChatHistory(key) {
+      const chatMessages = document.getElementById('id-agent-chat-messages');
+      if (!chatMessages) return;
+      const profile = agentProfiles[key] || { title: key };
+
+      fetch(`/api/agent/transcripts?agent=${encodeURIComponent(key)}&limit=40`)
+        .then(res => res.json())
+        .then(data => {
+          if (currentSelectedAgent !== key) return;
+          const items = data.transcripts || [];
+          chatMessages.innerHTML = '';
+
+          // Add persona intro card / greeting
+          const greetingEl = document.createElement('div');
+          greetingEl.className = 'chat-bubble agent';
+          greetingEl.innerHTML = `<strong>${profile.title}:</strong> Greetings ${operatorName}. I am ready. What task or directive would you like to assign?`;
+          chatMessages.appendChild(greetingEl);
+
+          items.forEach(t => {
+            const timeFormatted = new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            // User message bubble
+            const userBubble = document.createElement('div');
+            userBubble.className = 'chat-bubble user';
+            userBubble.innerHTML = `
+              <div style="font-size:0.68rem; color:#94a3b8; margin-bottom:3px; text-align:right;">${timeFormatted}</div>
+              <div>${escapeHtml(t.message)}</div>
+            `;
+            chatMessages.appendChild(userBubble);
+
+            // Agent response bubble
+            const agentBubble = document.createElement('div');
+            agentBubble.className = 'chat-bubble agent';
+            const formattedReply = formatChatMarkdown(t.reply || 'Task acknowledged.');
+            agentBubble.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <strong>${t.agentTitle || profile.title}:</strong>
+                <span style="font-size:0.68rem; color:#64748b;">${timeFormatted}</span>
+              </div>
+              <div style="line-height:1.5;">${formattedReply}</div>
+            `;
+
+            if (t.spawned && t.spawned.runId) {
+              const card = document.createElement('div');
+              card.className = 'agent-dispatch-card';
+              card.style.cssText = 'background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 10px 14px; margin-top: 10px; font-size: 0.82rem;';
+              card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-weight:700; color:#34d399; display:flex; align-items:center; gap:6px;">
+                    <span class="status-dot green" style="box-shadow: 0 0 8px #10b981;"></span>
+                    Subagent Dispatched: <code style="color:#a7f3d0; background:#064e3b; padding:1px 6px; border-radius:4px;">${escapeHtml(t.spawned.agent)}</code>
+                  </span>
+                  <span style="font-size:0.75rem; color:#94a3b8; font-family:'JetBrains Mono',monospace;">Run ${escapeHtml(t.spawned.runId)}</span>
+                </div>
+                <div style="color:#cbd5e1; font-size:0.78rem; margin-bottom:8px; display:flex; gap:12px; flex-wrap:wrap;">
+                  <span>Branch: <code style="color:#38bdf8;">${escapeHtml(t.spawned.branch)}</code></span>
+                  <span>Repo: <code style="color:#cbd5e1;">${escapeHtml(t.spawned.repo)}</code></span>
+                </div>
+              `;
+              agentBubble.appendChild(card);
+            }
+
+            chatMessages.appendChild(agentBubble);
+          });
+
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        })
+        .catch(() => {
+          chatMessages.innerHTML = `
+            <div class="chat-bubble agent">
+              <strong>${profile.title}:</strong> Greetings ${operatorName}. Ready for instructions.
+            </div>
+          `;
+        });
+    }
+
+    function openTranscriptsTimelineModal() {
+      const modal = document.getElementById('transcript-timeline-modal');
+      if (modal) modal.style.display = 'flex';
+      const select = document.getElementById('transcript-agent-filter');
+      if (select) select.value = currentSelectedAgent || 'all';
+      filterTranscriptsTimeline(currentSelectedAgent || 'all');
+    }
+
+    function closeTranscriptsTimelineModal() {
+      const modal = document.getElementById('transcript-timeline-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function filterTranscriptsTimeline(agentKey) {
+      const listEl = document.getElementById('transcript-timeline-list');
+      if (!listEl) return;
+      listEl.innerHTML = '<div style="text-align:center; color:#64748b; font-size:0.8rem; padding:20px;">Loading transcripts...</div>';
+
+      const url = (agentKey && agentKey !== 'all')
+        ? `/api/agent/transcripts?agent=${encodeURIComponent(agentKey)}&limit=100`
+        : `/api/agent/transcripts?limit=100`;
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          const items = (data.transcripts || []).slice().reverse();
+          if (!items.length) {
+            listEl.innerHTML = '<div style="text-align:center; color:#64748b; font-size:0.85rem; padding:30px 10px;">No conversation transcripts recorded yet for this filter.</div>';
+            return;
+          }
+
+          listEl.innerHTML = '';
+          items.forEach(t => {
+            const row = document.createElement('div');
+            row.style.cssText = 'background:#131c31; border:1px solid #1e293b; border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:8px;';
+            const timeStr = new Date(t.timestamp).toLocaleString();
+            row.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
+                <span style="font-weight:700; color:#38bdf8; font-size:0.85rem; display:flex; align-items:center; gap:6px;">
+                  <span>👤</span> ${escapeHtml(t.agentTitle || t.agent)}
+                  <span style="font-size:0.7rem; color:#64748b; font-family:'JetBrains Mono',monospace;">#${escapeHtml(t.id)}</span>
+                </span>
+                <span style="font-size:0.75rem; color:#94a3b8; font-family:'JetBrains Mono',monospace;">${timeStr}</span>
+              </div>
+              <div style="background:#090d16; padding:8px 12px; border-radius:6px; border-left:3px solid #38bdf8;">
+                <div style="font-size:0.7rem; color:#94a3b8; font-weight:600; text-transform:uppercase; margin-bottom:2px;">User Directive</div>
+                <div style="color:#f1f5f9; font-size:0.82rem; line-height:1.4;">${escapeHtml(t.message)}</div>
+              </div>
+              <div style="padding:6px 4px;">
+                <div style="font-size:0.7rem; color:#64748b; font-weight:600; text-transform:uppercase; margin-bottom:2px;">Agent Completion</div>
+                <div style="color:#cbd5e1; font-size:0.82rem; line-height:1.45; max-height:220px; overflow-y:auto;">${formatChatMarkdown(t.reply)}</div>
+              </div>
+              ${t.spawned ? `
+                <div style="font-size:0.72rem; color:#34d399; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:6px; align-self:flex-start;">
+                  <span>⚡ Dispatched Subagent:</span> <code>${escapeHtml(t.spawned.agent)}</code> (Run: ${escapeHtml(t.spawned.runId)})
+                </div>
+              ` : ''}
+            `;
+            listEl.appendChild(row);
+          });
+        })
+        .catch(err => {
+          listEl.innerHTML = `<div style="color:#f87171; text-align:center; padding:20px;">Failed to load transcripts: ${err.message}</div>`;
+        });
+    }
+
+    function exportCurrentAgentTranscript() {
+      const url = `/api/agent/transcripts?agent=${encodeURIComponent(currentSelectedAgent)}&export=md`;
+      window.open(url, '_blank');
+      showToast(`Exporting ${currentSelectedAgent.toUpperCase()} transcript...`, 'info', '📥');
+    }
+
+    function downloadFilteredTranscript() {
+      const filter = document.getElementById('transcript-agent-filter')?.value || 'all';
+      const url = filter === 'all'
+        ? `/api/agent/transcripts?export=md`
+        : `/api/agent/transcripts?agent=${encodeURIComponent(filter)}&export=md`;
+      window.open(url, '_blank');
+    }
+
+    function clearCurrentAgentChat() {
+      if (!confirm(`Are you sure you want to clear chat transcripts for ${currentSelectedAgent.toUpperCase()}?`)) return;
+      fetch(`/api/agent/transcripts?agent=${encodeURIComponent(currentSelectedAgent)}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+          showToast(`Transcripts cleared for ${currentSelectedAgent.toUpperCase()}`, 'success', '🧹');
+          loadAgentChatHistory(currentSelectedAgent);
+        })
+        .catch(err => showToast(`Error: ${err.message}`, 'error', '⚠️'));
     }
 
     // ---------------------------------------------------------------------------
@@ -1896,6 +2058,13 @@
     window.loadTaskAuditTrail = loadTaskAuditTrail;
     window.handleCreateKanbanTask = handleCreateKanbanTask;
     window.showToast = showToast;
+    window.openTranscriptsTimelineModal = openTranscriptsTimelineModal;
+    window.closeTranscriptsTimelineModal = closeTranscriptsTimelineModal;
+    window.filterTranscriptsTimeline = filterTranscriptsTimeline;
+    window.exportCurrentAgentTranscript = exportCurrentAgentTranscript;
+    window.downloadFilteredTranscript = downloadFilteredTranscript;
+    window.clearCurrentAgentChat = clearCurrentAgentChat;
+    window.loadAgentChatHistory = loadAgentChatHistory;
 
     // ---------------------------------------------------------------------------
     // Init

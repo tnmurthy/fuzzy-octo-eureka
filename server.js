@@ -74,6 +74,12 @@ if (teamStore) teamStore.start();
 const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require('./tasks-md');
 const { validateDispatchSafety } = require('./safety-filter');
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
+const {
+  recordTranscript,
+  getTranscripts,
+  clearTranscripts,
+  exportTranscriptsMarkdown
+} = require('./chat-transcripts');
 
 // Ollama connection details (can be local or remote, e.g. a Mac Studio on LAN/VPN)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
@@ -959,6 +965,35 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/tasks')) {
     return handleTasks(req, res);
   }
+  if (req.url.startsWith('/api/agent/transcripts')) {
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const agentFilter = parsedUrl.searchParams.get('agent');
+    const limit = parseInt(parsedUrl.searchParams.get('limit') || '100', 10);
+    const exportMode = parsedUrl.searchParams.get('export');
+
+    if (req.method === 'DELETE') {
+      const cleared = clearTranscripts({ agent: agentFilter });
+      return sendJson(res, 200, { ok: cleared, clearedAgent: agentFilter || 'all' });
+    }
+
+    if (exportMode === 'md' || exportMode === 'markdown') {
+      const mdContent = exportTranscriptsMarkdown({ agent: agentFilter });
+      const filename = `transcript-${agentFilter || 'all-agents'}-${new Date().toISOString().slice(0, 10)}.md`;
+      res.writeHead(200, {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      });
+      return res.end(mdContent);
+    }
+
+    const transcripts = getTranscripts({ agent: agentFilter, limit });
+    return sendJson(res, 200, {
+      ok: true,
+      agent: agentFilter || 'all',
+      count: transcripts.length,
+      transcripts
+    });
+  }
   if (req.url.startsWith('/api/agent/chat') && req.method === 'POST') {
     const actor = getReqUserNode(req);
     const authVerdict = rebac.canAccess(actor, 'chat:interact', 'resource:ollama_cluster');
@@ -972,6 +1007,18 @@ function handleRequest(req, res) {
         const payload = JSON.parse(body || '{}');
         const userMessage = payload.message || '';
         const agentKey = payload.agent || 'po';
+        const agentTitles = {
+          po: "🧭 Arunachala Ramana",
+          bizdev: "💼 Vikram Patel",
+          marketing: "📢 Priya Nair",
+          tech: "💻 Tech Lead & Architect",
+          qa: "🧪 QA & Verification Specialist",
+          sec: "🛡️ AppSec Lead (Mantis)",
+          cfo: "📊 Ananya Sundaram",
+          infra: "🛠️ DevOps & Infrastructure",
+          doc: "📝 Documentation Specialist",
+          hermes: "🐍 Hermes Local Runner"
+        };
         const agentSystemPrompts = {
           po: "You are Arunachala Ramana, AI Product Strategist & Product Owner for tt-ai-stack. You are calm, strategic, practical, and precise. Help the user break down scope, plan architectures, orchestrate tech/qa/infra/doc subagents, and prioritize tasks.",
           bizdev: "You are the Revenue & Client Acquisition Lead for Drisyon AI. You evaluate client RFPs, draft Statements of Work (SOWs), price project milestones, and ensure deals are structured for high gross margins.",
@@ -1118,6 +1165,16 @@ function handleRequest(req, res) {
                 reply += `\n\n---\n⚠️ **Dispatch Notice:** ${dispatchWarning}`;
               }
 
+              recordTranscript({
+                agent: agentKey,
+                agentTitle: agentTitles[agentKey] || agentKey,
+                user: actor.replace('user:', ''),
+                message: userMessage,
+                reply,
+                isAdvisory: Boolean(taskInfo.isAdvisory),
+                spawned: (dispatchResult && dispatchResult.runId) ? dispatchResult : null
+              });
+
               sendJson(res, 200, {
                 ok: true,
                 reply,
@@ -1131,6 +1188,17 @@ function handleRequest(req, res) {
               if (dispatchResult && dispatchResult.runId) {
                 reply += `\n\n🚀 **Autonomous Subagent Dispatched:** Run ID \`${dispatchResult.runId}\` on branch \`${dispatchResult.branch}\`.`;
               }
+
+              recordTranscript({
+                agent: agentKey,
+                agentTitle: agentTitles[agentKey] || agentKey,
+                user: actor.replace('user:', ''),
+                message: userMessage,
+                reply,
+                isAdvisory: Boolean(taskInfo.isAdvisory),
+                spawned: (dispatchResult && dispatchResult.runId) ? dispatchResult : null
+              });
+
               sendJson(res, 200, {
                 ok: true,
                 reply,
@@ -1150,6 +1218,16 @@ function handleRequest(req, res) {
           } else {
             reply += ` Local Ollama service is currently busy or offline, but I am standing by to orchestrate the workforce.`;
           }
+
+          recordTranscript({
+            agent: agentKey,
+            agentTitle: agentTitles[agentKey] || agentKey,
+            user: actor.replace('user:', ''),
+            message: userMessage,
+            reply,
+            isAdvisory: Boolean(taskInfo.isAdvisory),
+            spawned: (dispatchResult && dispatchResult.runId) ? dispatchResult : null
+          });
           sendJson(res, 200, {
             ok: true,
             reply,

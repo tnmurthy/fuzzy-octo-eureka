@@ -682,7 +682,14 @@
 
                   <!-- Direct Agent Communicator (Track 5) -->
                   <div>
-                    <span class="metric-header">Direct Communicator</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                      <span class="metric-header" style="margin-bottom:0;">Direct Communicator</span>
+                      <div style="display:flex; gap:6px;">
+                        <button class="btn btn-secondary" onclick="openTranscriptsTimelineModal()" style="font-size:0.72rem; padding:3px 8px; display:inline-flex; align-items:center; gap:4px;" data-tooltip="View chronological timeline of past conversation transcripts">📜 Timeline</button>
+                        <button class="btn btn-secondary" onclick="exportCurrentAgentTranscript()" style="font-size:0.72rem; padding:3px 8px; display:inline-flex; align-items:center; gap:4px;" data-tooltip="Download session transcript as Markdown">📥 Export .md</button>
+                        <button class="btn btn-secondary" onclick="clearCurrentAgentChat()" style="font-size:0.72rem; padding:3px 8px; color:#fca5a5; display:inline-flex; align-items:center; gap:4px;" data-tooltip="Clear chat history for this agent">🧹 Clear</button>
+                      </div>
+                    </div>
                     <div class="agent-chat-wrapper">
                       <div class="agent-chat-messages" id="id-agent-chat-messages">
                         <div class="chat-bubble agent">
@@ -1171,6 +1178,46 @@
           </div>
 
         </main>
+      </div>
+
+      <!-- Transcript Timeline Modal -->
+      <div id="transcript-timeline-modal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(6px);">
+        <div style="background:#0b1120; border:1px solid #1e293b; border-radius:14px; max-width:800px; width:92%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.6);">
+          <div style="padding:16px 20px; border-bottom:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:1.3rem;">📜</span>
+              <div>
+                <h3 style="font-size:1rem; font-weight:700; color:#fff; margin:0;" id="transcript-modal-title">Agent Conversation Timeline &amp; Transcripts</h3>
+                <p style="font-size:0.75rem; color:#94a3b8; margin:2px 0 0 0;">Persistent audit trail of operator prompts, agent responses, and task outcomes.</p>
+              </div>
+            </div>
+            <button onclick="closeTranscriptsTimelineModal()" style="background:transparent; border:none; color:#94a3b8; font-size:1.4rem; cursor:pointer; line-height:1;">&times;</button>
+          </div>
+          <div style="padding:10px 20px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center; gap:10px; background:#0f172a; flex-wrap:wrap;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Filter Persona:</span>
+              <select id="transcript-agent-filter" onchange="filterTranscriptsTimeline(this.value)" style="background:#1e293b; color:#e2e8f0; border:1px solid #334155; border-radius:6px; font-size:0.75rem; padding:4px 10px;">
+                <option value="all">🌟 All Personas</option>
+                <option value="po">🧭 Arunachala Ramana (PO)</option>
+                <option value="bizdev">💼 Vikram Patel (BizDev)</option>
+                <option value="marketing">📢 Priya Nair (Marketing)</option>
+                <option value="tech">💻 Tech Lead &amp; Architect</option>
+                <option value="qa">🧪 QA &amp; Verification</option>
+                <option value="sec">🛡️ AppSec Lead (Mantis)</option>
+                <option value="cfo">📊 Ananya Sundaram (CFO)</option>
+                <option value="infra">🛠️ DevOps &amp; Infra</option>
+                <option value="doc">📝 Documentation Scribe</option>
+                <option value="hermes">🐍 Hermes Local Runner</option>
+              </select>
+            </div>
+            <button onclick="downloadFilteredTranscript()" class="btn btn-secondary" style="font-size:0.75rem; padding:4px 12px; display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Download Transcript (.md)
+            </button>
+          </div>
+          <div id="transcript-timeline-list" style="padding:20px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:16px;">
+            <div style="text-align:center; color:#64748b; font-size:0.8rem; padding:20px;">Loading transcripts...</div>
+          </div>
+        </div>
       </div>
 
       <!-- Toast Notification Container -->
