@@ -738,8 +738,12 @@ function detectActionableTask(message, agentKey) {
       /\b(security\s+(audit|scan|review|assessment|probe|check|test)|vulnerability|mantis|rebac|cve|penetration|pentest|exploit|threat\s+model|access\s+control\s+audit)\b/i.test(taskContent);
     const isQA = (agentKey === 'qa') ||
       /\b(unit\s+test|e2e|integration\s+test|lint|pre-commit|test\s+suite|coverage|vitest|jest)\b/i.test(taskContent);
+    const isAdvisory = /\b(plan|strategy|enroll|enrolling|marketing|campaign|pitch|outreach|proposal|deck|copy|advisory|gtm|funnel|pricing|sow)\b/i.test(taskContent) &&
+      !/\b(code|script|api|endpoint|unit\s+test|refactor|function|database|schema|docker|bug|fix|pr|commit|repo)\b/i.test(taskContent);
 
-    if (isSecurityAudit) {
+    if (isAdvisory) {
+      targetAgent = 'advisory';
+    } else if (isSecurityAudit) {
       targetAgent = 'mantis';
     } else if (isQA) {
       targetAgent = 'auto';
@@ -758,7 +762,8 @@ function detectActionableTask(message, agentKey) {
     return {
       actionable: true,
       task: taskContent,
-      targetAgent
+      targetAgent,
+      isAdvisory
     };
   }
 
@@ -989,51 +994,80 @@ function handleRequest(req, res) {
         let dispatchWarning = null;
 
         if (taskInfo.actionable) {
-          const safetyCheck = validateDispatchSafety(taskInfo.task, payload);
-          if (!safetyCheck.ok) {
-            dispatchWarning = safetyCheck.error;
+          if (taskInfo.isAdvisory) {
+            // Advisory / GTM initiative: persist in memory and tasks board without spawning code runners
+            try {
+              memory.storeMemory({
+                title: `Advisory Directive: [${agentKey.toUpperCase()}] ${taskInfo.task.slice(0, 50)}`,
+                content: `Strategist (${agentKey}) logged advisory initiative: "${taskInfo.task}".`,
+                category: 'advisory_plan',
+                tenantId: actor.includes('drisyon') ? 'tenant:drisyon_core' : 'tenant:default',
+                projectId: targetRepo
+              });
+            } catch (_) {}
+
+            try {
+              const tasksFile = resolveTasksFile(DASHBOARD_DIR);
+              const taskObj = {
+                title: taskInfo.task,
+                project: targetRepo,
+                owner: agentKey,
+                status: 'intake',
+                decision: 'copilot'
+              };
+              if (teamStore) {
+                teamStore.createTask(taskObj).catch(() => {});
+              } else {
+                addLocalTask(tasksFile, taskObj);
+              }
+            } catch (_) {}
           } else {
-            const branch = `${agentKey}/${taskInfo.targetAgent}-${Date.now().toString(36)}`;
-            dispatchPromise = spawnAgentDispatch({
-              agent: taskInfo.targetAgent,
-              repo: targetRepo,
-              repoPath: targetRepoPath,
-              branch,
-              task: taskInfo.task
-            }).then((dispatchRes) => {
-              // Record in episodic memory
-              try {
-                memory.storeMemory({
-                  title: `Task Dispatched: [${taskInfo.targetAgent.toUpperCase()}] ${taskInfo.task.slice(0, 50)}`,
-                  content: `Strategist (${agentKey}) dispatched subagent ${taskInfo.targetAgent} on branch ${branch} for repository ${targetRepo}. Task: "${taskInfo.task}". Run ID: ${dispatchRes.runId}.`,
-                  category: 'task_dispatch',
-                  tenantId: actor.includes('drisyon') ? 'tenant:drisyon_core' : 'tenant:default',
-                  projectId: targetRepo
-                });
-              } catch (_) {}
+            const safetyCheck = validateDispatchSafety(taskInfo.task, payload);
+            if (!safetyCheck.ok) {
+              dispatchWarning = safetyCheck.error;
+            } else {
+              const branch = `${agentKey}/${taskInfo.targetAgent}-${Date.now().toString(36)}`;
+              dispatchPromise = spawnAgentDispatch({
+                agent: taskInfo.targetAgent,
+                repo: targetRepo,
+                repoPath: targetRepoPath,
+                branch,
+                task: taskInfo.task
+              }).then((dispatchRes) => {
+                // Record in episodic memory
+                try {
+                  memory.storeMemory({
+                    title: `Task Dispatched: [${taskInfo.targetAgent.toUpperCase()}] ${taskInfo.task.slice(0, 50)}`,
+                    content: `Strategist (${agentKey}) dispatched subagent ${taskInfo.targetAgent} on branch ${branch} for repository ${targetRepo}. Task: "${taskInfo.task}". Run ID: ${dispatchRes.runId}.`,
+                    category: 'task_dispatch',
+                    tenantId: actor.includes('drisyon') ? 'tenant:drisyon_core' : 'tenant:default',
+                    projectId: targetRepo
+                  });
+                } catch (_) {}
 
-              // Record in task board (TASKS.md / teamStore)
-              try {
-                const tasksFile = resolveTasksFile(DASHBOARD_DIR);
-                const taskObj = {
-                  title: taskInfo.task,
-                  project: targetRepo,
-                  owner: taskInfo.targetAgent,
-                  status: 'in_execution',
-                  decision: 'autonomous'
-                };
-                if (teamStore) {
-                  teamStore.createTask(taskObj).catch(() => {});
-                } else {
-                  addLocalTask(tasksFile, taskObj);
-                }
-              } catch (_) {}
+                // Record in task board (TASKS.md / teamStore)
+                try {
+                  const tasksFile = resolveTasksFile(DASHBOARD_DIR);
+                  const taskObj = {
+                    title: taskInfo.task,
+                    project: targetRepo,
+                    owner: taskInfo.targetAgent,
+                    status: 'in_execution',
+                    decision: 'autonomous'
+                  };
+                  if (teamStore) {
+                    teamStore.createTask(taskObj).catch(() => {});
+                  } else {
+                    addLocalTask(tasksFile, taskObj);
+                  }
+                } catch (_) {}
 
-              return dispatchRes;
-            }).catch((err) => {
-              console.error('Task dispatch spawn failed:', err.message);
-              return { error: err.message };
-            });
+                return dispatchRes;
+              }).catch((err) => {
+                console.error('Task dispatch spawn failed:', err.message);
+                return { error: err.message };
+              });
+            }
           }
         }
 

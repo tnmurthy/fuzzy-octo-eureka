@@ -28,8 +28,12 @@ function detectActionableTask(message, agentKey) {
       /\b(security\s+(audit|scan|review|assessment|probe|check|test)|vulnerability|mantis|rebac|cve|penetration|pentest|exploit|threat\s+model|access\s+control\s+audit)\b/i.test(taskContent);
     const isQA = (agentKey === 'qa') ||
       /\b(unit\s+test|e2e|integration\s+test|lint|pre-commit|test\s+suite|coverage|vitest|jest)\b/i.test(taskContent);
+    const isAdvisory = /\b(plan|strategy|enroll|enrolling|marketing|campaign|pitch|outreach|proposal|deck|copy|advisory|gtm|funnel|pricing|sow)\b/i.test(taskContent) &&
+      !/\b(code|script|api|endpoint|unit\s+test|refactor|function|database|schema|docker|bug|fix|pr|commit|repo)\b/i.test(taskContent);
 
-    if (isSecurityAudit) {
+    if (isAdvisory) {
+      targetAgent = 'advisory';
+    } else if (isSecurityAudit) {
       targetAgent = 'mantis';
     } else if (isQA) {
       targetAgent = 'auto';
@@ -48,7 +52,8 @@ function detectActionableTask(message, agentKey) {
     return {
       actionable: true,
       task: taskContent,
-      targetAgent
+      targetAgent,
+      isAdvisory
     };
   }
 
@@ -77,10 +82,11 @@ test('detectActionableTask: routes security and vulnerability tasks to Mantis', 
   assert.equal(result.targetAgent, 'mantis');
 });
 
-test('detectActionableTask: does not misclassify marketing/enrollment URLs with security as Mantis scans', () => {
+test('detectActionableTask: classifies marketing/enrollment URLs as advisory tasks rather than Mantis/auto code scans', () => {
   const result = detectActionableTask('build a plan and help me in enrolling 30 users for this https://drisyon.com/cloud-security', 'po');
   assert.equal(result.actionable, true);
-  assert.equal(result.targetAgent, 'auto');
+  assert.equal(result.isAdvisory, true);
+  assert.equal(result.targetAgent, 'advisory');
 });
 
 test('detectActionableTask: routes testing and verification to QA/auto runner', () => {
