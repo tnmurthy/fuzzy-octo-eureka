@@ -532,12 +532,15 @@
             `;
           }
 
+          const docMatch = (item.task || '').match(/\((docs\/[^)]+)\)/);
+          const docLink = docMatch ? `<div style="margin-top:6px;"><a href="/${docMatch[1]}" target="_blank" style="display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; color:#38bdf8; text-decoration:none; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); padding:2px 8px; border-radius:4px; font-weight:600;">📄 Open Playbook →</a></div>` : '';
+
           card.innerHTML = `
             <div class="kanban-card-header">
               <span class="kanban-card-id" style="font-weight:700;">#${item.id || 'TASK'}</span>
               <span class="kanban-card-project">${item.project || 'General'}</span>
             </div>
-            <div class="kanban-card-body">${escapeHtml(item.task || '')}</div>
+            <div class="kanban-card-body">${escapeHtml(item.task || '')}${docLink}</div>
             <div class="kanban-card-meta">
               ${decisionBadge}
               <span class="kanban-owner">👤 ${item.owner || 'Operator'}</span>

@@ -286,6 +286,8 @@
       delivs.forEach((d, idx) => {
         const item = document.createElement('div');
         item.className = 'p-4 rounded-xl bg-slate-900/70 border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 transition-colors hover:border-purple-500/30';
+        const docMatch = (d.title || '').match(/\((docs\/[^)]+)\)/);
+        const docLink = docMatch ? `<div class="mt-1"><a href="/${docMatch[1]}" target="_blank" class="inline-flex items-center gap-1.5 text-[11px] text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/50 font-mono transition-colors"><span>📄</span> Open Playbook &amp; Outreach Kit &rarr;</a></div>` : '';
         item.innerHTML = `
           <div class="flex items-center gap-3.5">
             <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
@@ -293,6 +295,7 @@
             </div>
             <div>
               <div class="text-xs font-bold text-white">${escapeHtml(d.title)}</div>
+              ${docLink}
               <div class="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
                 <span>${escapeHtml(d.category || 'Core Engineering')}</span>
                 <span>·</span>
