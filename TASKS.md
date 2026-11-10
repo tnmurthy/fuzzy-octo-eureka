@@ -21,10 +21,7 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 | ID | Task | Project | Owner | Decision |
 |---|---|---|---|---|
-| TASK-103 | Apple Silicon Metal GPU generation benchmark suite | perf | Hermes / Infra | autonomous |
 
-| TASK-3483 | Build a status check endpoint for the auth service | fuzzy-octo-eureka | auto | autonomous |
-| TASK-4608 | Audit the security of the API endpoints and check ReBAC boundaries | fuzzy-octo-eureka | mantis | autonomous |
 ## 4. Evals & AppSec Verification
 
 | ID | Task | Project | Owner | Decision |
@@ -34,9 +31,7 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 | ID | Task | Project | Owner | Decision |
 |---|---|---|---|---|
-| TASK-101 | Production Cloudflare tunnel multi-domain route migration | devops | Operator | sovereign |
 
-| TASK-102 | Continuous Mantis 19-skill security sweep & ReBAC isolation audit | security | Mantis Sec | autonomous |
 ## 6. Delivered & Invoiced
 
 | Task | Completed |
@@ -55,3 +50,8 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 | Verify automated unit tests pass | 2026-11-09 |
 | Audit API authentication boundaries and tenant ReBAC isolation | 2026-11-09 |
+| Production Cloudflare tunnel multi-domain route migration | 2026-11-10 |
+| Continuous Mantis 19-skill security sweep & ReBAC isolation audit | 2026-11-10 |
+| Apple Silicon Metal GPU generation benchmark suite | 2026-11-10 |
+| Build a status check endpoint for the auth service | 2026-11-10 |
+| Audit the security of the API endpoints and check ReBAC boundaries | 2026-11-10 |

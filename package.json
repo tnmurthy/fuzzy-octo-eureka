@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test auth.test.js agent-chat.test.js chat-transcripts.test.js access-auth.test.js runs-reader.test.js buzz-bridge/buzz-protocol.test.js buzz-bridge/handler.test.js buzz-bridge/router.test.js buzz-bridge/typesafe-client.test.js buzz-bridge/local-router-client.test.js buzz-bridge/router-fallback.test.js buzz-bridge/pending-store.test.js team-store/team-store.test.js team-store/ai-ledger.test.js team-store/memory-tasks.test.js orchestration/agent-dispatch.test.js orchestration/patrol-runner.test.js invoicing.test.js embeddings.test.js orchestration/claude-usage.test.js team-store/costs.test.js dispatch-context.test.js digest.test.js load-env.test.js"
+    "test": "node --test auth.test.js agent-chat.test.js chat-transcripts.test.js access-auth.test.js runs-reader.test.js buzz-bridge/buzz-protocol.test.js buzz-bridge/handler.test.js buzz-bridge/router.test.js buzz-bridge/typesafe-client.test.js buzz-bridge/local-router-client.test.js buzz-bridge/router-fallback.test.js buzz-bridge/pending-store.test.js team-store/team-store.test.js team-store/ai-ledger.test.js team-store/memory-tasks.test.js orchestration/agent-dispatch.test.js orchestration/patrol-runner.test.js invoicing.test.js embeddings.test.js orchestration/claude-usage.test.js team-store/costs.test.js dispatch-context.test.js digest.test.js load-env.test.js scripts/ingest-context.test.js",
+    "ingest": "node scripts/ingest-context.js"
   },
   "engines": {
     "node": ">=18"

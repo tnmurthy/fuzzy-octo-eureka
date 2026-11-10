@@ -443,7 +443,7 @@ function readJsonBody(req, limit) {
       body += chunk;
       if (body.length > limit) { reject(new Error('body too large')); req.destroy(); }
     });
-    req.on('end', () => {
+    req.on('end', async () => {
       try { resolve(JSON.parse(body || '{}')); } catch { reject(new Error('bad JSON')); }
     });
   });
@@ -821,7 +821,7 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/auth/login') && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const { username, password, activateTeam } = JSON.parse(body || '{}');
         if (!auth.verifyCredentials(username, password)) {
@@ -887,7 +887,7 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/team/directive') && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const { channelId, content } = JSON.parse(body || '{}');
         if (!channelId || !content) {
@@ -1002,7 +1002,7 @@ function handleRequest(req, res) {
     }
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
         const userMessage = payload.message || '';
@@ -1120,7 +1120,17 @@ function handleRequest(req, res) {
           }
         }
 
-        const systemPrompt = agentSystemPrompts[agentKey] || agentSystemPrompts.po;
+        let contextBlock = '';
+        try {
+          const memories = await dispatchMemories(targetRepo, userMessage);
+          if (memories && memories.length > 0) {
+            contextBlock = '\n\n---\nTeam & Project Context (shared memory):\n' +
+              memories.map(m => `- [${m.category || 'context'}] ${m.title}: ${(m.content || '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n');
+          }
+        } catch (_) {}
+
+        const baseSystemPrompt = agentSystemPrompts[agentKey] || agentSystemPrompts.po;
+        const systemPrompt = baseSystemPrompt + contextBlock;
         const ollamaReqData = JSON.stringify({
           model: PERSONA_MODEL,
           messages: [
@@ -1312,7 +1322,7 @@ function handleRequest(req, res) {
     }
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
         const stored = memory.storeMemory(payload);
@@ -1331,7 +1341,7 @@ function handleRequest(req, res) {
     }
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
         const taskText = payload.task || payload.prompt || payload.directive || '';
@@ -1362,7 +1372,7 @@ function handleRequest(req, res) {
   if (req.url.startsWith('/api/dispatch/run') && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       let payload;
       try {
         payload = JSON.parse(body || '{}');
