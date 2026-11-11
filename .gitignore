@@ -25,8 +25,8 @@ Thumbs.db
 # draw.io autosave backups
 .$*.bkp
 
-# Backup files from sessions
-*.bak
+# Backup files from sessions (incl. dated variants like *.bak-20260913)
+*.bak*
 
 # Never commit secrets
 *.env
