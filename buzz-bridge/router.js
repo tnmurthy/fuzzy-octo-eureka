@@ -35,6 +35,7 @@ const EXECUTORS = {
 function buildRequest({ message, thread, repos, recentRuns }) {
   const repoCriteria = Object.fromEntries(repos.map(r => [r, `the ${r} repository`]));
   repoCriteria.none = 'no repository is named or clearly implied';
+  const safeRuns = Array.isArray(recentRuns) ? recentRuns : (recentRuns?.runs || []);
 
   return {
     state: {
@@ -42,7 +43,7 @@ function buildRequest({ message, thread, repos, recentRuns }) {
       thread: thread.slice(-5),
       team: { personas: PERSONAS, executors: EXECUTORS },
       repos,
-      recentRuns: recentRuns.slice(0, 5),
+      recentRuns: safeRuns.slice(0, 5),
     },
     questions: {
       route: {
