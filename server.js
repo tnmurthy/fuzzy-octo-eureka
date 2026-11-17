@@ -660,11 +660,20 @@ function resolveRepoPath(repo) {
   return path.resolve(PROJECTS_DIR, repo);
 }
 
-function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
+// Tool lists for a read-only claude run (a PR review). Headless claude cannot
+// ask, and --permission-mode acceptEdits would wave edits through, so edits
+// and commits are denied outright rather than just left off the allow-list.
+const READ_ONLY_ALLOWED_TOOLS = 'Read Glob Grep Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git status:*) Bash(ls:*) Bash(cat:*)';
+const READ_ONLY_DENIED_TOOLS = 'Edit Write NotebookEdit Bash(git commit:*) Bash(git push:*) Bash(git reset:*) Bash(git checkout:*) Bash(gh:*)';
+const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
+
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
-  return dispatchMemories(repo, task).then((memories) => {
+  // A review's output is posted on the PR (public for a public repo), so it
+  // gets no team memories that it could quote back.
+  return (readOnly ? Promise.resolve([]) : dispatchMemories(repo, task)).then((memories) => {
     const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
     fs.mkdirSync(tmpDir, { recursive: true });
     const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
@@ -694,6 +703,10 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
       USERPROFILE: OPENCLAW_HOME,
       HOME: OPENCLAW_HOME,
     });
+    if (readOnly) {
+      dispatchEnv.CLAUDE_ALLOWED_TOOLS = READ_ONLY_ALLOWED_TOOLS;
+      dispatchEnv.CLAUDE_DENIED_TOOLS = READ_ONLY_DENIED_TOOLS;
+    }
 
     if (isWin) {
       dispatchEnv.APPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Roaming');
@@ -1409,11 +1422,18 @@ function handleRequest(req, res) {
       if (typeof task !== 'string' || !task.trim()) {
         return sendJson(res, 400, { ok: false, error: 'task text is required' });
       }
-      const safetyCheck = validateDispatchSafety(task, payload);
+      // readOnly: a review. Only agents whose tools this server can lock down
+      // may run it; with edits and commits denied, the safety filter's
+      // destructive-command check has nothing to guard.
+      const readOnly = payload.readOnly === true;
+      if (readOnly && !READ_ONLY_AGENTS.has(agent)) {
+        return sendJson(res, 400, { ok: false, error: `readOnly runs support only: ${[...READ_ONLY_AGENTS].join(', ')}` });
+      }
+      const safetyCheck = readOnly ? { ok: true } : validateDispatchSafety(task, payload);
       if (!safetyCheck.ok) {
         return sendJson(res, 400, safetyCheck);
       }
-      spawnAgentDispatch({ agent, repo, repoPath, branch, task })
+      spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly })
         .then((result) => sendJson(res, 202, { ok: true, ...result, note: 'started; poll /api/runs for completion' }))
         .catch((err) => sendJson(res, 500, { ok: false, error: `dispatch failed: ${err.message}` }));
     });

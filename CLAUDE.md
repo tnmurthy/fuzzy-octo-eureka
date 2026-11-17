@@ -35,7 +35,15 @@ worktree is kept for inspection).
   goes to claude.
 - Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run.
 - Text the safety filter refuses needs `agent:confirmed`.
-- `POLLER_MAX_CONCURRENT` (2) runs at once across all repos.
+- `POLLER_MAX_CONCURRENT` (2) runs at once across all repos (reviews count).
+- Agent review: after opening a PR the poller dispatches a second run on the
+  same branch with `readOnly: true` (`POLLER_REVIEW_AGENT`: claude | noop |
+  off) and posts its answer as a PR comment - verdict plus findings. The
+  dashboard locks read-only runs down: only `claude`/`noop` accepted; Edit,
+  Write, commit, push, reset, checkout denied; no team memories in the prompt
+  (the comment is public on a public repo). Verified live 2026-11-17: a
+  read-only claude run told to Write, Edit and commit changed nothing. If the
+  branch's commit count moves during a review, the comment carries a warning.
 - Needs `GITHUB_TOKEN` (fine-grained; Issues + Pull requests read/write) in
   the secrets file; idles and logs once an hour without it.
 - State: `logs/issue-poller-state.json` (run id -> issue). Tests:

@@ -46,6 +46,26 @@ function pickAgent(labels, fallback) {
   return { agent: chosen || fallback, confirmed: names.includes(LABELS.confirmed) };
 }
 
+const MAX_REVIEW_CHARS = 60000;
+
+function buildReviewTask({ repo, number, pr, base, title, issueBody }) {
+  return [
+    `Review pull request #${pr} in ${repo}: the changes on this branch, which close issue #${number} ("${title}").`,
+    '',
+    `Read the change with \`git diff origin/${base}...HEAD\` and open whatever files you need for context.`,
+    'You are a reviewer: do not edit files and do not commit.',
+    '',
+    'Reply in markdown, under 400 words:',
+    '- First line: **Verdict:** approve | request changes',
+    '- Then findings, most severe first. Each: `file:line`, what is wrong, and a concrete input or state that breaks it.',
+    '- Check: does it do what the issue asks, correctness, tests for the new behaviour, security (secrets, injection, auth).',
+    '- If nothing blocks a merge, say "No blocking issues" and list at most 3 optional improvements.',
+    '',
+    'Issue text, for intent:',
+    String(issueBody || '(no description)').slice(0, 3000),
+  ].join('\n');
+}
+
 function buildTask(repo, issue) {
   const body = String(issue.body || '(no description)').slice(0, MAX_BODY_CHARS);
   return [
@@ -77,7 +97,8 @@ function buildTask(repo, issue) {
 function createPoller(deps) {
   const {
     github, dispatch, git, readRuns, loadState, saveState, repos,
-    maxConcurrent = 2, defaultAgent = 'claude',
+    maxConcurrent = 2, defaultAgent = 'claude', reviewAgent = 'claude',
+    readLog = () => '',
     now = Date.now, log = console.log,
   } = deps;
   const authors = (deps.authors || []).map((a) => a.toLowerCase());
@@ -106,7 +127,41 @@ function createPoller(deps) {
     try { git(args, cwd); } catch (_) { /* cleanup is best-effort */ }
   }
 
+  // A second, read-only run on the PR's branch; its answer becomes a PR
+  // comment. It reuses the worktree, which is removed once the review is in.
+  async function startReview(job, pr, run) {
+    const { runId } = await dispatch({
+      agent: reviewAgent,
+      repo: job.name,
+      branch: job.branch,
+      task: buildReviewTask({ repo: job.repo, number: job.number, pr, base: job.base, title: job.title, issueBody: job.issueBody }),
+      readOnly: true,
+    });
+    state.active[runId] = {
+      ...job, kind: 'review', pr, agent: reviewAgent, dispatchedAt: now(),
+      commitsBefore: Number(run.commits_ahead) || 0, worktree: run.worktree,
+    };
+    log(`[poller] ${job.repo}#${pr} review -> ${reviewAgent} run ${runId}`);
+  }
+
+  async function finishReview(runId, job, run) {
+    const { repo, pr, path } = job;
+    let body;
+    if (run.status === 'done') {
+      const text = String(readLog(run.log) || '').trim().slice(0, MAX_REVIEW_CHARS);
+      body = `### Agent review (\`${job.agent}\`, run \`${runId}\`)\n\n${text || '_The reviewer returned no text._'}`;
+      if ((Number(run.commits_ahead) || 0) !== job.commitsBefore) {
+        body += `\n\n> **Warning:** the branch changed during the review (${job.commitsBefore} -> ${run.commits_ahead} commits). Check the branch before merging.`;
+      }
+    } else {
+      body = `Agent review run \`${runId}\` ended **${run.status}**.${run.log ? ` Log on the agent host: \`${run.log}\`.` : ''} Review this PR by hand.`;
+    }
+    await github.comment(repo, pr, body);
+    if (job.worktree) quietGit(['worktree', 'remove', job.worktree], path);
+  }
+
   async function finish(runId, job, run) {
+    if (job.kind === 'review') return finishReview(runId, job, run);
     const { repo, number, branch, path } = job;
     const commits = Number(run.commits_ahead) || 0;
 
@@ -119,7 +174,16 @@ function createPoller(deps) {
         body: `Closes #${number}\n\nAgent \`${job.agent}\`, run \`${runId}\`, ${run.duration_s ?? '?'}s, ${commits} commit(s).`,
       });
       await setLabel(repo, number, LABELS.running, LABELS.review);
-      await github.comment(repo, number, `Opened #${pr.number} for review.`);
+      const reviewing = reviewAgent !== 'off';
+      await github.comment(repo, number, `Opened #${pr.number} for review.${reviewing ? ` An agent review (\`${reviewAgent}\`) will be posted on it.` : ''}`);
+      if (reviewing) {
+        try {
+          await startReview(job, pr.number, run);
+          return;
+        } catch (err) {
+          await github.comment(repo, pr.number, `Could not start the agent review: ${err.message}. Review this PR by hand.`);
+        }
+      }
       if (run.worktree) quietGit(['worktree', 'remove', run.worktree], path);
       return;
     }
@@ -160,8 +224,12 @@ function createPoller(deps) {
         if (job.attempts >= MAX_FINISH_ATTEMPTS) {
           delete state.active[runId];
           try {
-            await setLabel(job.repo, job.number, LABELS.running, LABELS.failed);
-            await github.comment(job.repo, job.number, `Run \`${runId}\` finished but could not be handed back: ${err.message}. Branch \`${job.branch}\` is on the agent host.`);
+            if (job.kind === 'review') {
+              await github.comment(job.repo, job.pr, `Agent review run \`${runId}\` could not be posted: ${err.message}. Review this PR by hand.`);
+            } else {
+              await setLabel(job.repo, job.number, LABELS.running, LABELS.failed);
+              await github.comment(job.repo, job.number, `Run \`${runId}\` finished but could not be handed back: ${err.message}. Branch \`${job.branch}\` is on the agent host.`);
+            }
           } catch (_) { /* GitHub itself is failing; the log line above stands */ }
         }
       }
@@ -188,8 +256,8 @@ function createPoller(deps) {
       git(['branch', branch, `origin/${base}`], target.path);
       const { runId } = await dispatch({ agent, repo: target.name, branch, task: buildTask(repo, issue), confirmed });
       state.active[runId] = {
-        repo, number, branch, base, agent, path: target.path,
-        title: issue.title, dispatchedAt: now(),
+        repo, number, branch, base, agent, path: target.path, name: target.name,
+        title: issue.title, issueBody: String(issue.body || '').slice(0, 3000), dispatchedAt: now(),
       };
       persist();
       await github.comment(repo, number, `Started run \`${runId}\` with \`${agent}\` on branch \`${branch}\`.`);
@@ -236,7 +304,7 @@ function createPoller(deps) {
   };
 }
 
-module.exports = { createPoller, pickAgent, buildTask, LABELS, LABEL_DEFS, LOST_AFTER_MS };
+module.exports = { createPoller, pickAgent, buildTask, buildReviewTask, LABELS, LABEL_DEFS, LOST_AFTER_MS };
 
 // ---------------------------------------------------------------------------
 // Process entry point (PM2: IssuePoller in ecosystem.config.js).
@@ -326,6 +394,16 @@ if (require.main === module) {
           authors: (process.env.POLLER_AUTHORS || '').split(',').map((s) => s.trim()).filter(Boolean),
           maxConcurrent: Number(process.env.POLLER_MAX_CONCURRENT) || 2,
           defaultAgent: process.env.POLLER_DEFAULT_AGENT || 'claude',
+          // claude (default) | noop | off. Only agents the dashboard can
+          // lock to read-only tools may review.
+          reviewAgent: process.env.POLLER_REVIEW_AGENT || 'claude',
+          readLog: (file) => {
+            if (!file) return '';
+            try {
+              const text = fs.readFileSync(file, 'utf8');
+              return text.length > 200000 ? text.slice(-200000) : text;
+            } catch (_) { return ''; }
+          },
         });
         await poller.ensureLabels();
         console.log(`[poller] watching ${repos.map((r) => r.repo).join(', ')} every ${INTERVAL_MS / 1000}s`);
