@@ -117,6 +117,24 @@ function createTeamStore(env, {
       });
       return rows.map(fromMemoryRow);
     },
+    // Raw material for the Context page: who is on the team, their shared
+    // memories (with owner), and light activity columns. Only the columns
+    // the page shows are selected.
+    async teamContext() {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [{ userId }, teams, members, memories, runs, calls] = await Promise.all([
+        session.getToken(),
+        rest.select('arunachala_teams', { id: `eq.${teamId}`, select: 'name' }),
+        rest.select('arunachala_team_members', { team_id: `eq.${teamId}`, select: 'user_id,display_name,role,created_at' }),
+        rest.select('arunachala_memory', {
+          team_id: `eq.${teamId}`, order: 'created_at.desc', limit: String(TEAM_MEMORY_LIMIT),
+          select: 'id,client_id,owner,project_id,category,title,content,tags,created_at',
+        }),
+        rest.select('arunachala_agent_runs', { team_id: `eq.${teamId}`, order: 'started_at.desc', limit: String(RUNS_SYNC_LIMIT), select: 'owner,started_at' }),
+        rest.select('arunachala_ai_calls', { team_id: `eq.${teamId}`, created_at: `gte.${since}`, limit: String(TEAM_CALLS_LIMIT), select: 'owner,input_tokens,output_tokens' }),
+      ]);
+      return { me: userId, teamName: (teams[0] && teams[0].name) || null, members, memories, runs, calls };
+    },
     async teamTasks() {
       const [rows, members] = await Promise.all([
         rest.select('arunachala_tasks', { team_id: `eq.${teamId}`, order: 'created_at.asc', limit: String(TEAM_TASKS_LIMIT) }),

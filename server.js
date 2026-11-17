@@ -72,6 +72,7 @@ if (teamStore) teamStore.start();
 const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require('./tasks-md');
 const { validateDispatchSafety } = require('./safety-filter');
 const { checkDispatchCap, parseCap } = require('./dispatch-cap');
+const { buildContextView } = require('./context-view');
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 const {
   recordTranscript,
@@ -269,6 +270,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/costing') urlPath = '/costing.html';
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
   if (urlPath === '/agents') urlPath = '/agents.html';
+  if (urlPath === '/context') urlPath = '/context.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
@@ -971,6 +973,18 @@ function handleRequest(req, res) {
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
+  }
+  if (req.url.split('?')[0] === '/api/context/overview' && req.method === 'GET') {
+    // Context page: team members + memory (mine / shared / combined).
+    if (PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true') return sendJson(res, 404, { ok: false, error: 'not found' });
+    const local = memory.episodicMemory || [];
+    const team = teamStore
+      ? teamStore.teamContext().then((t) => ({ team: t })).catch((err) => ({ error: String(err.message || 'unreachable').slice(0, 120) }))
+      : Promise.resolve({});
+    team
+      .then(({ team: t = null, error = null }) => sendJson(res, 200, buildContextView({ local, team: t, error })))
+      .catch(() => sendJson(res, 500, { ok: false, error: 'could not build the context view' }));
+    return;
   }
   if (req.url.startsWith('/api/agents/')) {
     const isDrisyonPortal = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
