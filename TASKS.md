@@ -39,7 +39,7 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 | Drisyon Cloud Security Cohort 01 30-Seat Enrollment Playbook (docs/DRISYON_COHORT_01_ENROLLMENT_PLAYBOOK.md) | 2026-11-10 |
 | ReBAC end-to-end security gating across all API routes | 2026-11-09 |
 | Risky dispatch pre-flight safety filter (FR-CHAT-07) | 2026-11-09 |
-| Deprecated legacy webhook POST /api/buzz/events (FR-SEC-05) | 2026-11-09 |
+| Deprecated legacy chat webhook (FR-SEC-05); removed with the chat integration in #29 | 2026-11-09 |
 | Local repository TASKS.md fallback with mutation API (FR-CHAT-08) | 2026-11-09 |
 | Unified Agency Knowledge Wiki deployed for Team & Drisyon | 2026-11-09 |
 | 5-Tier Agency Hierarchy Org Chart with 7 specialized agents | 2026-11-09 |

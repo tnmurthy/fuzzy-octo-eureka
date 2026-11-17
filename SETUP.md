@@ -3,13 +3,12 @@
 Every teammate runs their **own** install on their own Windows machine, with
 their own keys and logins. What the team shares lives in one place: the
 `arunachala_*` tables in the Talia Supabase project (agent runs, AI call
-ledger, memory, task board) and the mytestbed Buzz relay.
+ledger, memory, task board) and the GitHub repos whose issues feed the agents.
 
 | Runs on each laptop (yours) | Shared by the team |
 |---|---|
-| Dashboard, Buzz bridge, telemetry (3 Windows services) | Supabase `arunachala_*` tables, row-level security per team |
-| Ollama + local models (routing, personas, embeddings) | Buzz relay `buzz.mytestbed.tech`, channels |
-| n8n with the `buzz-dispatch` workflow | |
+| Dashboard, issue poller, telemetry | Supabase `arunachala_*` tables, row-level security per team |
+| Ollama + local models (personas, embeddings) | GitHub issues labelled `agent:ready`, and the PRs agents open |
 | Your own Claude / Codex logins and API keys | Daily caps on paid AI calls (per person + team) |
 
 Nobody holds a Supabase service key: each person signs in as themselves, and
@@ -31,21 +30,19 @@ the database only lets them read their team's rows and write their own.
 2. **Team membership.** SQL editor (replace the three values):
 
    ```sql
-   insert into public.arunachala_team_members (team_id, user_id, display_name, buzz_pubkey, role)
-   select 'fc4a173d-e64a-4324-b26f-4ef786427e26', id, 'Ravi', '<their 64-hex Buzz pubkey>', 'member'
+   insert into public.arunachala_team_members (team_id, user_id, display_name, role)
+   select 'fc4a173d-e64a-4324-b26f-4ef786427e26', id, 'Ravi', 'member'
    from auth.users where email = 'ravi+arunachala@example.com';
    ```
 
-3. **Buzz relay.** Add their Buzz identity, then their bot's once it exists
-   (the bridge prints its npub on first start):
-
-   ```powershell
-   docker exec buzz-prod-relay-1 buzz-admin add-member --pubkey <hex> --role member
-   ```
+3. **GitHub.** The poller only runs issues opened by `POLLER_AUTHORS` (default:
+   the repo owner). Add the teammate's login there if their issues should run,
+   and make sure the machine's `GITHUB_TOKEN` (fine-grained; Issues + Pull
+   requests read/write) can reach the repo.
 
 4. **Send them** (none of these are secrets): Supabase URL
    `https://onsmkbwqucvbzggugmmn.supabase.co`, the publishable key
-   (`sb_publishable_...`), `TEAM_ID`, and the Buzz channel id(s).
+   (`sb_publishable_...`) and `TEAM_ID`.
 
 ---
 
@@ -91,22 +88,24 @@ The dry run changes nothing; it lists what is missing and what it would do.
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-teammate.ps1 `
   -SupabaseUrl https://onsmkbwqucvbzggugmmn.supabase.co -SupabaseKey sb_publishable_... `
-  -TeamId <from admin> -BuzzChannels <from admin>
+  -TeamId <from admin>
 ```
+
+(`install-teammate.ps1` still asks for Buzz values from before the Buzz
+integration was removed; it needs updating. Ignore those prompts or enter a
+placeholder.)
 
 **macOS (Terminal):**
 ```bash
 ./install-teammate.sh \
   --supabase-url https://onsmkbwqucvbzggugmmn.supabase.co \
   --supabase-key sb_publishable_... \
-  --team-id <from admin> \
-  --buzz-channels <from admin>
+  --team-id <from admin>
 ```
 
-It pulls the local models, asks for your name, Buzz pubkey, a **unique bot
-name** and your Supabase `+arunachala` email + password, installs the background
-services (NSSM as LocalSystem on Windows, PM2 on macOS), starts n8n on
-`127.0.0.1:5678` and imports the dispatch workflow. Re-running is safe.
+It pulls the local models, asks for your name and your Supabase
+`+arunachala` email + password, and installs the background services (NSSM as
+LocalSystem on Windows, PM2 on macOS). Re-running is safe.
 
 The password is typed hidden and saved to
 `04_internal/secrets/arunachala-team.env`
@@ -114,23 +113,22 @@ The password is typed hidden and saved to
 file in `SECRETS_ENV_FILE`. To change it later, edit that one line and
 restart `ArunachalaDashboard`.
 
-### 4. Finish in n8n
+### 4. Give the poller a GitHub token
 
-Open http://127.0.0.1:5678, create the owner account, open **buzz-dispatch**
-and switch it to **Active**. (It polls `/api/runs` every 10 s until the run
-ends, then calls the bridge's `/notify`.)
+Put a fine-grained `GITHUB_TOKEN` (Issues + Pull requests read/write) in the
+same secrets file as the Supabase password, then restart `IssuePoller`
+(`pm2 restart IssuePoller --update-env`). Without it the poller idles and logs
+once an hour.
 
-### 5. First message
+### 5. First issue
 
-In Buzz, switch to the **mytestbed** community, open your team channel, type
-`@`, **pick your bot from the popup**, and send:
-
-```
-@<your bot> run noop in arunachala-dashboard: hello
-```
-
-You should get an acknowledgement with a run id, then "finished" in the same
-thread. Your run also appears for the team at `/api/runs?scope=team`.
+Open an issue in a watched repo, add the label `agent:ready` and the label
+`agent:noop`, and wait up to a minute. The poller relabels it `agent:running`,
+runs the agent in its own worktree and finishes with `agent:no-changes` (the
+`noop` agent changes nothing). Your run also appears at
+`/api/runs?scope=team`. For real work use `agent:claude` (the default),
+`agent:hermes` (docs and drafts), `agent:codex` or `agent:auto`: the result is
+a PR that closes the issue, labelled `agent:review`.
 
 ---
 
@@ -142,14 +140,15 @@ thread. Your run also appears for the team at `/api/runs?scope=team`.
 | `PERSONA_MODEL` | `gemma3:4b` | `qwen2.5:7b` only with a GPU - on CPU it is 2x slower and overruns the 45 s chat timeout. |
 | `MEMORY_EMBEDDINGS` | `true` | `false` falls back to keyword memory search. |
 
-All settings: `.env.example` and `buzz-bridge/.env.example`.
+All settings: `.env.example` (including the `POLLER_*` ones).
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Bot never answers, nothing in `logs\buzz-bridge.out.log` | Posted in another community (e.g. drisyon-ai) or another channel | Use the mytestbed channel whose id is in `BUZZ_BOT_CHANNELS` |
-| Log says `Skipped ...: bot not mentioned` | Bot name typed as text | Pick the bot from the `@` popup |
+| Labelled issue is never picked up | No `GITHUB_TOKEN`, issue author not in `POLLER_AUTHORS`, or the repo is not watched | `pm2 logs IssuePoller`; fix the token, authors or `POLLER_REPOS` |
+| Issue gets `agent:failed` | The run failed, timed out or never recorded | The comment names the log path; the worktree is kept for inspection |
+| Issue text is refused | The safety filter blocked it | Review it, then add `agent:confirmed` |
 | `team-store off: missing SUPABASE_PASSWORD` in `logs\server.err.log` | Team sync not configured | Put `SUPABASE_PASSWORD=...` in `04_internal\secrets\arunachala-team.env`, check `.env` has `SECRETS_ENV_FILE` pointing at it, restart `ArunachalaDashboard` |
 | `team-store ... sign-in failed (400): Invalid login credentials` | Wrong password, or the Talia database password used by mistake | Admin sets a new password on the `+arunachala` user (Users → the user → edit, or delete and re-add); update the secrets file; restart |
 | `secrets file not loaded: <path>` | `SECRETS_ENV_FILE` points at a missing file | Create it or fix the path in `.env` |

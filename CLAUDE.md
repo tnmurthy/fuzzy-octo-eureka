@@ -11,15 +11,14 @@ The process list is defined in `ecosystem.config.js` (the source of truth -
 
 | Service Name | Entry Point | Port / Role |
 |---|---|---|
-| `ArunachalaDashboard` | `server.js` | Port 8787 (`https://team.mytestbed.tech`); reports runs to bridge `:3100` |
-| `DrisyonDashboard` | `server.js` (`DASHBOARD_ENV_FILE=.env.drisyon`) | Port 8788 (`https://drisyon.mytestbed.tech`); reports runs to bridge `:3101` |
+| `ArunachalaDashboard` | `server.js` | Port 8787 (`https://team.mytestbed.tech`) |
+| `DrisyonDashboard` | `server.js` (`DASHBOARD_ENV_FILE=.env.drisyon`) | Port 8788 (`https://drisyon.mytestbed.tech`) |
 | `ArunachalaTelemetry` | `telemetry-daemon.js` | Real-time CPU, GPU & TCP telemetry |
 | `IssuePoller` | `orchestration/issue-poller.js` | The agents' work queue: GitHub issues labelled `agent:ready` -> `/api/dispatch/run` on 8787 -> PR. See "Issue queue" below. |
 
-The Buzz bridges (`ArunachalaBuzzBridge`, `ArunachalaDrisyonBridge`) were
-retired on 2026-11-17: the bot obeyed an operator key that had leaked into git
-history, and chat is a poor work queue. The code in `buzz-bridge/` is kept;
-login / `POST /api/team/activate` now answers `status: "disabled"`.
+The Buzz chat integration was removed on 2026-11-17 (#29): the bot obeyed an
+operator key that had leaked into git history, and chat is a poor work queue.
+Work now arrives as GitHub issues (next section).
 
 ### Issue queue - `orchestration/issue-poller.js`
 
@@ -83,22 +82,22 @@ pm2 restart all --update-env && pm2 save
 pm2 logs ArunachalaDashboard --lines 50
 ```
 
-*(Note: Legacy Windows setups used NSSM services `ArunachalaTelemetry`, `ArunachalaDashboard`, and `ArunachalaBuzzBridge` under LocalSystem. Cross-platform discovery in `host-specs.js` detects the host automatically).*
+*(Note: Legacy Windows setups used NSSM services `ArunachalaTelemetry`, and `ArunachalaDashboard` under LocalSystem. Cross-platform discovery in `host-specs.js` detects the host automatically).*
 
 ## Per-person config (.env)
 
 Each teammate runs the same code with their own values, so nothing personal is
 hard-coded. Templates: `.env.example` (read by `server.js` and
-`telemetry-daemon.ps1`) and `buzz-bridge/.env.example` (read by `bridge.js`).
+`telemetry-daemon.ps1`).
 `OPERATOR_HOME` is required under LocalSystem - without it, agent runs and the
-telemetry brain dir resolve to the system profile. `BUZZ_OPERATORS` has no
-default: an empty value stops the bridge at startup. Secrets can stay in
+telemetry brain dir resolve to the system profile. Secrets can stay in
 `04_internal\secrets`: `.env` names the file in `SECRETS_ENV_FILE`
 (`load-env.js`; `.env` wins on a clash; a missing file is logged by path).
 
 New teammate: `SETUP.md` (admin steps + teammate steps) and
-`install-teammate.ps1` (`-DryRun` first; elevated to install). The n8n
-workflow it imports is `n8n/buzz-dispatch-workflow.json` (polls every 10 s).
+`install-teammate.ps1` (`-DryRun` first; elevated to install). Note: the
+Windows scripts `install-teammate.ps1` and `telemetry-daemon.ps1` still contain
+Buzz steps and probes from before #29; ignore them.
 
 ## Shared team context - `team-store/` + `supabase/`
 
@@ -144,9 +143,8 @@ every object is prefixed `arunachala_`.
   (plus global/all) to the prompt after the task, capped at 1500 chars,
   looked up within 4 s (`dispatch-context.js`; `DISPATCH_MEMORY_CONTEXT=false`
   turns it off).
-- Weekly digest: `GET /api/digest` text; the bridge posts it to its channels
-  Monday 09:00 IST when `BUZZ_DIGEST=true` (one bridge per team; state in
-  `logs/digest-state.json`; `digest.js`).
+- Weekly digest: `GET /api/digest` returns the text (`digest.js`). Nothing
+  broadcasts it any more.
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
 ## API surface (server.js)
@@ -167,7 +165,6 @@ All routes are unauthenticated unless noted. `GET` unless marked `POST`.
 | `/api/memory/search` | Cosine-similarity search over episodic memory, `?q=&tenant=&project=` |
 | `/api/memory/invariants` | Returns the hardcoded DEC-001/002/003/005 procedural rules |
 | `/api/rebac/inspect` | Dumps the full ReBAC node/edge graph - no auth gate on the dump itself |
-| `POST /api/buzz/events` | **Unauthenticated-by-design webhook.** Accepts a NIP-01-shaped event, stores it in Drisyon memory, and forwards it to the same local Ollama chat used by `/api/agent/chat`. Meant to receive Buzz relay directives, but nothing currently verifies the sender - see Open items. |
 
 ## Ollama - not a service, kept alive by a watchdog
 
@@ -198,100 +195,6 @@ stop" while it drains connections.
   containing a double quote and breaks string parsing. No smart quotes, no
   em-dashes, no emoji in PowerShell sources.
 
-## Buzz relay integration
-
-`Get-BuzzStatus` in `telemetry-daemon.ps1` emits `services.buzz`:
-`online, ui, metrics, containers, realMembers, latencyMs, port`.
-`realMembers` is cached 60s - `docker exec psql` is slow and the value rarely
-changes.
-
-Buzz specifics:
-
-- Relay is **host-routed** by the Host header. Two communities exist:
-  `localhost:3000` (local, what the dashboard probe uses) and
-  `buzz.mytestbed.tech` (public, via Cloudflare Tunnel). `127.0.0.1:3000`
-  matches neither and returns
-  `404 relay: no community is configured for this host`.
-- One person owning N communities has N `relay_members` rows. Count members
-  with `count(DISTINCT pubkey)`, or the tile reads "2 members" for one person.
-- Relay owner (`relay_members` role owner) is
-  `768ee3b1eccb49856271187b66d3095b70bb23d3fa883a63183c5b7f3c5235cd`.
-  Without a holdable owner key nobody can mint an invite (`POST /api/invites`
-  requires owner/admin), so login is impossible - that was the original
-  "cannot log in" cause.
-- **The operator's actual Buzz desktop identity is `bd11c441...`**
-  (`bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84`), an
-  admin in the mytestbed community. Until 2026-10-20 it was *also* the relay's
-  signing key (`BUZZ_RELAY_PRIVATE_KEY`, set during the Sep 13 login fix). The
-  relay treats its own key as itself, not a person: it was left out of every
-  channel's kind 39002 member list, so the desktop showed "Join to
-  participate" and the join hung ("already a member, skipping" never
-  republishes 39002). Fixed by giving the relay a fresh key (now signs as
-  `2d1ac6c7...`; old `.env` saved as `.env.bak-20261020` in the compose dir).
-  **Never set the relay key to a person's key.**
-- Communities have a `communities.signing_key` column, but both are NULL, so
-  both sign with the env key.
-- Compose lives at `C:\tt-ai-stack\01_projects\active\buzz\deploy\compose\`
-  (project `buzz-prod`). Relay publishes `3000`, plus `127.0.0.1:9102` (metrics)
-  and `127.0.0.1:8081` (health).
-- `docker compose up -d relay` needs `--no-deps`: the `minio-init` image
-  (`quay.io/minio/mc:RELEASE.2025-08-13...`) now fails to pull with 401.
-- Members: `docker exec buzz-prod-relay-1 buzz-admin add-member --pubkey <hex>
-  --role admin|member` (cannot grant owner). Read-only DB look:
-  `docker exec buzz-prod-postgres-1 psql -U buzz -d buzz` (`channel_members`,
-  `relay_members`, `events`).
-- The Buzz desktop also connects to a hosted community,
-  `wss://drisyon-ai.communities.buzz.xyz`, which has its own `#general`. A
-  message "sent to #general" may well be there, not on mytestbed.
-
-Dashboard tile states: `OFFLINE` / `UNCLAIMED` (realMembers 0) /
-`HOST MISMATCH` / `NO METRICS` / `HEALTHY`.
-
-## Buzz bridge - `buzz-bridge/`
-
-Lets the operator talk to the team from Buzz: `@Arunachala Team is everything
-up?` in mytestbed `#general`. Its own folder and `package.json` because it needs
-`nostr-tools` (Schnorr signing); `server.js` stays dependency-free.
-
-- Flow: `bridge.js` (relay connection) -> `handler.js` -> `router.js` asks
-  TypeSafe (`jev-latest`, plain HTTP in `typesafe-client.js`) seven judgments
-  in one call (route, persona, executor, repo, status topic, risky, clear);
-  `decide()` is plain policy over them. Status answers are built from
-  `/api/telemetry` + `/api/runs` with no model call; persona answers go to
-  `/api/agent/chat` (Ollama). Add-task and risky dispatches are **described,
-  not executed** yet.
-- Dispatch (non-risky): n8n webhook `buzz-dispatch` -> `POST /api/dispatch/run`
-  -> `orchestration/agent-dispatch.sh` (detached, stdio ignored: failures are
-  silent, check `04_internal/agent-runs/runs.jsonl`) -> n8n polls `/api/runs`
-  -> bridge `127.0.0.1:3100/notify` replies in the thread. Pending events
-  persist in `logs/pending-dispatch.json` (6h TTL). Under LocalSystem the
-  spawn env passes `safe.directory` via `GIT_CONFIG_COUNT` (git's ownership
-  check) and points `USERPROFILE`/`HOME`/`APPDATA`/`LOCALAPPDATA`/`PATH` at
-  Sriad's profile so the agent CLIs find their logins. Files the agents
-  rewrite there become SYSTEM-owned; Sriad keeps inherited full control.
-- Spend: `TYPESAFE_DAILY_CAP` (default 200) counted from
-  `logs/typesafe-ledger.jsonl`, one line per call. If TypeSafe fails or the
-  cap is hit, the PO persona answers instead.
-- Config in `buzz-bridge/.env` (gitignored; template `.env.example`):
-  `TYPESAFE_API_KEY`, `BUZZ_BOT_SECRET_KEY` (generated on first start),
-  `BUZZ_BOT_CHANNELS`. Use `BRIDGE_RELAY_URL`, not `BUZZ_RELAY_URL` - the
-  machine already sets the latter to `https://...` for Buzz desktop, and NIP-42
-  needs the ws(s) URL in the AUTH `relay` tag.
-- Bot identity `5f718015...` (`npub1taccq9...`), a plain **member** (not role
-  `bot`, no `bot:true` profile): the desktop runs an agent-authorization
-  preflight on bot accounts it doesn't manage and refuses to send
-  ("Could not authorize a mentioned agent").
-- Obeys only `BUZZ_OPERATORS` (default `768ee3b1...` and `bd11c441...`).
-- Relay quirks it works around: (1) new kind 9 events are **not fanned out
-  live to a `#p`-only subscription** (history is), so it subscribes by `#h`
-  channel and checks the mention itself; (2) desktop edits are kind 40003 with
-  an unmarked `e` to the original and `["mention", pk]` instead of `p` -
-  answered in the original's thread; (3) a bot can't change its own channel
-  role, but can leave (9022) and re-add itself (9000).
-- Tests: `npm test` in `buzz-bridge/` (also run from the root `npm test`).
-- Next (not built): dispatch with a confirm step for `risky`, a post-run
-  "did it do what was asked" check, then delete `POST /api/buzz/events`.
-
 ## Drisyon memory engine (4-tier) - `memory-engine.js`
 
 Backs the Drisyon brand/branding on the dashboard body and everything under
@@ -304,7 +207,7 @@ Backs the Drisyon brand/branding on the dashboard body and everything under
 | 1 - Working | In-memory `Map`, never persisted, not currently read by any route |
 | 2 - Episodic/Semantic | `storeMemory()` entries, partitioned by `tenantId` + `projectId`, ranked by a hand-rolled cosine-similarity/term-frequency search (no embeddings model) |
 | 3 - Procedural Invariants | DEC-001 (client-owned infra, zero prod creds), DEC-002 (run-step idempotency), DEC-003 (parked is a health condition not a state), DEC-005 (evidence over assertion for gates) - hardcoded in `_initializeProceduralMemory()`, not editable via API |
-| 4 - Operator Alignment | `ingestOperatorDispatch()`, fed by `POST /api/team/dispatch` and by `POST /api/buzz/events` |
+| 4 - Operator Alignment | `ingestOperatorDispatch()`, fed by `POST /api/team/dispatch` |
 
 **Tenant isolation caveat:** `search()` only filters by `tenantId` when the
 caller passes something other than `tenant:drisyon_core`. Querying as
@@ -346,7 +249,7 @@ pressure, since each CLI call can take 30s-several minutes.
 `team:opscore` -> `role:admin` -> `perm:ping` -> `resource:ollama_cluster`.
 
 **It only gates `/api/ping`.** No other route - not `/api/agent/chat`, not
-any `/api/memory/*` route, not `/api/team/dispatch`, not `/api/buzz/events` -
+any `/api/memory/*` route, not `/api/team/dispatch` -
 calls `canAccess()`. Treat the "ReBAC Engine" as authorizing one specific
 action today, not as a general access-control layer for the app; the
 `GET /api/rebac/inspect` route that dumps the whole graph is itself unguarded.
@@ -359,7 +262,6 @@ A config change needs `Restart-Service Cloudflared -Force` (elevated).
 
 | Hostname | Origin | Note |
 |---|---|---|
-| `buzz.mytestbed.tech` | `http://127.0.0.1:3000` | Buzz relay, TLS at the edge, `wss://` works |
 | `team.mytestbed.tech` | `http://127.0.0.1:8787` | Removed 2026-09-13, restored 2026-10-20 **behind Cloudflare Access** app `Arunachala Dashboard` (`82cd560e-410a-4441-a300-f311a09640e1`, allow = owner email only, 24h session). |
 
 ### Origin auth - `access-auth.js`
@@ -394,18 +296,11 @@ were callable by anyone on the internet, and `GET /api/telemetry` served the
 equivalent auth) is in front of it.
 
 Since that note was written, the API surface grew - all of it equally
-unauthenticated. Anything re-exposed needs to also cover: `POST
-/api/buzz/events` (explicitly built as an open webhook receiver - accepts and
-acts on unsigned input, forwarding it straight to the local model), `GET
+unauthenticated. Anything re-exposed needs to also cover: `GET
 /api/memory/search` and `/api/memory/invariants` (read out Drisyon memory
 contents and the hardcoded governance rules), and `GET /api/rebac/inspect`
 (dumps the full authorization graph). See "API surface" table above for the
 complete route list.
-
-Buzz is safe to expose because it authenticates: NIP-11 reports
-`auth_required: true`, `restricted_writes: true`, and
-`BUZZ_REQUIRE_AUTH_TOKEN=true`. If desktop login ever breaks, that last flag is
-the first thing to flip back.
 
 ## CI - `.github/workflows/ci.yml`
 
@@ -418,14 +313,7 @@ above before it reaches the service.
 
 ## Open items
 
-- DONE 2026-11-17: `team-manager.js` no longer hard-codes a node version for
-  `pm2` or a Buzz private key. Activation registers `ArunachalaDrisyonBridge`
-  from `ecosystem.config.js` when PM2 does not know it. `/api/team/directive`
-  signs with `BUZZ_DIRECTIVE_PRIVATE_KEY` from the secrets file, passed to the
-  Buzz CLI by environment, no shell. **The old key is still in git history -
-  rotate it.**
-
-- DONE 2026-11-09: `POST /api/buzz/events` deprecated with HTTP 410 Gone (FR-SEC-05); Nostr bridge directly communicates with relays (`wss://drisyon-ai.communities.buzz.xyz`).
+- DONE 2026-11-17: Buzz integration removed (#29); work arrives as GitHub issues.
 - DONE 2026-11-09: ReBAC (`rebac-engine.js`) extended to gate all protected endpoints: `/api/ping`, `/api/dispatch/run`, `/api/agent/chat`, `/api/team/dispatch`, `/api/memory/store`, `/api/memory/search`, and `/api/rebac/inspect`.
 - DONE 2026-11-09: Risky dispatch guardrail (`FR-CHAT-07`) active: pre-flight filter halts destructive commands (`git reset --hard`, `git push -f`, `rm -rf`, `DROP TABLE`, `chmod 777`) unless confirmed by operator (`confirmed: true`).
 - DONE 2026-11-09: `/api/tasks` fallback to local `TASKS.md` with local task creation and section moves when Supabase is not connected (`FR-CHAT-08`).
@@ -434,10 +322,6 @@ above before it reaches the service.
 - Drisyon memory `search()`'s `tenant:drisyon_core` default bypasses the
   per-tenant filter (see Drisyon memory engine section) - confirm that's
   intentional before relying on it as real multi-tenant isolation.
-- `BUZZ_REQUIRE_RELAY_MEMBERSHIP` is still `false` - revisit now that the relay
-  is internet-facing.
-- Second clone at `C:\tt-ai-stack\buzz` is stale; the live one is under
-  `01_projects\active\buzz`.
 - `PLAN.md`'s checklist (Phase 2-5) hasn't been touched since Sep 8 and
   undercounts what's shipped - e.g. it still shows the NSSM/service move as
   unchecked even though the Runtime section above documents it as live. Worth

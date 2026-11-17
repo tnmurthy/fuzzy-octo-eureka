@@ -10,12 +10,12 @@ with a stated gap) · **Not built**.
 
 ## 1. Purpose and scope
 
-A small team runs an AI workforce from chat. Each member operates their own
+A small team runs an AI workforce from GitHub issues. Each member operates their own
 install on Windows, with their own keys; the team shares context (agent runs,
 AI calls, memory, tasks) through Supabase. Local models handle the
 high-volume work; frontier models run only when needed and within caps.
 
-**In scope:** Buzz chat bot, agent dispatch, monitoring dashboard, shared team
+**In scope:** GitHub issue queue, agent dispatch, monitoring dashboard, shared team
 context, AI cost controls, per-person install.
 **Out of scope:** hosting for people outside the team, non-Windows installs,
 billing, a UI for creating or moving tasks (API only for now).
@@ -24,41 +24,43 @@ billing, a UI for creating or moving tasks (API only for now).
 
 | Actor | Who | Can |
 |---|---|---|
-| Operator | A teammate, on their own install | Chat with their bot, dispatch agents, use the dashboard, read team context |
+| Operator | A teammate, on their own install | Open and label GitHub issues, dispatch agents, use the dashboard, read team context |
 | Team owner | Admin of the team in Supabase | Add/remove members, change AI caps |
 | Agent | claude, codex, hermes, agy, noop | Work in one worktree, commit on its branch |
-| Bridge bot | One per operator, on the Buzz relay | Act only for its operator's Buzz keys |
+| Issue poller | `IssuePoller` under PM2 | Dispatch `agent:ready` issues from `POLLER_AUTHORS`, push branches and open PRs |
 
 ---
 
 ## 3. Functional requirements
 
-### 3.1 Chat (Buzz bridge)
+### 3.1 Work intake: GitHub issue queue and guardrails
+
+The Buzz chat bridge was removed in #29 (its FR-CHAT-01..06 and 09 went with
+it). Work now arrives as GitHub issues labelled `agent:ready`
+(`orchestration/issue-poller.js`).
 
 | ID | Requirement | Acceptance criteria | Status | Evidence |
 |---|---|---|---|---|
-| FR-CHAT-01 | Act only on messages from the operator that mention the bot | Messages from other keys, without a mention, or older than the bridge start get no reply | Built | `buzz-protocol.test.js` |
-| FR-CHAT-02 | Explain silence | An operator message without a real mention is logged as `bot not mentioned` | Built | `buzz-protocol.test.js` |
-| FR-CHAT-03 | Classify each message locally | A local Ollama model chooses status / persona / dispatch / add-task; on its timeout a smaller model is tried | Built | `router*.test.js`, `local-router-client.test.js` |
-| FR-CHAT-04 | Answer status questions without a model | Reply built from telemetry and runs | Built | `handler.test.js` |
-| FR-CHAT-05 | Answer persona questions | Reply from one of 5 personas on a local model | Built | live check 2026-11-05 |
-| FR-CHAT-06 | Reply in the original thread | Every reply, including run results, threads under the triggering message | Built | live test 2026-11-04 |
+| FR-QUEUE-01 | Turn a labelled issue into a run | Every 60 s an `agent:ready` issue is relabelled `agent:running`, a branch `agent/issue-<n>-<ts>` is cut from `origin/<default>` and `/api/dispatch/run` is called | Built | `orchestration/issue-poller.test.js` |
+| FR-QUEUE-02 | Report the outcome on the issue | Commits: branch pushed, PR that `Closes #n`, `agent:review`; no commits: `agent:no-changes`; failed, timed out or never recorded: `agent:failed` with the log path | Built | `orchestration/issue-poller.test.js` |
+| FR-QUEUE-03 | Run only trusted issues | Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run; text the safety filter refuses needs `agent:confirmed` | Built | `orchestration/issue-poller.test.js` |
+| FR-QUEUE-04 | Choose the agent per issue | `agent:claude|hermes|codex|noop|auto` label, else `POLLER_DEFAULT_AGENT` (claude) | Built | `orchestration/issue-poller.test.js` |
+| FR-QUEUE-05 | Bound concurrency | At most `POLLER_MAX_CONCURRENT` (2) runs at once across all repos; reviews count | Built | `orchestration/issue-poller.test.js` |
+| FR-QUEUE-06 | Review every agent PR | A read-only second run (`POLLER_REVIEW_AGENT`: claude, noop or off) posts verdict and findings as a PR comment | Built | `orchestration/issue-poller.test.js` |
 | FR-CHAT-07 | Confirm before risky dispatches | Destructive commands (git reset --hard, push -f, rm -rf, drop table) halt and require operator confirmation | Built | `safety-filter.test.js` |
-| FR-CHAT-08 | Add tasks from chat & local board | Tasks can be added and moved in local TASKS.md or team-store | Built | `tasks-local.test.js` |
-| FR-CHAT-09 | Bridge config has no personal defaults | Empty `BUZZ_OPERATORS` stops the bridge at start | Built | `bridge.js` startup check |
+| FR-CHAT-08 | Local board | Tasks can be added and moved in local TASKS.md or team-store | Built | `tasks-local.test.js` |
 
 ### 3.2 Dispatch
 
 | ID | Requirement | Acceptance criteria | Status | Evidence |
 |---|---|---|---|---|
-| FR-DISP-01 | Start a run from chat or API and return its id at once | `POST /api/dispatch/run` → 202 with `runId` | Built | live e2e 2026-11-04 |
+| FR-DISP-01 | Start a run from the issue poller or API and return its id at once | `POST /api/dispatch/run` → 202 with `runId` | Built | live e2e 2026-11-04 |
 | FR-DISP-02 | Validate dispatch input | Unknown agent, non-plain repo name, missing repo `.git` or empty task → 400 | Built | `server.js` route |
 | FR-DISP-03 | Isolate each run | One git worktree per branch beside the repo; gitignored files listed in `.worktreeinclude` copied in | Built | `agent-dispatch.sh` |
 | FR-DISP-04 | Record every run | Start and end lines in `runs.jsonl` (status, exit, duration, commits, head); full output in `<runId>.log` | Built | `runs-reader.test.js` |
 | FR-DISP-05 | Bound run time | Runs end after `AGENT_TIMEOUT` (1 h) with status `timed_out` | Built | `agent-dispatch.sh` |
 | FR-DISP-06 | Agents never push | claude's tool list denies `git push` and `gh`; the prompt forbids push/merge | Built | `agent-dispatch.sh` |
-| FR-DISP-07 | Report the result back to chat | n8n polls `/api/runs` every 10 s, then calls `/notify`; the bridge replies | Built | live test 2026-11-04 |
-| FR-DISP-08 | Survive a bridge restart mid-run | The pending reply is kept on disk (6 h) and still delivered | Built | `pending-store.test.js`, live test |
+| FR-DISP-07 | Report the result on the issue | The poller records run id -> issue in `logs/issue-poller-state.json` and relabels the issue and opens the PR when the run ends (see FR-QUEUE-02) | Built | `orchestration/issue-poller.test.js` |
 | FR-DISP-09 | Run under the LocalSystem service | git ownership check passed via env; agent CLIs find the operator's logins | Built | live claude run 2026-11-04 |
 | FR-DISP-10 | Local first, escalate on failure (`auto`) | Local agent first; repo tests pass → done without claude; fail / no tests → reset worktree, claude runs; `escalated` recorded | Built | `agent-dispatch.test.js` (4 scenarios) |
 | FR-DISP-11 | Opt in to local first per install | `DISPATCH_LOCAL_FIRST=true` turns claude requests into `auto` | Built | `server.js` |
@@ -95,14 +97,14 @@ billing, a UI for creating or moving tasks (API only for now).
 | FR-COST-03 | Share the ledger | Lines reach `arunachala_ai_calls`; resends ignored; 500 per sync | Built | `ai-ledger.test.js`, DB check 8 |
 | FR-COST-04 | Cap paid calls | Paid calls past 200/person or 1000/team per UTC day are rejected by the database | Built | DB check 4 |
 | FR-COST-05 | Local calls are free | `ollama` calls are recorded but never count towards or hit the caps | Built | DB check 7 |
-| FR-COST-06 | Check the cap before a paid call | A paid call is refused before it is made when over the cap | **Partial** - the bridge's TypeSafe client checks its local daily cap; the team cap is checked at sync | `typesafe-client.test.js` |
+| FR-COST-06 | Check the cap before a paid call | A paid call is refused before it is made when over the cap | **Partial** - the cap is enforced by the database when calls sync; there is no local pre-check | DB check 4 |
 | FR-COST-07 | Right-size the persona model | `PERSONA_MODEL` and `PERSONA_MAX_TOKENS` configurable; answers capped | Built | `server.js` |
 
 ### 3.6 Monitoring dashboard
 
 | ID | Requirement | Acceptance criteria | Status | Evidence |
 |---|---|---|---|---|
-| FR-MON-01 | Show service health | Ollama, OpenClaw, Buzz, Watchtower up/down with latency, refreshed every few seconds | Built | `telemetry-daemon.ps1` |
+| FR-MON-01 | Show service health | Ollama, OpenClaw, Watchtower up/down with latency, refreshed every few seconds | Built | `telemetry-daemon.ps1` |
 | FR-MON-02 | Show CPU and latency history | Charts from `/api/history` | Built | dashboard |
 | FR-MON-03 | Show agent runs | Agent Runs tab; runs without an end line after 6 h show as `stale` | Built | `runs-reader.test.js` |
 | FR-MON-04 | Show model usage | OpenClaw sessions and token usage, polled every 60 s | Built | `/api/openclaw` |
@@ -113,10 +115,10 @@ billing, a UI for creating or moving tasks (API only for now).
 | ID | Requirement | Acceptance criteria | Status | Evidence |
 |---|---|---|---|---|
 | FR-SEC-01 | Gate the public dashboard | Cloudflare Access at the edge plus origin JWT check; fails closed | Built | `access-auth.test.js` |
-| FR-SEC-02 | Bind locally | Server and bridge notify port listen on 127.0.0.1 only | Built | `server.js`, `bridge.js` |
+| FR-SEC-02 | Bind locally | Server listens on 127.0.0.1 only | Built | `server.js` |
 | FR-SEC-03 | Keep secrets out of git | `.env` files gitignored; installer types the password hidden | Built | `.gitignore`, installer |
 | FR-SEC-04 | Limit request bodies | Task routes cap bodies at 10 KB; task ids must be UUIDs | Built | `server.js` |
-| FR-SEC-05 | Remove the open webhook | `POST /api/buzz/events` deprecated with HTTP 410 Gone; Nostr relay bridge used | Built | `server.js` |
+| FR-SEC-05 | No open webhook | The unauthenticated chat webhook is gone with the Buzz integration (#29); work enters only via GitHub issues from `POLLER_AUTHORS` | Built | `server.js` |
 
 ### 3.8 Install and operations
 

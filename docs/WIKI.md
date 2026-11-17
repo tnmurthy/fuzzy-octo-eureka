@@ -81,7 +81,7 @@ In the **👥 Agents Board** tab, select any persona card to start an interactiv
 
 ### 2. Quick Dispatch (Autonomous Git Worktrees)
 In the **🧭 Agent Runs** tab, use the Quick Dispatch form to assign real engineering work to autonomous runners (`mantis`, `auto`, `claude`, `codex`, `hermes`):
-* **Isolated Worktrees:** Every job runs in an isolated worktree (`buzz/<timestamp>`) so uncommitted work is protected.
+* **Isolated Worktrees:** Every job runs in an isolated worktree (for issue-queue runs `agent/issue-<n>-<timestamp>`) so uncommitted work is protected.
 * **Automated Regression Gate (`auto`):** Runs local models first; escalates to Claude Sonnet only if local unit tests fail.
 * **Live Terminal Streaming:** Click any active run to tail its execution stdout/stderr in real time.
 
@@ -200,7 +200,7 @@ Institutional memory is preserved across reboots and agent runs through a multi-
 | **Tier 1: Working** | Ephemeral (single session) | In-memory Map buffer | Active terminal inputs, temporary tool outputs, recent bash commands. |
 | **Tier 2: Episodic & Semantic** | Permanent, Vectorized | `drisyon-memory.json` + `arunachala_memory` | Technical solutions, API behavior notes, architectural patterns indexed by `nomic-embed-text`. |
 | **Tier 3: Procedural Invariants** | Immutable Rules | Enforced in `memory-engine.js` | DEC-001 (Zero prod credentials), DEC-005 (Evidence over assertion). |
-| **Tier 4: Operator Alignment** | Permanent Log | Nostr/Buzz Relays + Disk | Directives sent by verified cryptographic operator keys via Buzz relay. |
+| **Tier 4: Operator Alignment** | Permanent Log | Disk (`drisyon-memory.json`) | Operator directives ingested through `POST /api/team/dispatch`. |
 
 ### Shared Context Memory Schema
 ```json
