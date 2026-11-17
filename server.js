@@ -721,7 +721,14 @@ const specialistSuggester = createSuggester({
     record: (call) => recordAiCall(AI_CALLS_FILE, call),
   }),
 });
-setTimeout(() => specialistSuggester.warm(), 5000).unref();
+setTimeout(() => specialistSuggester.warm().then(() => specialistRecommender && specialistRecommender.recommend()).catch(() => {}), 5000).unref();
+// "Recommended for you": this machine's specialist usage + memory/tasks.
+const specialistRecommender = require('./specialist-recommend').createRecommender({
+  specialists,
+  suggester: specialistSuggester,
+  readRuns: () => readRuns(RUNS_FILE, 2000).runs || [],
+  readMemories: () => memory.episodicMemory || [],
+});
 const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
@@ -731,6 +738,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
   settings: dispatchSettings,
   specialists,
   suggester: specialistSuggester,
+  recommender: specialistRecommender,
   isAdmin,
   actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,

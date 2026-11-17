@@ -104,7 +104,13 @@ function createSuggester({ specialists, embedder, cosine, rerank = null }) {
     return { ranker, suggestions: ranked.slice(0, k).map((r) => pick(r.s, r.score, ranker)) };
   }
 
-  return { suggest, warm };
+  /** The catalog's cached vectors (shared with recommendations), or null. */
+  async function docVectorsFn() {
+    await warm();
+    return docVectors;
+  }
+
+  return { suggest, warm, docVectors: docVectorsFn };
 }
 
 /**

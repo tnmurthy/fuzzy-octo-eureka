@@ -94,6 +94,7 @@
     .spec { background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--div-color, var(--status-blue)); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
     .spec .n { font-weight: 500; font-size: 0.9rem; }
     .spec .d { font-size: 0.78rem; color: #c3cedb; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .spec .why { font-size: 0.72rem; color: #e8c66a; }
     .spec .f { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
   </style>
 </head>
@@ -182,10 +183,16 @@
         <h2 style="margin:0">Specialists <span class="muted" id="catalog-count"></span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap">
           <input type="search" id="catalog-q" placeholder="Search specialists…" aria-label="Search specialists" class="cat-input">
+          <select id="catalog-sort" aria-label="Sort specialists" class="cat-input">
+            <option value="recommended">⭐ Recommended for you</option>
+            <option value="used">Most used by you</option>
+            <option value="az">A–Z</option>
+          </select>
           <select id="catalog-division" aria-label="Division" class="cat-input"><option value="">All divisions</option></select>
         </div>
       </div>
-      <div class="muted" id="catalog-source" style="margin-bottom:10px"></div>
+      <div class="muted" id="catalog-source" style="margin-bottom:4px"></div>
+      <div class="muted" id="catalog-basis" style="margin-bottom:10px"></div>
       <div class="cat-grid" id="catalog"></div>
       <button class="btn-sm" id="catalog-more" type="button" hidden style="display:block; margin:10px auto 0">Show more</button>
     </section>

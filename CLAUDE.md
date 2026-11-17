@@ -110,6 +110,16 @@ Suggestions: as you type a task on /agents, `GET
 keyword boost, re-ranked by a local model (`SPECIALIST_SUGGEST_MODEL`, default
 `gemma3:4b`, `off` to skip; 4 s timeout, falls back to the shortlist). ~0.4 s
 warm; Ollama calls are logged with purpose `suggest` and exempt from caps.
+Recommended for you: `GET /api/agents/specialists/recommended`
+(`specialist-recommend.js`) ranks all specialists for the person at this
+dashboard: 55% their own use (runs.jsonl `specialist`, half-life 14 days),
+45% context (each memory category and up to 8 recent task titles run through
+the suggester; its top 3 picks score 1/0.7/0.5 x signal weight). Test and
+automated runs (noop, `diag/`, `patrol/`, `sim/`, `test/` branches, PR
+reviews) are ignored. Cached 5 min, warmed at startup; reasons name only a
+memory category or task title, never memory text. The Agents page sorts the
+catalog by it (or Most used / A-Z), shows the reason on each card, and puts
+"⭐ Recommended for you" at the top of the picker.
 The issue poller auto-picks the top suggestion for issues without a
 `specialist:` label and adds that label to the issue (visible, editable;
 `POLLER_AUTO_SPECIALIST=false` turns it off; a failed lookup never blocks the
