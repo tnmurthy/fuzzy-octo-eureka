@@ -165,7 +165,7 @@ started=$(date +%s)
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$repo" \
   branch="$branch" worktree="$worktree" log="$log" status=running \
   task="$(if [ -n "${AGENT_TASK_TITLE:-}" ]; then printf '%s' "$AGENT_TASK_TITLE" | head -c 160; else head -c 160 "$prompt_file"; fi | tr '\r\n' '  ')" \
-  ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} started_at="$(iso_date)"
+  ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} ${AGENT_PARENT_RUN:+"parent=$AGENT_PARENT_RUN"} started_at="$(iso_date)"
 
 export AGENT_NAME="$agent"
 
@@ -215,11 +215,14 @@ run_mantis() {
 # from that file and prints the readable result. The exit code is claude's.
 run_claude() {
   local limit="$1" json="$RUNS_DIR/$run_id.claude.json" rc
-  local lean=()
+  local lean=() resume=()
   [ "$CLAUDE_LEAN" = true ] && lean=(--strict-mcp-config --disable-slash-commands --setting-sources project,local)
+  # A follow-up continues an earlier run's conversation (same worktree, so the
+  # session's project folder matches). The dashboard validated the id.
+  [[ "${AGENT_RESUME_SESSION:-}" =~ ^[0-9a-fA-F-]{36}$ ]] && resume=(--resume "$AGENT_RESUME_SESSION")
   (cd "$worktree" && run_timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
      --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS" \
-     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format stream-json --verbose "${lean[@]}") \
+     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format stream-json --verbose "${lean[@]}" ${resume[@]+"${resume[@]}"}) \
     | node "$(native "$HERE/stream-log.js")" "$(native "$json")"
   rc=${PIPESTATUS[0]}
   echo "== result"

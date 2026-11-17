@@ -13,6 +13,7 @@
 //   POST /api/agents/repos      { type: 'local', path } | { type: 'git', url } (admin)
 //   POST /api/agents/repos/remove { name } (admin; unregisters, files stay)
 //   POST /api/agents/run        { repo, agent, specialist?, title, body? } -> run now
+//   POST /api/agents/followup   { runId, message } -> resume that claude run's session
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -91,6 +92,7 @@ const slimRun = (r, active) => ({
   task: String(r.task || '').slice(0, 300),
   link: linkOf(r, active),
   hasLog: Boolean(r.log),
+  parent: r.parent || null,
 });
 
 /**
@@ -106,7 +108,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -148,7 +150,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       repos,
       agents: AGENTS,
       running: runs.filter((r) => r.status === 'running').map((r) => slimRun(r, active)),
-      recent: runs.filter((r) => r.status !== 'running').slice(0, 25).map((r) => slimRun(r, active)),
+      recent: runs.filter((r) => r.status !== 'running').slice(0, 25).map((r) => ({ ...slimRun(r, active), canFollowUp: Boolean(canFollowUp(r)) })),
       queue: q,
     };
   }
@@ -226,6 +228,22 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           if (!r.ok) return sendJson(res, 400, { ok: false, error: r.error });
           if (recommender) recommender.invalidate();
           return sendJson(res, r.already ? 200 : 201, { ok: true, already: Boolean(r.already), repo: { name: r.value.name, path: tilde(r.value.path), remote: r.value.remote || null } });
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/followup' && req.method === 'POST') {
+      // Send a message to a finished claude run: its session resumes on the
+      // same branch. Same checks and paid cap as any dispatch.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'follow-ups are not available' }); return true; }
+      readJsonBody(req, 16 * 1024)
+        .then(async (b) => {
+          const message = String(b.message || '').trim();
+          if (!message) return sendJson(res, 400, { ok: false, error: 'write a message for the agent' });
+          if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
+          const r = await dispatchRun({ followUpOf: String(b.runId || ''), task: `Follow-up: ${message}` });
+          return sendJson(res, r.status, r.body);
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;

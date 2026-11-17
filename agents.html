@@ -129,6 +129,10 @@
     td.task { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .st-done { color: var(--status-green); } .st-failed { color: var(--status-red); } .st-other { color: var(--status-amber); }
     a.lnk { color: var(--status-blue); text-decoration: none; }
+    td.actions { white-space: nowrap; }
+    td.actions .btn-sm + .btn-sm { margin-left: 6px; }
+    tr.fu-row td { background: rgba(0,176,255,.05); }
+    .fu { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 
     /* specialists catalog */
     .cat-input { background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; }

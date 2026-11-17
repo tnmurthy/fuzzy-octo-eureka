@@ -21,6 +21,7 @@ case "$STUB_LOCAL" in
 esac
 `;
 const CLAUDE_STUB = `#!/usr/bin/env bash
+[ -n "$CLAUDE_ARGS" ] && printf '%s\\n' "$@" > "$CLAUDE_ARGS"
 echo claude > fixed; git add -A; git -c user.email=t@t -c user.name=t commit -qm claude
 touch "$CLAUDE_MARK"
 echo '{"type":"system","subtype":"init","model":"claude-sonnet-test"}'
@@ -146,4 +147,36 @@ test('without a specialist the run log has no specialist field', () => {
   const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
   assert.equal('specialist' in start, false);
   assert.equal(start.task, 'make the tests pass');
+});
+
+test('a follow-up resumes the earlier claude session and records its parent run', () => {
+  const t = setup({ withTests: false });
+  const argsFile = path.join(t.dir, 'claude-args');
+  const res = spawnSync(BASH, [posix(SCRIPT), 'claude', posix(t.repo), 'task/x', posix(t.prompt), 'run-2'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env, PATH: `${t.bin}${path.delimiter}${process.env.PATH}`, AGENT_RUNS_DIR: posix(t.runs),
+      CLAUDE_ARGS: posix(argsFile), CLAUDE_MARK: posix(path.join(t.dir, 'm')), AI_CALLS_FILE: posix(path.join(t.dir, 'ai.jsonl')),
+      AGENT_RESUME_SESSION: '0f4c2a1e-8b7d-4c3a-9e2f-1a2b3c4d5e6f', AGENT_PARENT_RUN: 'run-1',
+    },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  const args = fs.readFileSync(argsFile, 'utf8').split('\n');
+  const i = args.indexOf('--resume');
+  assert.ok(i > 0, 'claude got --resume');
+  assert.equal(args[i + 1], '0f4c2a1e-8b7d-4c3a-9e2f-1a2b3c4d5e6f');
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal(start.parent, 'run-1');
+});
+
+test('a malformed session id is never passed to claude', () => {
+  const t = setup({ withTests: false });
+  const argsFile = path.join(t.dir, 'claude-args');
+  const res = spawnSync(BASH, [posix(SCRIPT), 'claude', posix(t.repo), 'task/x', posix(t.prompt), 'run-3'], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${t.bin}${path.delimiter}${process.env.PATH}`, AGENT_RUNS_DIR: posix(t.runs), CLAUDE_ARGS: posix(argsFile),
+      CLAUDE_MARK: posix(path.join(t.dir, 'm')), AI_CALLS_FILE: posix(path.join(t.dir, 'ai.jsonl')), AGENT_RESUME_SESSION: 'x; rm -rf /' },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(fs.readFileSync(argsFile, 'utf8').includes('--resume'), false);
 });
