@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agents - Arunachala Operations Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    body { background: var(--bg-primary); color: var(--color-text-main); font-family: 'Outfit', sans-serif; margin: 0; }
+    .page { max-width: 1240px; margin: 0 auto; padding: 28px 16px 60px; }
+    .head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+    .head h1 { font-size: 1.6rem; font-weight: 600; margin: 0; }
+    .head a { color: var(--status-blue); text-decoration: none; font-size: 0.85rem; }
+    .muted { color: var(--color-text-muted); font-size: 0.8rem; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; }
+    .card h2 { font-size: 0.95rem; font-weight: 600; margin: 0 0 12px; letter-spacing: 0.02em; }
+    .grid-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 860px) { .grid-top { grid-template-columns: 1fr; } }
+
+    /* cap meter */
+    .cap { display: flex; align-items: center; gap: 10px; }
+    .cap-bar { width: 160px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .cap-fill { height: 100%; background: var(--status-green); transition: width .3s; }
+    .cap.warn .cap-fill { background: var(--status-amber); }
+    .cap.full .cap-fill { background: var(--status-red); }
+
+    /* form */
+    form label { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin: 10px 0 4px; }
+    form input, form select, form textarea {
+      width: 100%; box-sizing: border-box; background: var(--bg-secondary); color: var(--color-text-main);
+      border: 1px solid var(--border-color); border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 0.9rem;
+    }
+    form textarea { min-height: 110px; resize: vertical; }
+    form input:focus, form select:focus, form textarea:focus { outline: none; border-color: var(--status-blue); }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn { margin-top: 14px; background: var(--status-blue); color: #001018; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn-sm { background: transparent; color: var(--status-blue); border: 1px solid rgba(0,176,255,.35); border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 0.75rem; cursor: pointer; }
+    .msg { margin-top: 10px; font-size: 0.85rem; min-height: 1.2em; }
+    .msg.ok { color: var(--status-green); } .msg.err { color: #fca5a5; }
+    .msg a { color: var(--status-blue); }
+
+    /* running */
+    .run { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-color); }
+    .run:first-of-type { border-top: 0; }
+    .run .what { min-width: 0; }
+    .run .task { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pill { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; margin-right: 6px; }
+    .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--status-green); margin-right: 6px; box-shadow: 0 0 0 0 var(--status-green-glow); animation: pulse 1.6s infinite; }
+    @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(0,0,0,0); } }
+
+    /* board */
+    .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+    @media (max-width: 960px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 520px) { .board { grid-template-columns: 1fr; } }
+    .col h3 { font-size: 0.8rem; font-weight: 600; margin: 0 0 10px; display: flex; justify-content: space-between; }
+    .col .count { color: var(--color-text-muted); }
+    .issue { display: block; text-decoration: none; color: inherit; background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent, var(--status-blue)); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; font-size: 0.83rem; }
+    .issue:hover { border-color: var(--border-color-glow); }
+    .issue .meta { font-size: 0.72rem; color: var(--color-text-muted); margin-top: 3px; }
+    .empty { font-size: 0.78rem; color: var(--color-text-muted); padding: 6px 0; }
+
+    /* log */
+    .log-card { margin-bottom: 16px; display: none; }
+    .log-card.open { display: block; }
+    .log-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    pre.log { margin: 0; max-height: 420px; overflow: auto; background: #05070a; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: #cfd8e3; }
+
+    /* recent */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { text-align: left; font-weight: 500; color: var(--color-text-muted); font-size: 0.74rem; padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
+    td { padding: 8px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    td.task { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .st-done { color: var(--status-green); } .st-failed { color: var(--status-red); } .st-other { color: var(--status-amber); }
+    a.lnk { color: var(--status-blue); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="head">
+      <div>
+        <h1>Agents</h1>
+        <div class="muted">Give a task, watch it run, review the PR. Refreshes every 5 s.</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+        <div class="cap" id="cap" title="Paid agent runs today (DISPATCH_DAILY_PAID_RUNS)">
+          <span class="muted">Paid runs today</span>
+          <div class="cap-bar"><div class="cap-fill" id="cap-fill" style="width:0"></div></div>
+          <span class="mono" id="cap-text">-</span>
+        </div>
+        <a href="/">← Dashboard</a>
+      </div>
+    </div>
+
+    <div class="grid-top">
+      <section class="card">
+        <h2>Give an agent a task</h2>
+        <form id="task-form" autocomplete="off">
+          <div class="row2">
+            <div>
+              <label for="repo">Repository</label>
+              <select id="repo" name="repo" required></select>
+            </div>
+            <div>
+              <label for="agent">Agent</label>
+              <select id="agent" name="agent">
+                <option value="claude">Claude: code (paid)</option>
+                <option value="hermes">Hermes: docs and drafts (free, local)</option>
+                <option value="auto">Auto: Hermes first, Claude if tests fail</option>
+                <option value="codex">Codex (paid)</option>
+                <option value="noop">Noop: dry run, tests the pipeline</option>
+              </select>
+            </div>
+          </div>
+          <label for="title">What should it do?</label>
+          <input id="title" name="title" maxlength="200" required placeholder="e.g. Remove the placeholder tiles from the dashboard">
+          <label for="body">Details (optional)</label>
+          <textarea id="body" name="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, what not to change."></textarea>
+          <button class="btn" id="submit" type="submit">Queue task</button>
+          <div class="msg" id="msg" role="status"></div>
+          <div class="muted">Opens a GitHub issue labelled <span class="mono">agent:ready</span>. The poller picks it up within a minute, opens a PR, and a second Claude run reviews it. You approve by merging.</div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Running now</h2>
+        <div id="running"><div class="empty">Loading…</div></div>
+      </section>
+    </div>
+
+    <section class="card log-card" id="log-card">
+      <div class="log-head">
+        <h2 style="margin:0">Log: <span class="mono" id="log-id"></span> <span class="muted" id="log-status"></span></h2>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label class="muted" style="display:flex; gap:5px; align-items:center;"><input type="checkbox" id="log-follow" checked> follow</label>
+          <button class="btn-sm" id="log-close" type="button">Close</button>
+        </div>
+      </div>
+      <pre class="log" id="log"></pre>
+    </section>
+
+    <section class="board" id="board"></section>
+    <div class="muted" id="queue-note" style="margin:-6px 0 16px"></div>
+
+    <section class="card">
+      <h2>Recent runs</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Agent</th><th>Took</th><th>Commits</th><th>For</th><th>Task</th><th></th></tr></thead>
+          <tbody id="recent"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="agents-page.js"></script>
+</body>
+</html>

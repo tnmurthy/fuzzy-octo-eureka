@@ -1,0 +1,196 @@
+// agents-api.js - the Agents page's API: what is running, the GitHub issue
+// queue, a run's live log, and "give an agent a task" (opens a GitHub issue
+// labelled agent:ready, which the issue poller picks up).
+//
+//   GET  /api/agents/overview   cap, running + recent runs, issue queue
+//   GET  /api/agents/log?id=R   tail of run R's log (only files in the runs dir)
+//   POST /api/agents/task       { repo, title, body, agent } -> new issue
+//
+// The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
+// seconds does not burn the token's rate limit. Errors never carry the token.
+
+const fs = require('fs');
+const path = require('path');
+
+const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
+const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
+const QUEUE_TTL_MS = 30000;
+const LOG_TAIL_BYTES = 64 * 1024;
+const MAX_TITLE = 200;
+const MAX_BODY = 8000;
+const RUN_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
+
+/** Validate a "give an agent a task" request. Returns { ok, value } or { ok: false, error }. */
+function validateTask(input, repos) {
+  const o = input && typeof input === 'object' ? input : {};
+  const repo = String(o.repo || '').trim();
+  const title = String(o.title || '').trim();
+  const body = String(o.body || '').trim();
+  const agent = String(o.agent || 'claude').trim();
+  if (!repos.includes(repo)) return { ok: false, error: `repo must be one of: ${repos.join(', ')}` };
+  if (!title) return { ok: false, error: 'title is required' };
+  if (title.length > MAX_TITLE) return { ok: false, error: `title is longer than ${MAX_TITLE} characters` };
+  if (body.length > MAX_BODY) return { ok: false, error: `description is longer than ${MAX_BODY} characters` };
+  if (!AGENTS.includes(agent)) return { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` };
+  return { ok: true, value: { repo, title, body, agent } };
+}
+
+/** True for a JSON request that is not from another site. */
+function isSameSiteJson(req) {
+  const h = req.headers || {};
+  if (!/^application\/json\b/i.test(String(h['content-type'] || ''))) return false;
+  if (String(h['sec-fetch-site'] || '') === 'cross-site') return false;
+  if (h.origin) {
+    try { return new URL(h.origin).host === String(h.host || ''); } catch (_) { return false; }
+  }
+  return true;
+}
+
+/** Which issue or PR a run serves, from the poller state or the task text it wrote. */
+function linkOf(run, active) {
+  const job = active[run.id];
+  if (job) return job.kind === 'review' ? { kind: 'review', pr: job.pr, repo: job.repo } : { kind: 'issue', issue: job.number, repo: job.repo };
+  const task = String(run.task || '');
+  let m = task.match(/^Review pull request #(\d+) in (\S+?):/);
+  if (m) return { kind: 'review', pr: Number(m[1]), repo: m[2] };
+  m = task.match(/GitHub issue (\S+)#(\d+)/);
+  if (m) return { kind: 'issue', issue: Number(m[2]), repo: m[1] };
+  return null;
+}
+
+const slimRun = (r, active) => ({
+  id: r.id,
+  agent: r.agent,
+  status: r.status,
+  started_at: r.started_at,
+  finished_at: r.finished_at,
+  duration_s: r.duration_s,
+  commits_ahead: r.commits_ahead,
+  task: String(r.task || '').slice(0, 300),
+  link: linkOf(r, active),
+  hasLog: Boolean(r.log),
+});
+
+/**
+ * @param {object} deps
+ * @param {string} deps.runsFile
+ * @param {string} deps.stateFile           issue poller state (run id -> job)
+ * @param {(file: string, n: number) => {runs: object[]}} deps.readRuns
+ * @param {(runs: object[]) => {used: number, cap: number, blocked?: boolean}} deps.capNow
+ * @param {string[]} deps.repos             owner/name the poller watches
+ * @param {object|null} deps.github         github-client, or null without a token
+ * @param {() => number} [deps.now]
+ */
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, now = Date.now }) {
+  const runsDir = path.resolve(path.dirname(runsFile));
+  let queueCache = { at: 0, value: null };
+
+  const loadRuns = () => readRuns(runsFile, 5000).runs || [];
+  const loadActive = () => {
+    try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')).active || {}; } catch (_) { return {}; }
+  };
+
+  async function queue() {
+    if (!github) return { available: false, note: 'GITHUB_TOKEN is not set, so the issue queue is hidden.' };
+    if (queueCache.value && now() - queueCache.at < QUEUE_TTL_MS) return queueCache.value;
+    const columns = {};
+    for (const [col, label] of Object.entries(QUEUE_LABELS)) {
+      const lists = await Promise.all(repos.map((repo) => github.listIssuesWithLabel(repo, label)
+        .then((issues) => issues.map((i) => ({
+          repo,
+          number: i.number,
+          title: i.title,
+          url: i.html_url,
+          updated_at: i.updated_at,
+          agent: ((i.labels || []).map((l) => (typeof l === 'string' ? l : l.name))
+            .find((n) => AGENTS.includes(n.replace(/^agent:/, ''))) || '').replace(/^agent:/, '') || null,
+        })))));
+      columns[col] = lists.flat();
+    }
+    queueCache = { at: now(), value: { available: true, columns } };
+    return queueCache.value;
+  }
+
+  async function overview() {
+    const runs = loadRuns();
+    const active = loadActive();
+    let q;
+    try { q = await queue(); } catch (err) { q = { available: false, note: `GitHub queue unavailable (${err.status || 'network'})` }; }
+    return {
+      cap: capNow(runs),
+      repos,
+      agents: AGENTS,
+      running: runs.filter((r) => r.status === 'running').map((r) => slimRun(r, active)),
+      recent: runs.filter((r) => r.status !== 'running').slice(0, 25).map((r) => slimRun(r, active)),
+      queue: q,
+    };
+  }
+
+  function log(id) {
+    if (!RUN_ID_RE.test(id || '')) return { status: 400, body: { ok: false, error: 'bad run id' } };
+    const run = loadRuns().find((r) => r.id === id);
+    if (!run || !run.log) return { status: 404, body: { ok: false, error: 'run or log not found' } };
+    const file = path.resolve(run.log);
+    if (path.dirname(file) !== runsDir) return { status: 403, body: { ok: false, error: 'log is outside the runs folder' } };
+    let text = '';
+    let truncated = false;
+    try {
+      const { size } = fs.statSync(file);
+      const start = Math.max(0, size - LOG_TAIL_BYTES);
+      truncated = start > 0;
+      const fd = fs.openSync(file, 'r');
+      try {
+        const buf = Buffer.alloc(size - start);
+        fs.readSync(fd, buf, 0, buf.length, start);
+        text = buf.toString('utf8');
+      } finally { fs.closeSync(fd); }
+    } catch (_) {
+      return { status: 404, body: { ok: false, error: 'log file not written yet' } };
+    }
+    return { status: 200, body: { ok: true, id, status: run.status, truncated, text } };
+  }
+
+  async function createTask(input) {
+    if (!github) return { status: 503, body: { ok: false, error: 'GITHUB_TOKEN is not set; add it to the secrets file to queue tasks.' } };
+    const v = validateTask(input, repos);
+    if (!v.ok) return { status: 400, body: { ok: false, error: v.error } };
+    const { repo, title, body, agent } = v.value;
+    const labels = [QUEUE_LABELS.ready, `agent:${agent}`];
+    const issue = await github.createIssue(repo, { title, body: body || title, labels });
+    queueCache = { at: 0, value: null };
+    return { status: 201, body: { ok: true, number: issue.number, url: issue.html_url } };
+  }
+
+  /** Returns true when it handled the request. */
+  function handle(req, res, { sendJson, readJsonBody }) {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/api/agents/overview' && req.method === 'GET') {
+      overview().then((b) => sendJson(res, 200, b)).catch(() => sendJson(res, 500, { ok: false, error: 'could not read agent runs' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/log' && req.method === 'GET') {
+      const r = log(url.searchParams.get('id'));
+      sendJson(res, r.status, r.body);
+      return true;
+    }
+    if (url.pathname === '/api/agents/task' && req.method === 'POST') {
+      // Opening an issue starts a paid agent, so block cross-site requests:
+      // JSON content type forces a CORS preflight (which this server never
+      // grants), and a browser-sent Origin must be this host.
+      if (!isSameSiteJson(req)) {
+        sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+        return true;
+      }
+      readJsonBody(req, 16 * 1024)
+        .then(createTask)
+        .then((r) => sendJson(res, r.status, r.body))
+        .catch((err) => sendJson(res, err.status ? 502 : 400, { ok: false, error: err.status ? `GitHub refused the issue (${err.status})` : 'bad request body' }));
+      return true;
+    }
+    return false;
+  }
+
+  return { handle, overview, log, createTask };
+}
+
+module.exports = { createAgentsApi, validateTask, linkOf, isSameSiteJson, AGENTS };
