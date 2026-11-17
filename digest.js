@@ -1,4 +1,4 @@
-// digest.js - the weekly AI digest the bridge posts to Buzz: runs, how often
+// digest.js - the weekly AI digest: runs, how often
 // local-first was enough, spend, and what to change. Built from /api/costs and
 // /api/runs data; pure functions so the wording and the schedule are tested.
 

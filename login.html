@@ -233,16 +233,9 @@
           <input class="form-input" type="password" id="password" name="password" required autocomplete="current-password" placeholder="Enter password">
         </div>
 
-        <label class="activation-toggle" for="activateTeam">
-          <input type="checkbox" id="activateTeam" name="activateTeam" checked>
-          <span class="activation-label">
-            <strong>⚡ Activate Buzz Team locally</strong><br>
-            Connects relay <code>drisyon-ai</code> and starts AI agents
-          </span>
-        </label>
 
         <button type="submit" id="submitBtn" class="btn-submit">
-          <span>Sign In & Activate Team</span>
+          <span>Sign In</span>
           <span>→</span>
         </button>
       </form>
@@ -260,18 +253,17 @@
       const submitBtn = document.getElementById('submitBtn');
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      const activateTeam = document.getElementById('activateTeam').checked;
 
       alertBox.className = 'alert';
       alertBox.style.display = 'none';
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Activating AI Team...</span>';
+      submitBtn.innerHTML = '<span>Signing in...</span>';
 
       try {
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, activateTeam })
+          body: JSON.stringify({ username, password })
         });
 
         const data = await res.json();
@@ -294,7 +286,7 @@
         alertBox.textContent = err.message;
         alertBox.style.display = 'block';
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Sign In & Activate Team</span><span>→</span>';
+        submitBtn.innerHTML = '<span>Sign In</span><span>→</span>';
       }
     }
   </script>

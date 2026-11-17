@@ -39,7 +39,6 @@ const accessGate = createAccessGate({
   allowedEmails: (process.env.ACCESS_ALLOWED_EMAILS || '').split(',').filter(Boolean),
 });
 const auth = require('./auth');
-const teamManager = require('./team-manager');
 const { getHostSpecs } = require('./host-specs');
 const DASHBOARD_DIR = __dirname;
 const TELEMETRY_FILE = path.join(DASHBOARD_DIR, 'telemetry.json');
@@ -50,8 +49,7 @@ const STACK_ROOT = process.env.STACK_ROOT || path.resolve(DASHBOARD_DIR, '../../
 // task handed to Claude, Codex, Antigravity or Hermes.
 const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
   path.join(STACK_ROOT, '04_internal', 'agent-runs', 'runs.jsonl');
-// Same default buzz-bridge/bridge.js uses for listRepos(): the parent of
-// the active-projects folder this dashboard lives in.
+// Default: the parent of the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
 const { readRuns } = require('./runs-reader');
 const { getInvoicingSummary } = require('./invoicing');
@@ -465,7 +463,7 @@ function recordTaskTransitionAudit(taskId, task, newStatus, actor) {
     if (err) console.error('Failed to append task audit log:', err.message);
   });
 
-  // If entering Sovereign Review, trigger alert webhook (e.g. n8n or Buzz bridge)
+  // If entering Sovereign Review, trigger alert webhook (e.g. n8n)
   if (newStatus === 'human_review') {
     const alertPayload = {
       event: 'sovereign_review_required',
@@ -610,8 +608,8 @@ function handleCosts(req, res) {
     .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
 }
 
-// Weekly digest text for Buzz (the bridge posts it Monday 09:00 IST): the
-// team's view when team sync is on, else this machine's.
+// Weekly digest text: the team's view when team sync is on, else this
+// machine's.
 const { buildDigest } = require('./digest');
 const DIGEST_DAYS = 7;
 function handleDigest(req, res) {
@@ -668,7 +666,7 @@ const READ_ONLY_DENIED_TOOLS = 'Edit Write NotebookEdit Bash(git commit:*) Bash(
 const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 
 function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false }) {
-  const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `buzz/${Date.now()}`;
+  const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
   // A review's output is posted on the PR (public for a public repo), so it
@@ -842,14 +840,9 @@ function handleRequest(req, res) {
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { username, password, activateTeam } = JSON.parse(body || '{}');
+        const { username, password } = JSON.parse(body || '{}');
         if (!auth.verifyCredentials(username, password)) {
           return sendJson(res, 401, { ok: false, error: 'Invalid username or password' });
-        }
-
-        let teamActivation = null;
-        if (activateTeam !== false) {
-          teamActivation = teamManager.activateTeam(`Login by ${username}`);
         }
 
         const cookie = auth.createSessionCookie(username);
@@ -860,9 +853,7 @@ function handleRequest(req, res) {
         res.end(JSON.stringify({
           ok: true,
           user: username,
-          activated: true,
-          teamActivation,
-          message: 'Logged in successfully. Buzz AI Team activated on Mac Studio.'
+          message: 'Logged in successfully.'
         }));
       } catch (err) {
         sendJson(res, 400, { ok: false, error: err.message });
@@ -884,41 +875,7 @@ function handleRequest(req, res) {
     return sendJson(res, 200, {
       authenticated: !!user,
       user: user || null,
-      teamStatus: teamManager.getTeamStatus()
     });
-  }
-
-  if (req.url.startsWith('/api/team/status')) {
-    return sendJson(res, 200, teamManager.getTeamStatus());
-  }
-
-  if (req.url.startsWith('/api/team/activate') && req.method === 'POST') {
-    const user = auth.getSessionUser(req) || 'dashboard';
-    const result = teamManager.activateTeam(`Manual activation by ${user}`);
-    return sendJson(res, result.ok ? 200 : 500, result);
-  }
-
-  if (req.url.startsWith('/api/team/deactivate') && req.method === 'POST') {
-    const result = teamManager.deactivateTeam();
-    return sendJson(res, result.ok ? 200 : 500, result);
-  }
-
-  if (req.url.startsWith('/api/team/directive') && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const { channelId, content } = JSON.parse(body || '{}');
-        if (!channelId || !content) {
-          return sendJson(res, 400, { ok: false, error: 'channelId and content required' });
-        }
-        const result = teamManager.sendDirective(channelId, content);
-        return sendJson(res, 200, { ok: true, result });
-      } catch (err) {
-        return sendJson(res, 500, { ok: false, error: err.message });
-      }
-    });
-    return;
   }
 
   if (req.url.startsWith('/api/telemetry')) {
@@ -1486,23 +1443,10 @@ function handleRequest(req, res) {
     Promise.all([computeCosts(DIGEST_DAYS, true), runsP])
       .then(([costs, runs]) => {
         const digestText = buildDigest({ costs, runs: recent(runs) });
-        const pubScript = path.join(DASHBOARD_DIR, 'buzz-bridge', 'publish-once.js');
-        let broadcast = false;
-        if (fs.existsSync(pubScript)) {
-          const child = require('child_process').spawn('node', [pubScript, digestText], {
-            cwd: path.join(DASHBOARD_DIR, 'buzz-bridge'),
-            stdio: 'ignore',
-            detached: true
-          });
-          child.unref();
-          child.on('error', (err) => console.error('digest broadcast spawn failed:', err.message));
-          broadcast = true;
-        }
         sendJson(res, 200, {
           ok: true,
-          broadcast,
           text: digestText,
-          message: broadcast ? 'Weekly digest generated and broadcast initiated to Buzz channels.' : 'Weekly digest generated (broadcast script not found).'
+          message: 'Weekly digest generated.'
         });
       })
       .catch((err) => sendJson(res, 500, { ok: false, error: err.message }));
@@ -1523,22 +1467,11 @@ function handleRequest(req, res) {
     return sendJson(res, 200, {
       ok: true,
       daemon: daemonState,
-      buzzDigestEnabled: process.env.BUZZ_DIGEST === 'true',
       latestMantisRun: latestMantis,
       timestamp: new Date().toISOString()
     });
   }
 
-  // ── Buzz Integration: Message Receiver ──
-  // Deprecated (FR-SEC-05): Nostr bridge connects directly to relays (wss://drisyon-ai.communities.buzz.xyz)
-  if (req.url.startsWith('/api/buzz/events')) {
-    return sendJson(res, 410, {
-      ok: false,
-      status: 'gone',
-      error: 'Endpoint deprecated (FR-SEC-05). Directives are handled natively via Nostr relay (wss://drisyon-ai.communities.buzz.xyz) or authenticated dashboard dispatch (/api/dispatch/run).'
-    });
-  }
-  // ── END Buzz Integration ──
   return serveStaticFile(req, res);
 }
 

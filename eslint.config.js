@@ -11,7 +11,6 @@ module.exports = [
   {
     ignores: [
       'node_modules/**',
-      'buzz-bridge/node_modules/**',
       'logs/**',
       '*.bak*',
       'supabase/tests/**',

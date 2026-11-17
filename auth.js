@@ -1,6 +1,6 @@
 // auth.js - Username & password authentication and session management for team.mytestbed.tech
-// Provides secure HMAC-SHA256 signed session cookies, credential verification,
-// and auto-activation hook for the Buzz AI Team. Zero external dependencies.
+// Provides secure HMAC-SHA256 signed session cookies and credential
+// verification. Zero external dependencies.
 
 const crypto = require('crypto');
 
