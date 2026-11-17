@@ -110,6 +110,11 @@ Suggestions: as you type a task on /agents, `GET
 keyword boost, re-ranked by a local model (`SPECIALIST_SUGGEST_MODEL`, default
 `gemma3:4b`, `off` to skip; 4 s timeout, falls back to the shortlist). ~0.4 s
 warm; Ollama calls are logged with purpose `suggest` and exempt from caps.
+The issue poller auto-picks the top suggestion for issues without a
+`specialist:` label and adds that label to the issue (visible, editable;
+`POLLER_AUTO_SPECIALIST=false` turns it off; a failed lookup never blocks the
+run). Runs record `specialist` in runs.jsonl; the org chart's Tier 3b shows
+each division with its runs this week.
 
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid

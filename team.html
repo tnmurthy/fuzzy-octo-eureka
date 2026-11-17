@@ -379,6 +379,10 @@
       <div class="tier" id="tier-roles"></div>
 
       <div class="connector"></div>
+      <div class="tier-label">Tier 3b: Specialists (The Agency · agency-agents) <a href="/agents" style="color:var(--status-blue); text-decoration:none; font-size:0.72rem; margin-left:6px;">browse &amp; use →</a></div>
+      <div class="tier" id="tier-specialists"></div>
+
+      <div class="connector"></div>
       <div class="tier-label">Tier 4: Executors &amp; Sandboxes (Agent Runs)</div>
       <div class="tier" id="tier-exec"></div>
 
@@ -641,8 +645,39 @@
       mTrust.append(podMember('openclaw-gw', '🦁', 'OpenClaw Gateway', 'MCP Tool Security Router (:18789)', ocSt[0], ocSt[1], 'autonomous'));
     }
 
-    function renderHierarchy(tel, runs, people, runsSource) {
+    // Tier 3b: one node per agency-agents division, with how many of its
+    // specialists ran in the last 7 days (local run log records the slug).
+    function renderSpecialists(catalog, localRuns) {
+      const tier = document.getElementById('tier-specialists');
+      tier.replaceChildren();
+      const list = (catalog && catalog.specialists) || [];
+      if (!list.length) { tier.append(el('div', 'muted', 'No specialists imported (scripts/sync-specialists.js).')); return; }
+      const weekAgo = Date.now() - 7 * 864e5;
+      const used = {};
+      (localRuns || []).forEach(r => {
+        if (r.specialist && Date.parse(r.started_at) >= weekAgo) used[r.specialist] = (used[r.specialist] || 0) + 1;
+      });
+      const byDiv = {};
+      list.forEach(s => { (byDiv[s.division] = byDiv[s.division] || { label: s.divisionLabel, items: [] }).items.push(s); });
+      Object.entries(byDiv).sort((a, b) => b[1].items.length - a[1].items.length).forEach(([div, d]) => {
+        const runsHere = d.items.reduce((n, s) => n + (used[s.slug] || 0), 0);
+        const id = 'spec-' + div;
+        tier.append(node(id, '🎭 ' + d.label, d.items.length + ' specialists', runsHere ? 'green' : '', runsHere ? runsHere + (runsHere === 1 ? ' run' : ' runs') + ' this week' : 'available'));
+        const top = d.items.filter(s => used[s.slug]).sort((a, b) => used[b.slug] - used[a.slug]).slice(0, 3);
+        details[id] = [
+          ['Decision Rights', '🟢 Role guidance for an executor (cannot override task, rules or tool limits)'],
+          ['Division', d.label + ' · ' + d.items.length + ' specialists'],
+          ['Used this week', top.length ? top.map(s => (s.emoji || '') + ' ' + s.name + ' (' + used[s.slug] + ')').join(', ') : 'none yet'],
+          ['Examples', d.items.slice(0, 4).map(s => s.name).join(', ')],
+          ['Source', 'agency-agents (MIT) @ ' + String(catalog.commit || '').slice(0, 7)],
+          ['How to use', 'Agents page picker or a specialist:<slug> issue label; auto-picked when absent']
+        ];
+      });
+    }
+
+    function renderHierarchy(tel, runs, people, runsSource, catalog, localRuns) {
       renderPeople(people);
+      renderSpecialists(catalog, localRuns);
       const svc = tel.services || {};
       const roles = tel.agentStats || {};
       const ollama = svcState(svc.ollama);
@@ -875,16 +910,18 @@
       try {
         // Runs and people come from Supabase when team sharing is on; both
         // endpoints fall back to this Mac's files on their own.
-        const [tel, runs, tasks, people] = await Promise.all([
+        const [tel, runs, tasks, people, catalog, localRunsBody] = await Promise.all([
           fetch('/api/telemetry').then(r => r.json()),
           fetch('/api/runs?scope=team').then(r => r.json()).catch(() => ({ runs: [] })),
           fetch('/api/tasks').then(r => r.json()).catch(() => ({ columns: {} })),
-          fetch('/api/context/overview').then(r => r.json()).catch(() => null)
+          fetch('/api/context/overview').then(r => r.json()).catch(() => null),
+          fetch('/api/agents/specialists').then(r => r.json()).catch(() => null),
+          fetch('/api/runs').then(r => r.json()).catch(() => ({ runs: [] }))
         ]);
         const runList = (runs && runs.runs) || [];
         const runsSource = runs && runs.source === 'team' ? 'team' : 'local';
         renderPods(tel, runList, tasks, people);
-        renderHierarchy(tel, runList, people, runsSource);
+        renderHierarchy(tel, runList, people, runsSource, catalog, (localRunsBody && localRunsBody.runs) || []);
         errBox.hidden = true;
         select(currentSelectedNodeId);
       } catch (e) {
