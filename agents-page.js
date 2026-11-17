@@ -206,6 +206,7 @@
       msg.replaceChildren('Queued as ', el('a', { href: b.url, target: '_blank', rel: 'noopener', textContent: `issue #${b.number}` }), '. An agent starts within a minute.');
       $('title').value = '';
       $('body').value = '';
+      $('suggest').hidden = true;
       refresh();
     } catch (err) {
       msg.className = 'msg err';
@@ -279,7 +280,37 @@
       renderCatalog();
     } catch (_) { /* catalog is optional */ }
   }
-  $('specialist').addEventListener('change', describeSpecialist);
+  $('specialist').addEventListener('change', () => { describeSpecialist(); markChips(); });
+
+  // Suggestions as you type the task (debounced; local model, no cost).
+  let suggestTimer = null;
+  let suggestSeq = 0;
+  function markChips() {
+    document.querySelectorAll('#suggest .chip').forEach((c) => c.classList.toggle('on', c.dataset.slug === $('specialist').value));
+  }
+  async function loadSuggestions() {
+    const q = `${$('title').value} ${$('body').value}`.trim();
+    const box = $('suggest');
+    if (q.length < 8) { box.hidden = true; return; }
+    const seq = ++suggestSeq;
+    try {
+      const r = await fetch(`/api/agents/specialists/suggest?q=${encodeURIComponent(q.slice(0, 500))}`);
+      const b = await r.json();
+      if (seq !== suggestSeq) return; // a newer request superseded this one
+      const chips = (b.suggestions || []).map((s) => {
+        const c = el('button', { className: 'chip', type: 'button', textContent: `${s.emoji || ''} ${s.name}`.trim(), title: s.divisionLabel });
+        c.dataset.slug = s.slug;
+        c.addEventListener('click', () => { $('specialist').value = $('specialist').value === s.slug ? '' : s.slug; describeSpecialist(); markChips(); });
+        return c;
+      });
+      box.replaceChildren(el('span', { className: 'muted', textContent: 'Suggested specialists:' }), ...chips);
+      box.hidden = !chips.length;
+      markChips();
+    } catch (_) { box.hidden = true; }
+  }
+  const queueSuggest = () => { clearTimeout(suggestTimer); suggestTimer = setTimeout(loadSuggestions, 500); };
+  $('title').addEventListener('input', queueSuggest);
+  $('body').addEventListener('input', queueSuggest);
   $('catalog-q').addEventListener('input', () => { catShown = 24; renderCatalog(); });
   $('catalog-division').addEventListener('change', () => { catShown = 24; renderCatalog(); });
   $('catalog-more').addEventListener('click', () => { catShown += 24; renderCatalog(); });
