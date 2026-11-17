@@ -53,10 +53,16 @@ Not under PM2 on this Mac (as of 2026-11-17): `openclaw` is not installed, and
 `cloudflared` has no tunnel credentials in `~/.cloudflared`, so
 `drisyon.mytestbed.tech` answers 530 until a tunnel is set up here.
 
-**Reboot:** PM2 only comes back if its launchd hook is installed
-(`pm2 startup launchd`, then run the `sudo` line it prints, then `pm2 save`).
-Without it a reboot leaves every service down and no agent spawns - the
-2026-11-16 outage. Recover by hand with `pm2 resurrect`.
+**Reboot:** a per-user LaunchAgent, `~/Library/LaunchAgents/pm2.arunachala.plist`
+(installed 2026-11-17, no sudo needed), runs `pm2 resurrect` at login and
+restores whatever `pm2 save` last stored. It starts only apps that are not
+already running, so loading it by hand is safe. Two caveats: it runs at
+**login**, not at boot (like Ollama and the Hermes gateway), so the Mac needs
+automatic login or someone signed in; and it names the nvm node path
+(`v22.23.5`) - after a node upgrade, update the plist's paths. Logs:
+`~/.pm2/launchd.{out,err}.log`. Without it a reboot leaves every service down
+and no agent spawns (the 2026-11-16 outage); recover by hand with
+`pm2 resurrect`.
 
 **Dispatch failures:** output the dispatch script prints before it records a
 run goes to `logs/dispatch.log`.
