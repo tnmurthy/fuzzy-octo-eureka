@@ -101,6 +101,9 @@ function createPoller(deps) {
     github, dispatch, git, readRuns, loadState, saveState, repos,
     maxConcurrent = 2, defaultAgent = 'claude', reviewAgent = 'claude',
     reviewSpecialist = null,
+    // (text) => Promise<slug|null>: picks a specialist for issues without a
+    // specialist:<slug> label. Null turns auto-picking off.
+    suggestSpecialist = null,
     readLog = () => '',
     now = Date.now, log = console.log,
   } = deps;
@@ -251,7 +254,24 @@ function createPoller(deps) {
     }
 
     await setLabel(repo, number, LABELS.ready, LABELS.running);
-    const { agent, confirmed, specialist } = pickAgent(issue.labels || [], defaultAgent);
+    const picked = pickAgent(issue.labels || [], defaultAgent);
+    const { agent, confirmed } = picked;
+    let { specialist } = picked;
+    if (!specialist && suggestSpecialist && agent !== 'noop') {
+      // Auto-pick, and label the issue so the choice is visible and editable.
+      try {
+        specialist = await suggestSpecialist(`${issue.title}\n${String(issue.body || '').slice(0, 400)}`);
+        if (specialist) {
+          const label = `specialist:${specialist}`.slice(0, 50);
+          await github.ensureLabel(repo, { name: label, color: '5319e7', description: 'agency-agents persona for this task' });
+          await github.addLabels(repo, number, [label]);
+          log(`[poller] ${repo}#${number} auto specialist -> ${specialist}`);
+        }
+      } catch (err) {
+        specialist = null; // a suggestion is a nicety; never block the run
+        log(`[poller] ${repo}#${number} specialist suggestion skipped: ${err.message}`);
+      }
+    }
     const base = await defaultBranch(repo);
     const branch = `agent/issue-${number}-${now().toString(36)}`;
 
@@ -402,6 +422,14 @@ if (require.main === module) {
           // lock to read-only tools may review.
           reviewAgent: process.env.POLLER_REVIEW_AGENT || 'claude',
           // agency-agents persona for reviews; 'off' for none.
+          // Issues without a specialist label get the dashboard's top
+          // suggestion (local models, free). POLLER_AUTO_SPECIALIST=false: off.
+          suggestSpecialist: process.env.POLLER_AUTO_SPECIALIST === 'false' ? null : async (text) => {
+            const res = await fetch(`${DASHBOARD}/api/agents/specialists/suggest?q=${encodeURIComponent(text.slice(0, 500))}`, { signal: AbortSignal.timeout(10000) });
+            const body = await res.json().catch(() => ({}));
+            const top = res.ok && Array.isArray(body.suggestions) ? body.suggestions[0] : null;
+            return top && /^[a-z0-9][a-z0-9-]{1,60}$/.test(top.slug) ? top.slug : null;
+          },
           reviewSpecialist: ['off', 'none', ''].includes(String(process.env.POLLER_REVIEW_SPECIALIST ?? 'engineering-code-reviewer').trim())
             ? null : String(process.env.POLLER_REVIEW_SPECIALIST ?? 'engineering-code-reviewer').trim(),
           // A claude run's log now holds its step-by-step trace; the review

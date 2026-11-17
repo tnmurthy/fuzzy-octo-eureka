@@ -25,7 +25,7 @@ function fakeGitHub(issues = []) {
   };
 }
 
-function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, readLog } = {}) {
+function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, suggestSpecialist = null, readLog } = {}) {
   const github = fakeGitHub(issues);
   const gitCalls = [];
   const dispatched = [];
@@ -38,7 +38,7 @@ function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, g
     loadState: () => JSON.parse(JSON.stringify(state)),
     saveState: (s) => { saved = JSON.parse(JSON.stringify(s)); },
     repos: [{ repo: REPO, path: '/work/demo', name: 'demo' }],
-    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, readLog,
+    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, suggestSpecialist, readLog,
   });
   return { poller, github, gitCalls, dispatched, saved: () => saved };
 }
@@ -275,4 +275,30 @@ test('reviews use the configured review specialist', async () => {
   await poller.tick();
   assert.equal(dispatched[0].readOnly, true);
   assert.equal(dispatched[0].specialist, 'engineering-code-reviewer');
+});
+
+test('an issue without a specialist label gets the suggested one, labelled on the issue', async () => {
+  const seen = [];
+  const { poller, github, dispatched } = setup({
+    issues: [issue(11, { title: 'Set up CI', labels: [{ name: LABELS.ready }] })],
+    suggestSpecialist: async (text) => { seen.push(text); return 'engineering-devops-automator'; },
+  });
+  await poller.tick();
+  assert.match(seen[0], /^Set up CI/);
+  assert.equal(dispatched[0].specialist, 'engineering-devops-automator');
+  assert.ok(github.calls.some((c) => c[0] === 'ensure'));
+  assert.ok(github.calls.some((c) => c[0] === 'add' && c[3][0] === 'specialist:engineering-devops-automator'));
+});
+
+test('an explicit specialist label wins, and a failed suggestion never blocks the run', async () => {
+  let asked = 0;
+  const a = setup({ issues: [issue(12, { labels: [{ name: LABELS.ready }, { name: 'specialist:engineering-code-reviewer' }] })], suggestSpecialist: async () => { asked += 1; return 'x-y'; } });
+  await a.poller.tick();
+  assert.equal(asked, 0);
+  assert.equal(a.dispatched[0].specialist, 'engineering-code-reviewer');
+
+  const b = setup({ issues: [issue(13, { labels: [{ name: LABELS.ready }] })], suggestSpecialist: async () => { throw new Error('dashboard down'); } });
+  await b.poller.tick();
+  assert.equal(b.dispatched.length, 1);
+  assert.equal('specialist' in b.dispatched[0], false);
 });
