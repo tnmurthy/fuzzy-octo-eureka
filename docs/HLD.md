@@ -1,8 +1,8 @@
 # Arunachala Operations Center - High-Level Design
 
-Arunachala lets a small team run an AI workforce from chat and unified dashboards:
+Arunachala lets a small team run an AI workforce from GitHub issues and unified dashboards:
 the host environment (Apple Silicon Mac Studio with Metal GPU acceleration, or Windows rigs)
-runs the operations dashboard, Drisyon agency workspace, a Buzz Nostr chat bridge, local Ollama models,
+runs the operations dashboard, Drisyon agency workspace, a GitHub issue poller, local Ollama models,
 and an autonomous dispatcher that hands coding tasks to agents, while the team shares context
 (agent runs, AI call ledger, 4-tier memory, task board) through Supabase and local storage.
 Local models do high-volume work; frontier models run only when a task needs escalation.
@@ -17,26 +17,27 @@ editing this repo: [`CLAUDE.md`](../CLAUDE.md). Agency Wiki: [`docs/WIKI.md`](WI
 ```mermaid
 flowchart LR
     subgraph People
-        OP["Operator / Teammate<br/>Buzz Desktop"]
+        OP["Operator / Teammate<br/>GitHub issues"]
         BR["Browser<br/>Dashboard & Wiki"]
     end
 
     subgraph Host["Host Node (Mac Studio M5 Max / Rig)"]
         ARU["Arunachala Dashboard :8787<br/>+ Drisyon Dashboard :8788"]
-        BRG["Buzz Bridge + Nostr Relay<br/>NIP-42 Auth"]
+        POLL["IssuePoller<br/>orchestration/issue-poller.js"]
         LLM["Ollama Metal GPU (:11434)<br/>gemma3:4b, qwen2.5-coder:3b"]
         AG["Agent Mesh<br/>Tech, QA, Mantis, Infra, OpenHands"]
         SAFE["Safety Filter & ReBAC<br/>FR-CHAT-07 Guardrails"]
     end
 
     subgraph Shared["Shared Services"]
-        BUZZ["Buzz Relay<br/>wss://drisyon-ai.communities.buzz.xyz"]
+        GH["GitHub<br/>issues, branches, PRs"]
         SB[("Supabase - Talia Project<br/>arunachala_* tables")]
         CF["Cloudflare Tunnels<br/>team.mytestbed.tech<br/>drisyon.mytestbed.tech"]
     end
 
-    OP -- "@mention bot" --> BUZZ
-    BUZZ <-- "websocket, NIP-42" --> BRG
+    OP -- "label agent:ready" --> GH
+    GH <-- "poll every 60 s, push, open PR" --> POLL
+    POLL -- "dispatch" --> ARU
     BR -- "HTTPS" --> CF --> ARU
     ARU --> SAFE --> AG
     ARU -- "route, chat, embed" --> LLM
@@ -48,7 +49,7 @@ flowchart LR
 | Where it runs | Every teammate runs their own install | Own keys and logins; no shared server to maintain |
 | What is shared | Supabase tables, scoped by team with row-level security | One place for context, no service key on laptops |
 | Which model | Local Ollama first, frontier on escalation | Routing, chat and search are high-volume and cheap locally |
-| Chat surface | Buzz (Nostr relay) | Already the team's channel; signed, authenticated messages |
+| Work queue | GitHub issues labelled `agent:ready` | Reviewable, authored by known accounts, results land as PRs |
 
 ---
 
@@ -59,11 +60,10 @@ flowchart TB
     subgraph NSSM["Windows services (NSSM, LocalSystem)"]
         TEL["ArunachalaTelemetry<br/>telemetry-daemon.ps1"]
         DASH["ArunachalaDashboard<br/>server.js :8787"]
-        BRG["ArunachalaBuzzBridge<br/>bridge.js, notify :3100"]
     end
 
-    subgraph Docker
-        N8N["n8n :5678<br/>buzz-dispatch workflow"]
+    subgraph PM2["PM2"]
+        POLL["IssuePoller<br/>issue-poller.js"]
     end
 
     subgraph User["User-level"]
@@ -82,11 +82,8 @@ flowchart TB
 
     TEL -- "probe" --> OLL & OC
     TEL -- "write" --> FILES
-    BRG -- "classify" --> OLL
-    BRG -- "status, chat" --> DASH
-    BRG -- "webhook" --> N8N
-    N8N -- "start run, poll" --> DASH
-    N8N -- "notify" --> BRG
+    POLL -- "dispatch" --> DASH
+    POLL -- "issues, PRs" --> GH["GitHub"]
     DASH -- "spawn" --> DISP
     DISP -- "append" --> FILES
     DASH --- TS & MEM & LED
@@ -98,71 +95,67 @@ flowchart TB
 | Component | Runtime | Responsibility | Key files |
 |---|---|---|---|
 | Dashboard | NSSM, Node, 127.0.0.1:8787 | UI and every `/api/*` route; spawns runs; team sync; memory search | `server.js`, `team-store/`, `memory-*.js`, `embeddings.js` |
-| Buzz bridge | NSSM, Node, notify on 127.0.0.1:3100 | Bot on the relay: filter, route, reply in thread | `buzz-bridge/` |
+| Issue poller | PM2, Node | Every 60 s: `agent:ready` issues → dispatch → PR, labels, review comment | `orchestration/issue-poller.js` |
 | Telemetry | NSSM, PowerShell | Service probes, CPU, agent stats to JSON snapshots | `telemetry-daemon.ps1` |
-| n8n | Docker, 127.0.0.1:5678 | Webhook → start run → poll every 10 s → notify | `n8n/buzz-dispatch-workflow.json` |
 | Dispatcher | git-bash child, one per run | Worktree per run, agent call, run log, `auto` escalation | `orchestration/agent-dispatch.sh` |
 | Ollama | User tray app + watchdog task | Routing, personas, embeddings | `ollama-watchdog.ps1` |
 
-All three services run as LocalSystem. Per-person values come from `.env`
+On Windows the NSSM services run as LocalSystem. Per-person values come from `.env`
 (`OPERATOR_HOME` gives agent runs the operator's profile and CLI logins).
 
 ---
 
 ## 3. Key flows
 
-### 3.1 Buzz message to agent run and back
+### 3.1 GitHub issue to agent run to PR
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Op as Operator (Buzz)
-    participant R as Buzz relay
-    participant B as Bridge
-    participant O as Ollama router
-    participant N as n8n
+    actor Op as Operator
+    participant GH as GitHub
+    participant P as IssuePoller
     participant D as Dashboard
     participant S as agent-dispatch.sh
     participant F as runs.jsonl
     participant SB as Supabase
 
-    Op->>R: @bot run noop in arunachala-dashboard: hello
-    R->>B: channel event (mention, operator key)
-    B->>O: classify (route, executor, repo, risky)
-    O-->>B: dispatch, safe
-    B->>N: POST /webhook/buzz-dispatch
-    N->>D: POST /api/dispatch/run
+    Op->>GH: open issue, label agent:ready
+    loop every 60 s
+        P->>GH: list agent:ready issues (POLLER_AUTHORS only)
+    end
+    P->>GH: relabel agent:running
+    P->>P: branch agent/issue-N-ts from origin/default
+    P->>D: POST /api/dispatch/run
     D->>S: spawn detached
-    D-->>N: 202 runId
-    N-->>B: runId
-    B->>B: save runId in pending-dispatch.json
-    B->>R: ack in thread
+    D-->>P: 202 runId
     S->>F: start line
     S->>S: worktree + agent (1 h timeout)
     S->>F: end line (status, exit, escalated)
-    loop every 10 s until the run ends
-        N->>D: GET /api/runs
+    P->>F: run recorded as finished
+    alt commits
+        P->>GH: push branch over SSH, open PR "Closes #N", agent:review
+        P->>D: second run on the branch, readOnly
+        P->>GH: review verdict + findings as PR comment
+    else no commits
+        P->>GH: agent:no-changes
+    else failed / timed out / never recorded
+        P->>GH: agent:failed + log path
     end
-    N->>B: POST :3100/notify
-    B->>R: result in the original thread
     D-->>SB: run synced within 30 s
 ```
 
-### 3.2 Message routing
+### 3.2 Intake rules
 
 ```mermaid
 flowchart LR
-    E[Channel event] --> G{shouldHandle}
-    G -- "operator, mentioned" --> RT["Router<br/>gemma3:4b → qwen2.5-coder:3b"]
-    G -- "operator, no mention" --> L1["Logged: bot not mentioned"]
-    G -- "stranger / old / no channel" --> L2[Logged skip]
-    G -- "own or others' chatter" --> X[Dropped]
-    RT --> D{decide}
-    D -- status --> S["Reply from telemetry + runs<br/>no model call"]
-    D -- persona --> P["Persona reply<br/>Ollama"]
-    D -- "dispatch, safe" --> W["n8n → agent run"]
-    D -- "dispatch, risky" --> C["Described; confirm not built"]
-    D -- add_task --> T["Described; not built"]
+    I[Issue labelled agent:ready] --> A{"Author in<br/>POLLER_AUTHORS?"}
+    A -- no --> X[Ignored]
+    A -- yes --> SF{"Safety filter<br/>refuses text?"}
+    SF -- "yes, no agent:confirmed" --> H[Held]
+    SF -- "no, or confirmed" --> C{"Under POLLER_MAX_CONCURRENT?"}
+    C -- no --> W[Waits for next tick]
+    C -- yes --> R["Dispatch: agent:claude|hermes|codex|noop|auto,<br/>else POLLER_DEFAULT_AGENT"]
 ```
 
 ### 3.3 Local-first dispatch (`auto`)
@@ -231,7 +224,6 @@ erDiagram
         uuid team_id PK
         uuid user_id PK
         text display_name
-        text buzz_pubkey
         text role
     }
     arunachala_agent_runs {
@@ -302,33 +294,31 @@ flowchart LR
     end
     subgraph Host["Teammate machine - 127.0.0.1 only"]
         D["Dashboard :8787<br/>re-checks Access JWT"]
-        RL["Buzz relay :3000"]
-        B["Bridge: obeys BUZZ_OPERATORS only"]
+        P["IssuePoller: runs only POLLER_AUTHORS' issues"]
         A["Agents: SYSTEM rights + operator profile;<br/>no git push, no gh"]
     end
+    GH["GitHub<br/>issues, PRs"]
     SB[("Supabase<br/>publishable key + own login, RLS")]
 
     U --> ACC --> TUN --> D
     X -. "blocked without Access" .-> ACC
-    U -- "NIP-42, auth token" --> TUN --> RL
-    RL --> B
+    P <-- "GITHUB_TOKEN" --> GH
+    P --> D
     D --> A
-    D & B -.-> SB
+    D -.-> SB
 ```
 
 | Boundary | Control |
 |---|---|
 | Public dashboard | Cloudflare Access at the edge plus origin JWT check (`access-auth.js`), fails closed |
-| Public relay | NIP-42 auth, restricted writes, auth token required |
-| Bridge commands | Only the owner's Buzz pubkeys (`BUZZ_OPERATORS`, no default) |
+| Work intake | Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run; text the safety filter refuses needs `agent:confirmed`; fine-grained `GITHUB_TOKEN` (Issues + Pull requests) |
 | Dispatch API | Loopback only; agent allow-list; repo must be a plain directory name; 10 KB body caps on task routes |
-| Agents | Run in their own worktree; commit, never push or merge; claude has a tool allow-list |
+| Agents | Run in their own worktree; commit, never push or merge (the poller pushes the branch and opens the PR); claude has a tool allow-list; the review run is read-only |
 | Supabase | No service key on laptops; RLS per team; `security definer` helpers not callable by `anon` |
 | Secrets | `.env` files are gitignored; the installer types the Supabase password hidden |
 
 Known gaps: agents run with SYSTEM rights while using the operator's profile
-(acceptable on a single-user machine); `POST /api/buzz/events` is an open
-webhook nothing calls and should be deleted; ReBAC gates only `/api/ping`.
+(acceptable on a single-user machine); ReBAC gates only `/api/ping`.
 
 ---
 
@@ -351,7 +341,7 @@ webhook nothing calls and should be deleted; ReBAC gates only `/api/ping`.
 | `GET /api/telemetry`, `/api/history` | Service health snapshot and CPU/latency series |
 | `GET /api/config` | Operator name and persona model for the UI |
 | `GET /api/runs[?scope=team]` | Agent runs, local or the whole team's |
-| `POST /api/dispatch/run` | Start an agent run (n8n calls this) |
+| `POST /api/dispatch/run` | Start an agent run (the issue poller calls this) |
 | `GET /api/tasks`, `POST /api/tasks`, `PATCH /api/tasks/<id>` | Task board: team board in Supabase, else read-only `TASKS.md` |
 | `GET /api/memory/search?q=[&scope=team]` | Memory search by meaning (embeddings), keyword fallback |
 | `POST /api/memory/store`, `POST /api/team/dispatch` | Add memory / operator directives |
@@ -364,8 +354,5 @@ webhook nothing calls and should be deleted; ReBAC gates only `/api/ping`.
 
 | Item | Next step |
 |---|---|
-| Risky dispatches and add-task only described | Build a confirm step in the bridge |
-| Bridge listens to one relay (mytestbed) | Multi-relay only if drisyon-ai becomes the team's channel |
 | Memory search threshold (0.5) is loose on a small store | Tune once there are more memories |
 | `codex` / `hermes` untested as live dispatch targets | One real run each |
-| n8n per person | Replace with a poller inside the bridge to drop a component |

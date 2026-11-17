@@ -557,7 +557,7 @@
         <h3 style="color: #00e676; margin-top: 0;">⚡ 2. Quick Dispatch (Autonomous Git Worktrees)</h3>
         <p>Under the <strong>🧭 Agent Runs</strong> tab, the <strong>Quick Dispatch</strong> form allows you to assign actionable coding or auditing tasks directly to autonomous engines (<code>mantis</code>, <code>auto</code>, <code>claude</code>, <code>codex</code>, <code>hermes</code>):</p>
         <ul>
-          <li><strong>Isolated Worktrees:</strong> Each run forks into an isolated git worktree (e.g. <code>buzz/&lt;timestamp&gt;</code>) so uncommitted changes never collide.</li>
+          <li><strong>Isolated Worktrees:</strong> Each run forks into an isolated git worktree (issue-queue runs use <code>agent/issue-&lt;n&gt;-&lt;timestamp&gt;</code>) so uncommitted changes never collide.</li>
           <li><strong>Automated Test Gate (<code>auto</code>):</strong> Executes code changes on local models first; escalates to Claude Sonnet only if unit tests fail.</li>
           <li><strong>Live Output Streaming:</strong> Click on any active run in the table to tail stdout/stderr execution logs in real time.</li>
         </ul>
@@ -740,8 +740,8 @@
             <tr>
               <td><strong>Tier 4: Operator Alignment</strong></td>
               <td>Permanent Log</td>
-              <td>Nostr/Buzz Relays + Disk</td>
-              <td>Directives sent by verified cryptographic operator keys via Buzz relay.</td>
+              <td>Disk (<code>drisyon-memory.json</code>)</td>
+              <td>Operator directives ingested through <code>POST /api/team/dispatch</code>.</td>
             </tr>
           </tbody>
         </table>

@@ -10,58 +10,49 @@ Requirements: [`FRD.md`](FRD.md).
 
 | You want to | Do this | What answers |
 |---|---|---|
-| Check that everything is up | Ask your bot in Buzz: `@<bot> is everything up?` | Status built from telemetry - no model call |
-| See what agents did today | `@<bot> what did the team run today?`, or the **Agent Runs** tab | Run history |
-| Think a problem through | `@<bot> ask the tech lead: should we cache this?` | A persona on a local model |
-| Get code written | `@<bot> run claude in <repo>: <task>` | An agent in its own worktree; reply when done |
+| Check that everything is up | The dashboard, or `pm2 ls` | Status built from telemetry - no model call |
+| See what agents did today | The **Agent Runs** tab | Run history |
+| Think a problem through | Persona chat in the dashboard | A persona on a local model |
+| Get code written | Open a GitHub issue and label it `agent:ready` (§2) | An agent in its own worktree; a PR when done |
 | Plan work with the team | The task board (API today, see §5) | Shared board in Supabase |
 | Find something the team knows | `/api/memory/search?q=...&scope=team` | Memory ranked by meaning |
 | See what AI is costing | The ledger (§7) | Every call: model, tokens, time |
 
 ---
 
-## 2. Talking to your bot in Buzz
+## 2. Handing work over: the GitHub issue queue
 
-1. Open the Buzz desktop app and switch to the **mytestbed** community.
-2. Open your team channel (its id is `BUZZ_BOT_CHANNELS` in `buzz-bridge/.env`).
-3. Type `@`, **pick your bot from the popup**, then write your message.
-
-Typing the name as plain text does not create a mention, and the bot ignores
-the message (the bridge log shows `Skipped ...: bot not mentioned`). Messages
-in another community, such as drisyon-ai, never reach your bot.
-
-**Example messages**
-
-```
-@Ravi's Team is everything up?
-@Ravi's Team which runs failed today?
-@Ravi's Team ask QA how we should test the sync code
-@Ravi's Team run noop in arunachala-dashboard: hello
-@Ravi's Team run claude in bov: add a unit test for the price formatter
-```
-
-**What happens to a message**
+1. Open an issue in a repo the poller watches (`POLLER_REPOS`). Put the task
+   in the title and body.
+2. Add the label `agent:ready`. Optionally add `agent:claude`, `agent:codex`,
+   `agent:hermes`, `agent:noop` or `agent:auto` to pick the agent; otherwise
+   `POLLER_DEFAULT_AGENT` (claude) runs. Use `agent:hermes` for docs and
+   drafts, claude for code.
+3. Within a minute the poller relabels the issue `agent:running`.
 
 ```mermaid
 flowchart LR
-    M[Your message] --> F{"From you,<br/>bot mentioned?"}
-    F -- no --> I["Ignored<br/>(logged if it was you)"]
-    F -- yes --> R["Local router<br/>decides the kind"]
-    R --> S["status: instant reply"]
-    R --> P["persona: local model reply,<br/>about 10-40 s"]
-    R --> D["dispatch: ack now,<br/>result in thread later"]
-    R --> X["risky dispatch / add task:<br/>described, not run yet"]
+    I["Issue labelled<br/>agent:ready"] --> P["IssuePoller<br/>every 60 s"]
+    P --> R["agent:running<br/>branch agent/issue-N-ts"]
+    R --> C{"Commits?"}
+    C -- yes --> PR["Branch pushed, PR 'Closes #N'<br/>agent:review + read-only agent review"]
+    C -- no --> N["agent:no-changes"]
+    R -- "failed / timed out" --> F["agent:failed + log path"]
 ```
 
-The bot only obeys the Buzz keys in your `BUZZ_OPERATORS`. Each teammate has
-their own bot with a unique name, so mention yours.
+Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run, and at
+most `POLLER_MAX_CONCURRENT` (2) runs go at once across all repos; reviews
+count. Text the safety filter refuses needs the label `agent:confirmed`.
+After opening a PR the poller starts a second, read-only run on the same
+branch (`POLLER_REVIEW_AGENT`: claude, noop or off) and posts its verdict and
+findings as a PR comment.
 
 ---
 
 ## 3. Dispatching an agent
 
-A dispatch hands one task to one agent. You get an acknowledgement with a run
-id at once, and the result in the same thread when the run ends.
+A dispatch hands one task to one agent. With the issue queue, the poller
+dispatches for you: label the issue and a PR arrives when the run ends.
 
 | Agent | Runs | Use it for |
 |---|---|---|
@@ -73,8 +64,9 @@ id at once, and the result in the same thread when the run ends.
 | `auto` | Local first, claude if tests fail | Saving tokens on small tasks (§4) |
 
 **What the agent may do:** work only in its own git worktree beside the repo
-(`<repo>--<branch>`), commit on its branch, never push or merge. You review
-and merge. Runs time out after one hour (`AGENT_TIMEOUT`).
+(`<repo>--<branch>`) and commit on its branch; it never pushes or merges. The
+poller pushes the branch and opens the PR; you review and merge. Runs time out
+after one hour (`AGENT_TIMEOUT`).
 
 **Where to look**
 
@@ -83,13 +75,6 @@ and merge. Runs time out after one hour (`AGENT_TIMEOUT`).
 | Run list | Dashboard → **Agent Runs**, or `/api/runs` (`?scope=team` for everyone) |
 | Full agent output | `04_internal\agent-runs\<run id>.log` |
 | The agent's work | The worktree folder and its branch |
-
-**Dispatch without Buzz** (same pipeline):
-
-```powershell
-Invoke-RestMethod -Method Post http://127.0.0.1:5678/webhook/buzz-dispatch -ContentType application/json `
-  -Body '{"agent":"noop","repo":"arunachala-dashboard","task":"hello"}'
-```
 
 ---
 
@@ -176,19 +161,18 @@ select escalated, count(*) from arunachala_agent_runs where agent = 'auto' group
 
 ## 8. How it all works
 
-**Your machine runs three services** (`ArunachalaTelemetry`,
-`ArunachalaDashboard`, `ArunachalaBuzzBridge`), plus Ollama and n8n:
+**Your machine runs these services** (`ArunachalaTelemetry`,
+`ArunachalaDashboard`, `IssuePoller`), plus Ollama:
 
-- The **telemetry service** checks every few seconds that Ollama, OpenClaw,
-  Buzz and Watchtower answer, and writes a snapshot the dashboard reads.
+- The **telemetry service** checks every few seconds that Ollama, OpenClaw
+  and Watchtower answer, and writes a snapshot the dashboard reads.
 - The **dashboard** (http://127.0.0.1:8787) serves the UI and the API, starts
   agent runs, answers persona chats on a local model, searches memory, and
   copies your runs, AI calls and memory to the team every 30 seconds.
-- The **bridge** is your bot on the Buzz relay. A local model reads each
-  message you send it and decides what kind it is; the bridge then answers,
-  asks a persona, or starts a dispatch through n8n.
-- **n8n** starts the run, checks every 10 seconds whether it has finished, and
-  tells the bridge, which replies in your thread.
+- The **issue poller** (`orchestration/issue-poller.js`) checks GitHub every
+  60 seconds for issues labelled `agent:ready`, starts a run through the
+  dashboard's `/api/dispatch/run`, and on finish pushes the branch and opens
+  the PR.
 
 **Your files stay the source of truth.** Runs, AI calls and memory are written
 locally first and copied up afterwards, so nothing is lost when the internet
@@ -204,9 +188,9 @@ own (tasks are the exception: anyone moves any task).
 
 | Task | Command (elevated PowerShell where noted) |
 |---|---|
-| Restart everything | `Restart-Service ArunachalaDashboard -Force; Start-Service ArunachalaBuzzBridge` (elevated) |
+| Restart everything | `pm2 restart all --update-env && pm2 save` (Windows: `Restart-Service ArunachalaDashboard -Force`, elevated) |
 | Did a setting change apply? | Restart `ArunachalaDashboard` - it reads `.env` at start |
-| Bot silent? | `Get-Content logs\buzz-bridge.out.log -Tail 20` |
+| Issue not picked up? | `pm2 logs IssuePoller --lines 50` |
 | Team sync working? | `logs\server.err.log` - `team-store ... failed` lines; silence means fine |
 | Check the install | `.\install-teammate.ps1 -DryRun` |
 

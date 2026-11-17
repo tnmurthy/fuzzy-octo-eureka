@@ -16,7 +16,7 @@ code runs as a teammate node. Do not apply the NSSM, `Restart-Service`, or
 |---|---|---|
 | telemetry daemon | `telemetry-daemon.js` (Node port of the `.ps1`) **[verify which daemon PM2 runs]** | - |
 | dashboard | `server.js` | 8787 (127.0.0.1 only) |
-| Buzz bridge | `buzz-bridge/bridge.js` | 3100 (`/notify`) |
+| issue poller | `orchestration/issue-poller.js` (`IssuePoller`) | - |
 
 - Status: `pm2 ls`
 - Restart one: `pm2 restart <name>`
@@ -45,12 +45,12 @@ use `pm2 restart`, not `kill`, because PM2 respawns the process.
   defined in repo]**.
 - Models: `gemma3:4b`, `qwen2.5-coder:3b`, `nomic-embed-text`.
 
-## Buzz
+## Issue queue
 
-- Local relay (OrbStack/Docker): `localhost:3000`. Do not use `127.0.0.1:3000`,
-  because the relay is host-routed and returns 404 for it.
-- Compose files are on the Windows host, not in this repo. Do not assume a path
-  on the Mac **[verify]**.
+- Work arrives as GitHub issues labelled `agent:ready`; `IssuePoller` (PM2)
+  dispatches them. See "Issue queue" in CLAUDE.md.
+- Needs `GITHUB_TOKEN` in the secrets file; the branch is pushed over SSH, so
+  the Mac needs a working GitHub SSH key.
 
 ## Encoding
 
@@ -60,7 +60,7 @@ use `pm2 restart`, not `kill`, because PM2 respawns the process.
 
 ## Secrets
 
-- `.env` and `buzz-bridge/.env` stay in the repo folder and must be gitignored.
-  Confirm with `git check-ignore -v .env buzz-bridge/.env` **[verify]**.
+- `.env` stays in the repo folder and must be gitignored. Confirm with
+  `git check-ignore -v .env` **[verify]**.
 - Never copy the Windows host's `.env` to this machine. Each node has its own
-  `OPERATOR_HOME` and Buzz operator key.
+  `OPERATOR_HOME` and `GITHUB_TOKEN`.
