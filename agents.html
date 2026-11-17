@@ -83,6 +83,11 @@
     .st-done { color: var(--status-green); } .st-failed { color: var(--status-red); } .st-other { color: var(--status-amber); }
     a.lnk { color: var(--status-blue); text-decoration: none; }
 
+    .suggest { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+    .suggest[hidden] { display: none; }
+    .chip { background: rgba(83,25,231,.15); border: 1px solid rgba(179,136,255,.45); color: #d7c6ff; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.76rem; cursor: pointer; }
+    .chip.on { background: rgba(179,136,255,.35); color: #fff; }
+
     /* specialists catalog */
     .cat-input { background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; }
     .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
@@ -143,6 +148,7 @@
           <div class="muted" id="specialist-desc" style="margin-top:4px; min-height:1em"></div>
           <label for="title">What should it do?</label>
           <input id="title" name="title" maxlength="200" required placeholder="e.g. Remove the placeholder tiles from the dashboard">
+          <div class="suggest" id="suggest" hidden><span class="muted">Suggested specialists:</span></div>
           <label for="body">Details (optional)</label>
           <textarea id="body" name="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, what not to change."></textarea>
           <button class="btn" id="submit" type="submit">Queue task</button>

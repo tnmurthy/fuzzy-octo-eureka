@@ -707,6 +707,21 @@ function pollerRepos() {
     return m ? [m[1]] : [];
   } catch (_) { return []; }
 }
+// Suggests specialists for a task as you type (local embeddings, free).
+// A small local model re-ranks the shortlist (SPECIALIST_SUGGEST_MODEL, 'off'
+// to skip); local Ollama calls are exempt from the paid caps.
+const { createSuggester, ollamaReranker } = require('./specialist-suggest');
+const SUGGEST_MODEL = process.env.SPECIALIST_SUGGEST_MODEL || 'gemma3:4b';
+const specialistSuggester = createSuggester({
+  specialists,
+  embedder,
+  cosine: require('./embeddings').cosine,
+  rerank: SUGGEST_MODEL === 'off' ? null : ollamaReranker({
+    host: OLLAMA_HOST, port: OLLAMA_PORT, model: SUGGEST_MODEL,
+    record: (call) => recordAiCall(AI_CALLS_FILE, call),
+  }),
+});
+setTimeout(() => specialistSuggester.warm(), 5000).unref();
 const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
@@ -715,6 +730,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
   repos: pollerRepos(),
   settings: dispatchSettings,
   specialists,
+  suggester: specialistSuggester,
   isAdmin,
   actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,

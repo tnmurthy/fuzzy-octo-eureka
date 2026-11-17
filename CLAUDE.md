@@ -104,6 +104,12 @@ none). Update: clone the repo, `node scripts/sync-specialists.js <clone>`
 (imports only division folders, runs nothing, skips files that try to
 override instructions, pipe downloads into a shell, or carry
 credential-looking strings), review the diff, commit.
+Suggestions: as you type a task on /agents, `GET
+/api/agents/specialists/suggest?q=` shows the top 3
+(`specialist-suggest.js`): a shortlist of 30 by local embeddings plus a stemmed
+keyword boost, re-ranked by a local model (`SPECIALIST_SUGGEST_MODEL`, default
+`gemma3:4b`, `off` to skip; 4 s timeout, falls back to the shortlist). ~0.4 s
+warm; Ollama calls are logged with purpose `suggest` and exempt from caps.
 
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid
