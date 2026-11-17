@@ -8,6 +8,7 @@
 //   POST /api/agents/settings   { dailyPaidRuns } (admin only) -> new cap
 //   GET  /api/agents/specialists catalog of agency-agents personas (no bodies)
 //   GET  /api/agents/specialists/suggest?q=  top 3 for a task description
+//   GET  /api/agents/specialists/recommended  all, ranked by your usage + memory
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -90,7 +91,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -184,6 +185,13 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/agents/overview' && req.method === 'GET') {
       overview(req).then((b) => sendJson(res, 200, b)).catch(() => sendJson(res, 500, { ok: false, error: 'could not read agent runs' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/specialists/recommended' && req.method === 'GET') {
+      if (!recommender) { sendJson(res, 200, { ok: true, ranker: 'none', signals: [], ranked: [] }); return true; }
+      recommender.recommend()
+        .then((r) => sendJson(res, 200, { ok: true, ...r }))
+        .catch(() => sendJson(res, 200, { ok: true, ranker: 'none', signals: [], ranked: [] }));
       return true;
     }
     if (url.pathname === '/api/agents/specialists/suggest' && req.method === 'GET') {

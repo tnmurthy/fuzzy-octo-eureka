@@ -227,6 +227,7 @@
 
   // ---- specialists (agency-agents) ---------------------------------------
   let catalog = { specialists: [], divisions: {} };
+  const recommended = new Map(); // slug -> { score, used, reasons, pos }
   let catShown = 24;
 
   function describeSpecialist() {
@@ -244,16 +245,23 @@
   function renderCatalog() {
     const q = $('catalog-q').value.trim().toLowerCase();
     const div = $('catalog-division').value;
+    const sort = $('catalog-sort').value;
     const list = catalog.specialists.filter((s) => (!div || s.division === div)
       && (!q || `${s.name} ${s.description} ${s.vibe} ${s.divisionLabel}`.toLowerCase().includes(q)));
+    const rk = (s) => recommended.get(s.slug) || { score: 0, used: 0, pos: 1e9 };
+    if (sort === 'recommended') list.sort((a, b) => rk(a).pos - rk(b).pos);
+    else if (sort === 'used') list.sort((a, b) => rk(b).used - rk(a).used || rk(a).pos - rk(b).pos);
+    else list.sort((a, b) => a.name.localeCompare(b.name));
     const box = $('catalog');
     box.replaceChildren();
     $('catalog-count').textContent = `${list.length} of ${catalog.specialists.length}`;
     for (const s of list.slice(0, catShown)) {
       const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Use' });
       btn.addEventListener('click', () => useSpecialist(s.slug));
+      const why = (recommended.get(s.slug) || {}).reasons || [];
       const card = el('div', { className: 'spec', title: s.vibe || '' },
         el('div', { className: 'n', textContent: `${s.emoji || '•'} ${s.name}` }),
+        why.length ? el('div', { className: 'why', textContent: `⭐ ${why.join(' · ')}` }) : null,
         el('div', { className: 'd', textContent: s.description }),
         el('div', { className: 'f' }, el('span', { className: 'muted', textContent: s.divisionLabel }), btn));
       const color = (catalog.divisions[s.division] || {}).color;
@@ -271,9 +279,23 @@
       if (!b.ok) return;
       catalog = b;
       b.specialists.forEach((s) => bySlug.set(s.slug, s));
+      // Recommendations (usage + memory). Optional: the catalog works without.
+      try {
+        const rr = await (await fetch('/api/agents/specialists/recommended')).json();
+        (rr.ranked || []).forEach((x, pos) => recommended.set(x.slug, { ...x, pos }));
+        const basis = (rr.signals || []).filter((x) => x.kind === 'memory').map((x) => x.label);
+        const tasks = (rr.signals || []).filter((x) => x.kind === 'task').length;
+        if (basis.length || tasks) $('catalog-basis').textContent = `Recommended from your memory (${basis.join(', ')})${tasks ? ` and ${tasks} recent tasks` : ''}, plus what you use.`;
+      } catch (_) { /* fall back to catalog order */ }
       const groups = {};
       for (const s of b.specialists) (groups[s.divisionLabel] = groups[s.divisionLabel] || []).push(s);
       const sel = $('specialist');
+      const top = [...recommended.values()].filter((x) => x.reasons && x.reasons.length).slice(0, 8);
+      if (top.length) {
+        const og = el('optgroup', { label: '⭐ Recommended for you' });
+        top.forEach((x) => { const s = bySlug.get(x.slug); if (s) og.append(el('option', { value: s.slug, textContent: `${s.emoji || ''} ${s.name}`.trim() })); });
+        sel.append(og);
+      }
       for (const [label, items] of Object.entries(groups)) {
         const og = el('optgroup', { label });
         items.forEach((s) => og.append(el('option', { value: s.slug, textContent: `${s.emoji || ''} ${s.name}`.trim() })));
@@ -321,6 +343,7 @@
   $('body').addEventListener('input', queueSuggest);
   $('catalog-q').addEventListener('input', () => { catShown = 24; renderCatalog(); });
   $('catalog-division').addEventListener('change', () => { catShown = 24; renderCatalog(); });
+  $('catalog-sort').addEventListener('change', () => { catShown = 24; renderCatalog(); });
   $('catalog-more').addEventListener('click', () => { catShown += 24; renderCatalog(); });
 
   loadSpecialists();
