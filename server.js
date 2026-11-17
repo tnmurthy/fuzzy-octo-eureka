@@ -73,6 +73,8 @@ const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require(
 const { validateDispatchSafety } = require('./safety-filter');
 const { checkDispatchCap, parseCap } = require('./dispatch-cap');
 const { buildContextView } = require('./context-view');
+// agency-agents personas (specialists/), optional role guidance per dispatch.
+const specialists = require('./specialists').createSpecialists();
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 const {
   recordTranscript,
@@ -712,12 +714,13 @@ const agentsApi = require('./agents-api').createAgentsApi({
   capNow: (runs) => checkDispatchCap({ agent: 'claude', runs, pending: pendingPaidRuns, cap: dispatchSettings.cap() }),
   repos: pollerRepos(),
   settings: dispatchSettings,
+  specialists,
   isAdmin,
   actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
 });
 
-function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false }) {
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -735,7 +738,8 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
     const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
     fs.mkdirSync(tmpDir, { recursive: true });
     const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
-    fs.writeFileSync(promptFile, buildDispatchPrompt(task, memories), 'utf8');
+    // Order: task (its first 160 chars name the run), specialist role, memories.
+    fs.writeFileSync(promptFile, buildDispatchPrompt(task + specialists.roleBlock(specialist), memories), 'utf8');
 
     const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
     const bashBin = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash');
@@ -1468,7 +1472,11 @@ function handleRequest(req, res) {
       if (!safetyCheck.ok) {
         return sendJson(res, 400, safetyCheck);
       }
-      spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly })
+      const specialist = payload.specialist == null || payload.specialist === '' ? null : payload.specialist;
+      if (specialist !== null && !specialists.get(specialist)) {
+        return sendJson(res, 400, { ok: false, error: 'unknown specialist (see /api/agents/specialists)' });
+      }
+      spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly, specialist })
         .then((result) => sendJson(res, 202, { ok: true, ...result, note: 'started; poll /api/runs for completion' }))
         .catch((err) => sendJson(res, err.status || 500, { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` }));
     });

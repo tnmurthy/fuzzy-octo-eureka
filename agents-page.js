@@ -198,7 +198,7 @@
       const r = await fetch('/api/agents/task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo: $('repo').value, agent: $('agent').value, title: $('title').value, body: $('body').value }),
+        body: JSON.stringify({ repo: $('repo').value, agent: $('agent').value, title: $('title').value, body: $('body').value, specialist: $('specialist').value }),
       });
       const b = await r.json();
       if (!r.ok || !b.ok) throw new Error(b.error || `HTTP ${r.status}`);
@@ -215,6 +215,76 @@
     }
   });
 
+  // ---- specialists (agency-agents) ---------------------------------------
+  let catalog = { specialists: [], divisions: {} };
+  let catShown = 24;
+  const bySlug = new Map();
+
+  function describeSpecialist() {
+    const s = bySlug.get($('specialist').value);
+    $('specialist-desc').textContent = s ? `${s.emoji || ''} ${s.description}`.trim() : '';
+  }
+
+  function useSpecialist(slug) {
+    $('specialist').value = slug;
+    describeSpecialist();
+    $('task-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('title').focus();
+  }
+
+  function renderCatalog() {
+    const q = $('catalog-q').value.trim().toLowerCase();
+    const div = $('catalog-division').value;
+    const list = catalog.specialists.filter((s) => (!div || s.division === div)
+      && (!q || `${s.name} ${s.description} ${s.vibe} ${s.divisionLabel}`.toLowerCase().includes(q)));
+    const box = $('catalog');
+    box.replaceChildren();
+    $('catalog-count').textContent = `${list.length} of ${catalog.specialists.length}`;
+    for (const s of list.slice(0, catShown)) {
+      const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Use' });
+      btn.addEventListener('click', () => useSpecialist(s.slug));
+      const card = el('div', { className: 'spec', title: s.vibe || '' },
+        el('div', { className: 'n', textContent: `${s.emoji || '•'} ${s.name}` }),
+        el('div', { className: 'd', textContent: s.description }),
+        el('div', { className: 'f' }, el('span', { className: 'muted', textContent: s.divisionLabel }), btn));
+      const color = (catalog.divisions[s.division] || {}).color;
+      if (color && /^#[0-9a-fA-F]{6}$/.test(color)) card.style.setProperty('--div-color', color);
+      box.append(card);
+    }
+    if (!list.length) box.append(el('div', { className: 'empty', textContent: 'No specialist matches.' }));
+    $('catalog-more').hidden = list.length <= catShown;
+  }
+
+  async function loadSpecialists() {
+    try {
+      const r = await fetch('/api/agents/specialists');
+      const b = await r.json();
+      if (!b.ok) return;
+      catalog = b;
+      b.specialists.forEach((s) => bySlug.set(s.slug, s));
+      const groups = {};
+      for (const s of b.specialists) (groups[s.divisionLabel] = groups[s.divisionLabel] || []).push(s);
+      const sel = $('specialist');
+      for (const [label, items] of Object.entries(groups)) {
+        const og = el('optgroup', { label });
+        items.forEach((s) => og.append(el('option', { value: s.slug, textContent: `${s.emoji || ''} ${s.name}`.trim() })));
+        sel.append(og);
+      }
+      const divSel = $('catalog-division');
+      Object.entries(b.divisions || {}).sort((x, y) => x[1].label.localeCompare(y[1].label))
+        .forEach(([k, v]) => divSel.append(el('option', { value: k, textContent: v.label })));
+      $('catalog-source').textContent = b.commit
+        ? `From The Agency (agency-agents, MIT), pinned at ${b.commit.slice(0, 7)}. Pick one and its expertise is added to the agent's instructions.`
+        : '';
+      renderCatalog();
+    } catch (_) { /* catalog is optional */ }
+  }
+  $('specialist').addEventListener('change', describeSpecialist);
+  $('catalog-q').addEventListener('input', () => { catShown = 24; renderCatalog(); });
+  $('catalog-division').addEventListener('change', () => { catShown = 24; renderCatalog(); });
+  $('catalog-more').addEventListener('click', () => { catShown += 24; renderCatalog(); });
+
+  loadSpecialists();
   refresh();
   setInterval(refresh, 5000);
 })();

@@ -6,6 +6,7 @@
 //   GET  /api/agents/log?id=R   tail of run R's log (only files in the runs dir)
 //   POST /api/agents/task       { repo, title, body, agent } -> new issue
 //   POST /api/agents/settings   { dailyPaidRuns } (admin only) -> new cap
+//   GET  /api/agents/specialists catalog of agency-agents personas (no bodies)
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -22,7 +23,7 @@ const MAX_BODY = 8000;
 const RUN_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
 
 /** Validate a "give an agent a task" request. Returns { ok, value } or { ok: false, error }. */
-function validateTask(input, repos) {
+function validateTask(input, repos, specialists = null) {
   const o = input && typeof input === 'object' ? input : {};
   const repo = String(o.repo || '').trim();
   const title = String(o.title || '').trim();
@@ -33,7 +34,9 @@ function validateTask(input, repos) {
   if (title.length > MAX_TITLE) return { ok: false, error: `title is longer than ${MAX_TITLE} characters` };
   if (body.length > MAX_BODY) return { ok: false, error: `description is longer than ${MAX_BODY} characters` };
   if (!AGENTS.includes(agent)) return { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` };
-  return { ok: true, value: { repo, title, body, agent } };
+  const specialist = String(o.specialist || '').trim();
+  if (specialist && !(specialists && specialists.get(specialist))) return { ok: false, error: 'unknown specialist' };
+  return { ok: true, value: { repo, title, body, agent, specialist: specialist || null } };
 }
 
 /** True for a JSON request that is not from another site. */
@@ -85,7 +88,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -158,10 +161,17 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
 
   async function createTask(input) {
     if (!github) return { status: 503, body: { ok: false, error: 'GITHUB_TOKEN is not set; add it to the secrets file to queue tasks.' } };
-    const v = validateTask(input, repos);
+    const v = validateTask(input, repos, specialists);
     if (!v.ok) return { status: 400, body: { ok: false, error: v.error } };
-    const { repo, title, body, agent } = v.value;
+    const { repo, title, body, agent, specialist } = v.value;
     const labels = [QUEUE_LABELS.ready, `agent:${agent}`];
+    if (specialist) {
+      // specialist:<slug> tells the poller which persona to use. Created on
+      // first use; GitHub caps label names at 50 characters.
+      const label = `specialist:${specialist}`.slice(0, 50);
+      if (github.ensureLabel) await github.ensureLabel(repo, { name: label, color: '5319e7', description: 'agency-agents persona for this task' });
+      labels.push(label);
+    }
     const issue = await github.createIssue(repo, { title, body: body || title, labels });
     queueCache = { at: 0, value: null };
     return { status: 201, body: { ok: true, number: issue.number, url: issue.html_url } };
@@ -172,6 +182,10 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/agents/overview' && req.method === 'GET') {
       overview(req).then((b) => sendJson(res, 200, b)).catch(() => sendJson(res, 500, { ok: false, error: 'could not read agent runs' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/specialists' && req.method === 'GET') {
+      sendJson(res, 200, specialists ? { ok: true, ...specialists.list() } : { ok: true, specialists: [], divisions: {} });
       return true;
     }
     if (url.pathname === '/api/agents/log' && req.method === 'GET') {
