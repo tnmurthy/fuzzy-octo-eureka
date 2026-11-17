@@ -28,6 +28,8 @@
     return el('a', { className: 'lnk', href: ghUrl(link.repo, isReview ? 'pr' : 'issue', n), target: '_blank', rel: 'noopener', textContent: isReview ? `review PR #${n}` : `issue #${n}` });
   }
 
+  const bySlug = new Map(); // specialist slug -> catalog entry (filled by loadSpecialists)
+
   // ---- log viewer -------------------------------------------------------
   let logId = null;
   let logTimer = null;
@@ -99,6 +101,13 @@
     $('cap').classList.toggle('full', pct >= 100);
   }
 
+  // "claude · 👁️ Code Reviewer" when a run worked as a specialist.
+  function agentLabel(r) {
+    if (!r.specialist) return r.agent;
+    const s = bySlug.get(r.specialist);
+    return `${r.agent} · ${s ? `${s.emoji || ''} ${s.name}`.trim() : r.specialist}`;
+  }
+
   function renderRunning(runs) {
     const box = $('running');
     box.replaceChildren();
@@ -107,7 +116,7 @@
     for (const r of runs) {
       const meta = el('div', { className: 'muted' },
         el('span', { className: 'pulse' }),
-        `${r.agent} · ${ago(now - Date.parse(r.started_at))} `);
+        `${agentLabel(r)} · ${ago(now - Date.parse(r.started_at))} `);
       const ln = linkNode(r.link);
       if (ln) meta.append('· ', ln);
       const what = el('div', { className: 'what' }, meta, el('div', { className: 'task', title: r.task, textContent: r.task }));
@@ -154,7 +163,7 @@
       if (btn) btn.addEventListener('click', () => openLog(r.id));
       tb.append(el('tr', {},
         el('td', { className: st, textContent: r.status }),
-        el('td', { textContent: r.agent }),
+        el('td', { textContent: agentLabel(r) }),
         el('td', { className: 'mono', textContent: Number.isFinite(r.duration_s) ? ago(r.duration_s * 1000) : '-' }),
         el('td', { textContent: r.commits_ahead ? String(r.commits_ahead) : '-' }),
         el('td', {}, linkNode(r.link) || '-'),
@@ -219,7 +228,6 @@
   // ---- specialists (agency-agents) ---------------------------------------
   let catalog = { specialists: [], divisions: {} };
   let catShown = 24;
-  const bySlug = new Map();
 
   function describeSpecialist() {
     const s = bySlug.get($('specialist').value);

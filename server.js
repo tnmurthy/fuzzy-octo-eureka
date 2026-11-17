@@ -781,6 +781,10 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
       USERPROFILE: OPENCLAW_HOME,
       HOME: OPENCLAW_HOME,
     });
+    // The run log records the task alone and the specialist's slug.
+    dispatchEnv.AGENT_TASK_TITLE = String(task).slice(0, 160);
+    if (specialist && specialists.get(specialist)) dispatchEnv.AGENT_SPECIALIST = specialist;
+    else delete dispatchEnv.AGENT_SPECIALIST;
     if (readOnly) {
       dispatchEnv.CLAUDE_ALLOWED_TOOLS = READ_ONLY_ALLOWED_TOOLS;
       dispatchEnv.CLAUDE_DENIED_TOOLS = READ_ONLY_DENIED_TOOLS;

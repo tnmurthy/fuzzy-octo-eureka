@@ -122,3 +122,28 @@ test('auto: no tests in the repo - straight to claude, local never tried', () =>
   assert.equal(fs.readFileSync(path.join(r.worktree, 'fixed'), 'utf8').trim(), 'claude');
   assert.match(r.log, /no tests to check/);
 });
+
+test('the run log records the task title and specialist, not the appended guidance', () => {
+  const t = setup({ withTests: false });
+  fs.writeFileSync(t.prompt, 'Short task\n---\nSpecialist role: work this task as Code Reviewer\nlots of guidance');
+  const res = spawnSync(BASH, [posix(SCRIPT), 'noop', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
+    encoding: 'utf8',
+    env: { ...process.env, AGENT_RUNS_DIR: posix(t.runs), AGENT_TASK_TITLE: 'Short task', AGENT_SPECIALIST: 'engineering-code-reviewer' },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal(start.task, 'Short task');
+  assert.equal(start.specialist, 'engineering-code-reviewer');
+});
+
+test('without a specialist the run log has no specialist field', () => {
+  const t = setup({ withTests: false });
+  const env = { ...process.env, AGENT_RUNS_DIR: posix(t.runs) };
+  delete env.AGENT_SPECIALIST;
+  delete env.AGENT_TASK_TITLE;
+  const res = spawnSync(BASH, [posix(SCRIPT), 'noop', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], { encoding: 'utf8', env });
+  assert.equal(res.status, 0, res.stderr);
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal('specialist' in start, false);
+  assert.equal(start.task, 'make the tests pass');
+});
