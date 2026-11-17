@@ -630,7 +630,7 @@ function listAvailableRepos() {
     DASHBOARD_DIR,
     PROJECTS_DIR,
     path.resolve(DASHBOARD_DIR, '..'),
-    path.resolve(process.env.STACK_ROOT || '/Users/Sriad/tt-ai-stack', 'tools')
+    path.resolve(STACK_ROOT, 'tools')
   ];
   const repos = new Map();
   repos.set(path.basename(DASHBOARD_DIR), DASHBOARD_DIR);
@@ -700,6 +700,11 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
       dispatchEnv.LOCALAPPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Local');
     }
 
+    // The script records a run only once it gets as far as runs.jsonl. What
+    // it prints before that (missing CLI, bad repo, git refusing a worktree)
+    // goes here, so an early exit is not silent.
+    const dispatchLogFd = fs.openSync(path.join(DASHBOARD_DIR, 'logs', 'dispatch.log'), 'a');
+    fs.writeSync(dispatchLogFd, `\n[${new Date().toISOString()}] ${effectiveRunId} ${agent} ${repo} ${safeBranch}\n`);
     const child = require('child_process').spawn(
       bashBin,
       [scriptPath, agent, repoPath, safeBranch, promptFile, effectiveRunId],
@@ -707,10 +712,11 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId }) {
         cwd: DASHBOARD_DIR,
         windowsHide: true,
         detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', dispatchLogFd, dispatchLogFd],
         env: dispatchEnv,
       }
     );
+    fs.closeSync(dispatchLogFd);
     child.unref();
     child.on('error', (err) => console.error('dispatch spawn failed:', err.message));
 

@@ -94,7 +94,8 @@ function createHandler(deps) {
 
     let decision;
     try {
-      const runs = await deps.dashboard.runs();
+      const rawRuns = await deps.dashboard.runs();
+      const runs = Array.isArray(rawRuns) ? rawRuns : (rawRuns?.runs || []);
       const req = buildRequest({ message: text, thread, repos: deps.repos(), recentRuns: runs });
       const res = await deps.typesafe.systemOne(req, { purpose: 'route' });
       decision = decide(res.answers);

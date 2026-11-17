@@ -192,7 +192,7 @@ run_openhands() {
 
 run_mantis() {
   local limit="$1"
-  local mantis_dir="${MANTIS_HOME:-/Users/Sriad/tt-ai-stack/tools/mantis}"
+  local mantis_dir="${MANTIS_HOME:-${STACK_ROOT:-$HOME/tt-ai-stack}/tools/mantis}"
   echo "== Running Google Mantis security analysis on $worktree"
   if [ -x "$mantis_dir/reference/run.sh" ] && [ -d "$mantis_dir/reference/.venv" ]; then
     run_timeout "$limit" "$mantis_dir/reference/run.sh" "$worktree"

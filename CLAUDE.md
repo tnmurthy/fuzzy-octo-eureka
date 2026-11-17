@@ -6,15 +6,52 @@ The production stack runs on an **Apple Silicon Mac Studio (Apple M5 Max, 18 cor
 
 **Never kill daemon PIDs directly** with `kill -9` - PM2 will respawn them. Always manage via the PM2 CLI:
 
-| ID | Service Name | Entry Point | Port / Role |
-|---|---|---|---|
-| `0` | `ArunachalaDashboard` | `server.js` | Port 8787 (`https://team.mytestbed.tech`) |
-| `1` | `ArunachalaBuzzBridge` | `buzz-bridge/bridge.js` | Nostr relay bridge (`@arunachala`) |
-| `2` | `ArunachalaTelemetry` | `telemetry-daemon.js` | Real-time CPU, GPU & TCP telemetry |
-| `3` | `OpenClawGateway` | `openclaw` | Gateway runner (Port 18789) |
-| `4` | `ArunachalaDrisyonBridge` | `drisyon-bridge.js` | Drisyon Nostr relay bridge |
-| `5` | `DrisyonDashboard` | `server.js` (PORT=8788) | Port 8788 (`https://drisyon.mytestbed.tech`) |
-| `6` | `CloudflareTunnelDrisyon` | `cloudflared` | Zero Trust tunnel ingress (`d23b354e...`) |
+The process list is defined in `ecosystem.config.js` (the source of truth -
+`pm2 start ecosystem.config.js && pm2 save` rebuilds it on a fresh machine).
+
+| Service Name | Entry Point | Port / Role |
+|---|---|---|
+| `ArunachalaDashboard` | `server.js` | Port 8787 (`https://team.mytestbed.tech`); reports runs to bridge `:3100` |
+| `DrisyonDashboard` | `server.js` (`DASHBOARD_ENV_FILE=.env.drisyon`) | Port 8788 (`https://drisyon.mytestbed.tech`); reports runs to bridge `:3101` |
+| `ArunachalaTelemetry` | `telemetry-daemon.js` | Real-time CPU, GPU & TCP telemetry |
+| `IssuePoller` | `orchestration/issue-poller.js` | The agents' work queue: GitHub issues labelled `agent:ready` -> `/api/dispatch/run` on 8787 -> PR. See "Issue queue" below. |
+
+The Buzz bridges (`ArunachalaBuzzBridge`, `ArunachalaDrisyonBridge`) were
+retired on 2026-11-17: the bot obeyed an operator key that had leaked into git
+history, and chat is a poor work queue. The code in `buzz-bridge/` is kept;
+login / `POST /api/team/activate` now answers `status: "disabled"`.
+
+### Issue queue - `orchestration/issue-poller.js`
+
+Label an issue `agent:ready` -> the poller (every 60 s) relabels it
+`agent:running`, branches `agent/issue-<n>-<ts>` from `origin/<default>`, and
+dispatches it. On finish: commits -> it pushes the branch over SSH and opens a
+PR that `Closes #n` (`agent:review`); no commits -> `agent:no-changes`;
+failed / timed out / never recorded -> `agent:failed` with the log path (the
+worktree is kept for inspection).
+
+- Agent: `agent:claude|hermes|codex|noop|auto` label, else
+  `POLLER_DEFAULT_AGENT` (claude). Use `agent:hermes` for docs and drafts; code
+  goes to claude.
+- Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run.
+- Text the safety filter refuses needs `agent:confirmed`.
+- `POLLER_MAX_CONCURRENT` (2) runs at once across all repos.
+- Needs `GITHUB_TOKEN` (fine-grained; Issues + Pull requests read/write) in
+  the secrets file; idles and logs once an hour without it.
+- State: `logs/issue-poller-state.json` (run id -> issue). Tests:
+  `orchestration/issue-poller.test.js`.
+
+Not under PM2 on this Mac (as of 2026-11-17): `openclaw` is not installed, and
+`cloudflared` has no tunnel credentials in `~/.cloudflared`, so
+`drisyon.mytestbed.tech` answers 530 until a tunnel is set up here.
+
+**Reboot:** PM2 only comes back if its launchd hook is installed
+(`pm2 startup launchd`, then run the `sudo` line it prints, then `pm2 save`).
+Without it a reboot leaves every service down and no agent spawns - the
+2026-11-16 outage. Recover by hand with `pm2 resurrect`.
+
+**Dispatch failures:** output the dispatch script prints before it records a
+run goes to `logs/dispatch.log`.
 
 ### Service Management Commands
 
@@ -366,6 +403,13 @@ not `Test-ScriptFileInfo`) to catch the encoding/quoting breakage described
 above before it reaches the service.
 
 ## Open items
+
+- DONE 2026-11-17: `team-manager.js` no longer hard-codes a node version for
+  `pm2` or a Buzz private key. Activation registers `ArunachalaDrisyonBridge`
+  from `ecosystem.config.js` when PM2 does not know it. `/api/team/directive`
+  signs with `BUZZ_DIRECTIVE_PRIVATE_KEY` from the secrets file, passed to the
+  Buzz CLI by environment, no shell. **The old key is still in git history -
+  rotate it.**
 
 - DONE 2026-11-09: `POST /api/buzz/events` deprecated with HTTP 410 Gone (FR-SEC-05); Nostr bridge directly communicates with relays (`wss://drisyon-ai.communities.buzz.xyz`).
 - DONE 2026-11-09: ReBAC (`rebac-engine.js`) extended to gate all protected endpoints: `/api/ping`, `/api/dispatch/run`, `/api/agent/chat`, `/api/team/dispatch`, `/api/memory/store`, `/api/memory/search`, and `/api/rebac/inspect`.
