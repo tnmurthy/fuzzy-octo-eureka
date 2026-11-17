@@ -111,7 +111,7 @@
   function renderRunning(runs) {
     const box = $('running');
     box.replaceChildren();
-    if (!runs.length) { box.append(el('div', { className: 'empty', textContent: 'Nothing running. Queue a task and it starts within a minute.' })); return; }
+    if (!runs.length) { box.append(el('div', { className: 'empty', textContent: 'Nothing running. Pick a repo and give the agent a task above.' })); return; }
     const now = Date.now();
     for (const r of runs) {
       const meta = el('div', { className: 'muted' },
@@ -172,19 +172,11 @@
     }
   }
 
-  let reposFilled = false;
-  function fillRepos(repos) {
-    if (reposFilled || !repos || !repos.length) return;
-    $('repo').replaceChildren(...repos.map((r) => el('option', { value: r, textContent: r })));
-    reposFilled = true;
-  }
-
   async function refresh() {
     try {
       const r = await fetch('/api/agents/overview');
       if (r.status === 401) { location.href = '/login?redirect=/agents'; return; }
       const b = await r.json();
-      fillRepos(b.repos);
       renderCap(b.cap);
       renderCapAdmin(b.admin, b.capSettings);
       renderRunning(b.running || []);
@@ -195,38 +187,9 @@
     }
   }
 
-  // ---- submit -----------------------------------------------------------
-  $('task-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const msg = $('msg');
-    const btn = $('submit');
-    btn.disabled = true;
-    msg.className = 'msg';
-    msg.textContent = 'Opening issue…';
-    try {
-      const r = await fetch('/api/agents/task', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo: $('repo').value, agent: $('agent').value, title: $('title').value, body: $('body').value, specialist: $('specialist').value }),
-      });
-      const b = await r.json();
-      if (!r.ok || !b.ok) throw new Error(b.error || `HTTP ${r.status}`);
-      msg.className = 'msg ok';
-      msg.replaceChildren('Queued as ', el('a', { href: b.url, target: '_blank', rel: 'noopener', textContent: `issue #${b.number}` }), '. An agent starts within a minute.');
-      $('title').value = '';
-      $('body').value = '';
-      $('suggest').hidden = true;
-      refresh();
-    } catch (err) {
-      msg.className = 'msg err';
-      msg.textContent = err.message;
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
   // ---- specialists (agency-agents) ---------------------------------------
   let catalog = { specialists: [], divisions: {} };
+  let role = { label: '', slugs: [] }; // set by agents-workspace.js
   const recommended = new Map(); // slug -> { score, used, reasons, pos }
   let catShown = 24;
 
@@ -249,7 +212,8 @@
     const list = catalog.specialists.filter((s) => (!div || s.division === div)
       && (!q || `${s.name} ${s.description} ${s.vibe} ${s.divisionLabel}`.toLowerCase().includes(q)));
     const rk = (s) => recommended.get(s.slug) || { score: 0, used: 0, pos: 1e9 };
-    if (sort === 'recommended') list.sort((a, b) => rk(a).pos - rk(b).pos);
+    const roleRank = (s) => { const i = role.slugs.indexOf(s.slug); return i < 0 ? 1e9 : i; };
+    if (sort === 'recommended') list.sort((a, b) => roleRank(a) - roleRank(b) || rk(a).pos - rk(b).pos);
     else if (sort === 'used') list.sort((a, b) => rk(b).used - rk(a).used || rk(a).pos - rk(b).pos);
     else list.sort((a, b) => a.name.localeCompare(b.name));
     const box = $('catalog');
@@ -258,7 +222,7 @@
     for (const s of list.slice(0, catShown)) {
       const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Use' });
       btn.addEventListener('click', () => useSpecialist(s.slug));
-      const why = (recommended.get(s.slug) || {}).reasons || [];
+      const why = [...(role.slugs.includes(s.slug) ? [`for ${role.label}`] : []), ...((recommended.get(s.slug) || {}).reasons || [])];
       const card = el('div', { className: 'spec', title: s.vibe || '' },
         el('div', { className: 'n', textContent: `${s.emoji || '•'} ${s.name}` }),
         why.length ? el('div', { className: 'why', textContent: `⭐ ${why.join(' · ')}` }) : null,
@@ -270,6 +234,34 @@
     }
     if (!list.length) box.append(el('div', { className: 'empty', textContent: 'No specialist matches.' }));
     $('catalog-more').hidden = list.length <= catShown;
+  }
+
+  // The picker: your role's specialists, then recommended, then by division.
+  let allGroups = {};
+  const opt = (s) => el('option', { value: s.slug, textContent: `${s.emoji || ''} ${s.name}`.trim() });
+  function fillPicker() {
+    const sel = $('specialist');
+    const keep = sel.value;
+    sel.replaceChildren(el('option', { value: '', textContent: 'None: plain agent' }));
+    const roleItems = role.slugs.map((slug) => bySlug.get(slug)).filter(Boolean);
+    if (roleItems.length) sel.append(el('optgroup', { label: `For ${role.label}` }, ...roleItems.map(opt)));
+    const top = [...recommended.values()].filter((x) => x.reasons && x.reasons.length && !role.slugs.includes(x.slug)).slice(0, 8)
+      .map((x) => bySlug.get(x.slug)).filter(Boolean);
+    if (top.length) sel.append(el('optgroup', { label: '⭐ Recommended for you' }, ...top.map(opt)));
+    for (const [label, items] of Object.entries(allGroups)) sel.append(el('optgroup', { label }, ...items.map(opt)));
+    sel.value = keep;
+    describeSpecialist();
+  }
+
+  function setSpecialist(slug) {
+    $('specialist').value = bySlug.has(slug) ? slug : '';
+    describeSpecialist();
+    markChips();
+  }
+
+  function setRole(next) {
+    role = { label: next.label, slugs: next.specialists || [] };
+    if (catalog.specialists.length) { fillPicker(); renderCatalog(); }
   }
 
   async function loadSpecialists() {
@@ -289,18 +281,9 @@
       } catch (_) { /* fall back to catalog order */ }
       const groups = {};
       for (const s of b.specialists) (groups[s.divisionLabel] = groups[s.divisionLabel] || []).push(s);
-      const sel = $('specialist');
-      const top = [...recommended.values()].filter((x) => x.reasons && x.reasons.length).slice(0, 8);
-      if (top.length) {
-        const og = el('optgroup', { label: '⭐ Recommended for you' });
-        top.forEach((x) => { const s = bySlug.get(x.slug); if (s) og.append(el('option', { value: s.slug, textContent: `${s.emoji || ''} ${s.name}`.trim() })); });
-        sel.append(og);
-      }
-      for (const [label, items] of Object.entries(groups)) {
+      allGroups = groups;
+      fillPicker();
         const og = el('optgroup', { label });
-        items.forEach((s) => og.append(el('option', { value: s.slug, textContent: `${s.emoji || ''} ${s.name}`.trim() })));
-        sel.append(og);
-      }
       const divSel = $('catalog-division');
       Object.entries(b.divisions || {}).sort((x, y) => x[1].label.localeCompare(y[1].label))
         .forEach(([k, v]) => divSel.append(el('option', { value: k, textContent: v.label })));
@@ -345,6 +328,9 @@
   $('catalog-division').addEventListener('change', () => { catShown = 24; renderCatalog(); });
   $('catalog-sort').addEventListener('change', () => { catShown = 24; renderCatalog(); });
   $('catalog-more').addEventListener('click', () => { catShown += 24; renderCatalog(); });
+
+  // Shared with agents-workspace.js (repos, roles, task submit).
+  window.AgentsPage = { refresh, openLog, setSpecialist, setRole, el, $ };
 
   loadSpecialists();
   refresh();

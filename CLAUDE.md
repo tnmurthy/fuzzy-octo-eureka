@@ -66,6 +66,22 @@ and no agent spawns (the 2026-11-16 outage); recover by hand with
 **Dispatch failures:** output the dispatch script prints before it records a
 run goes to `logs/dispatch.log`.
 
+**Agents workspace (top of /agents):** pick a role (developer, tester, PM,
+designer, DevOps, security: its specialists lead the picker and catalog, and
+it offers one-click starter tasks), pick a repo, describe the task, then
+**Run now** (any repo: `POST /api/agents/run` -> new `agent/run-<ts>` branch in
+its own worktree, same checks and paid cap as `/api/dispatch/run` via the
+shared `startDispatch`) or **GitHub issue -> PR** (only repos the poller
+watches). Repos: built-ins (`listAvailableRepos`, remotes read from
+`.git/config`) plus folders and clones an admin adds (`repo-registry.js`,
+`logs/repos.json`): a local git repo inside home (not hidden, `Library` or a
+worktree), or a git URL (https/ssh, no credentials) cloned with
+`--depth 50` into `AGENT_REPOS_DIR` (default `~/agent-repos`). Remove only
+unregisters. Agents run a repo's code on this Mac, so adding is admin-only,
+same-origin JSON, and the page warns. When only built-ins exist the page
+recommends repos found in common dev folders. Role and repo choice are kept
+in localStorage.
+
 **Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
 header). A form that queues a task (opens a GitHub issue labelled
 `agent:ready` + `agent:<name>`), the issue queue as four columns (queued,

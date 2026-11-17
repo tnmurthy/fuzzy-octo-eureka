@@ -10,20 +10,24 @@
   <link rel="stylesheet" href="dashboard.css">
   <style>
     body { background: var(--bg-primary); color: var(--color-text-main); font-family: 'Outfit', sans-serif; margin: 0; }
-    .page { max-width: 1240px; margin: 0 auto; padding: 28px 16px 60px; }
-    .head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+    .page { max-width: 1240px; margin: 0 auto; padding: 28px 16px 60px; overflow-x: clip; }
+    .card { min-width: 0; }
+    .cat-input { min-width: 0; max-width: 100%; }
+    .head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
     .head h1 { font-size: 1.6rem; font-weight: 600; margin: 0; }
     .head a { color: var(--status-blue); text-decoration: none; font-size: 0.85rem; }
     .muted { color: var(--color-text-muted); font-size: 0.8rem; }
     .mono { font-family: 'JetBrains Mono', monospace; }
     .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; }
     .card h2 { font-size: 0.95rem; font-weight: 600; margin: 0 0 12px; letter-spacing: 0.02em; }
-    .grid-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 16px; }
-    @media (max-width: 860px) { .grid-top { grid-template-columns: 1fr; } }
+    .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,176,255,.18); color: var(--status-blue); font-size: 0.75rem; margin-right: 8px; }
+    .grid-top { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 900px) { .grid-top { grid-template-columns: minmax(0, 1fr); } }
+    .stack { margin-bottom: 16px; }
 
     /* cap meter */
     .cap { display: flex; align-items: center; gap: 10px; }
-    .cap-bar { width: 160px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .cap-bar { width: 140px; max-width: 30vw; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
     .cap-fill { height: 100%; background: var(--status-green); transition: width .3s; }
     .cap.warn .cap-fill { background: var(--status-amber); }
     .cap.full .cap-fill { background: var(--status-red); }
@@ -32,28 +36,71 @@
     .cap-form input { width: 80px; background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.85rem; }
     .cap-note { width: 100%; text-align: right; }
 
+    /* roles */
+    .roles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .role { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--color-text-main); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 0.85rem; cursor: pointer; }
+    .role[aria-pressed="true"] { border-color: var(--status-blue); background: rgba(0,176,255,.14); }
+
+    /* repos */
+    .repo { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; cursor: pointer; background: var(--bg-secondary); }
+    .repo[aria-checked="true"] { border-color: var(--status-blue); box-shadow: 0 0 0 1px var(--status-blue) inset; }
+    .repo .main { flex: 1; min-width: 0; }
+    .repo .nm { font-weight: 500; font-size: 0.9rem; }
+    .repo .pth { font-size: 0.74rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tag { font-size: 0.66rem; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border-color); color: var(--color-text-muted); margin-left: 6px; white-space: nowrap; }
+    .tag.gh { color: var(--status-green); border-color: rgba(0,230,118,.4); }
+    .tag.git { color: var(--status-blue); border-color: rgba(0,176,255,.4); }
+    .tag.missing { color: #fca5a5; border-color: rgba(239,68,68,.4); }
+    details.add { margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+    details.add summary { cursor: pointer; color: var(--status-blue); font-size: 0.88rem; }
+    .tabs { display: inline-flex; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 3px; gap: 3px; margin: 10px 0; }
+    .tab { background: transparent; border: 0; color: var(--color-text-muted); font: inherit; font-size: 0.82rem; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+    .tab[aria-selected="true"] { background: var(--bg-card-hover); color: var(--color-text-main); }
+    .inline { display: flex; gap: 8px; }
+    .inline input { flex: 1; }
+    .warn-note { font-size: 0.74rem; color: #e8c66a; margin-top: 8px; }
+    .reco { margin-top: 10px; padding: 10px 12px; border: 1px dashed rgba(0,176,255,.35); border-radius: 10px; font-size: 0.82rem; }
+    .reco[hidden] { display: none; }
+
     /* form */
-    form label { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin: 10px 0 4px; }
-    form input, form select, form textarea {
+    input.f, select.f, textarea.f {
       width: 100%; box-sizing: border-box; background: var(--bg-secondary); color: var(--color-text-main);
       border: 1px solid var(--border-color); border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 0.9rem;
     }
-    form textarea { min-height: 110px; resize: vertical; }
-    form input:focus, form select:focus, form textarea:focus { outline: none; border-color: var(--status-blue); }
+    textarea.f { min-height: 90px; resize: vertical; }
+    .f:focus { outline: none; border-color: var(--status-blue); }
+    label.l { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin: 10px 0 4px; }
     .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .btn { margin-top: 14px; background: var(--status-blue); color: #001018; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+    @media (max-width: 520px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+    .btn { background: var(--status-blue); color: #001018; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
     .btn:disabled { opacity: .5; cursor: default; }
     .btn-sm { background: transparent; color: var(--status-blue); border: 1px solid rgba(0,176,255,.35); border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 0.75rem; cursor: pointer; }
+    .btn-sm.danger { color: #fca5a5; border-color: rgba(239,68,68,.35); }
     .msg { margin-top: 10px; font-size: 0.85rem; min-height: 1.2em; }
     .msg.ok { color: var(--status-green); } .msg.err { color: #fca5a5; }
-    .msg a { color: var(--status-blue); }
+    .msg a, .msg button { color: var(--status-blue); }
+    .starters { display: flex; flex-wrap: wrap; gap: 6px; }
+    .starter { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--color-text-main); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 0.78rem; cursor: pointer; text-align: left; }
+    .starter:hover { border-color: var(--border-color-glow); }
+    .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    @media (max-width: 520px) { .modes { grid-template-columns: minmax(0, 1fr); } }
+    .mode { border: 1px solid var(--border-color); border-radius: 10px; padding: 9px 11px; cursor: pointer; background: var(--bg-secondary); font-size: 0.8rem; }
+    .mode input { margin-right: 6px; }
+    .mode b { font-size: 0.86rem; }
+    .mode.disabled { opacity: .5; cursor: not-allowed; }
+    .mode:has(input:checked) { border-color: var(--status-blue); }
+    .submit-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+
+    .suggest { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+    .suggest[hidden] { display: none; }
+    .chip { background: rgba(83,25,231,.15); border: 1px solid rgba(179,136,255,.45); color: #d7c6ff; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.76rem; cursor: pointer; }
+    .chip.on { background: rgba(179,136,255,.35); color: #fff; }
 
     /* running */
     .run { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-color); }
     .run:first-of-type { border-top: 0; }
     .run .what { min-width: 0; }
     .run .task { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .pill { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; margin-right: 6px; }
     .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--status-green); margin-right: 6px; box-shadow: 0 0 0 0 var(--status-green-glow); animation: pulse 1.6s infinite; }
     @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(0,0,0,0); } }
 
@@ -83,11 +130,6 @@
     .st-done { color: var(--status-green); } .st-failed { color: var(--status-red); } .st-other { color: var(--status-amber); }
     a.lnk { color: var(--status-blue); text-decoration: none; }
 
-    .suggest { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
-    .suggest[hidden] { display: none; }
-    .chip { background: rgba(83,25,231,.15); border: 1px solid rgba(179,136,255,.45); color: #d7c6ff; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.76rem; cursor: pointer; }
-    .chip.on { background: rgba(179,136,255,.35); color: #fff; }
-
     /* specialists catalog */
     .cat-input { background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; }
     .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
@@ -95,7 +137,7 @@
     .spec .n { font-weight: 500; font-size: 0.9rem; }
     .spec .d { font-size: 0.78rem; color: #c3cedb; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .spec .why { font-size: 0.72rem; color: #e8c66a; }
-    .spec .f { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
+    .spec .f2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
   </style>
 </head>
 <body>
@@ -103,13 +145,13 @@
     <div class="head">
       <div>
         <h1>Agents</h1>
-        <div class="muted">Give a task, watch it run, review the PR. Refreshes every 5 s.</div>
+        <div class="muted">Pick a repo, describe the task, and an AI agent works on it in its own branch. Refreshes every 5 s.</div>
       </div>
       <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
         <div class="cap" id="cap" title="Paid agent runs today (DISPATCH_DAILY_PAID_RUNS)">
           <span class="muted">Paid runs today</span>
           <div class="cap-bar"><div class="cap-fill" id="cap-fill" style="width:0"></div></div>
-          <span class="mono" id="cap-text">-</span>
+          <span class="mono" id="cap-text" style="white-space:nowrap">-</span>
           <button class="btn-sm" id="cap-edit" type="button" hidden>Change</button>
         </div>
         <form class="cap-form" id="cap-form" hidden>
@@ -124,45 +166,86 @@
       </div>
     </div>
 
+    <section class="roles" aria-label="Your role">
+      <span class="muted">I'm working as</span>
+      <div id="roles" style="display:contents"></div>
+    </section>
+
     <div class="grid-top">
       <section class="card">
-        <h2>Give an agent a task</h2>
+        <h2><span class="step">1</span>Repository</h2>
+        <div id="repo-list" role="radiogroup" aria-label="Repository"><div class="empty">Loading…</div></div>
+        <div class="reco" id="repo-reco" hidden></div>
+        <details class="add" id="add-repo" hidden>
+          <summary>+ Add a repository</summary>
+          <div class="tabs" role="tablist">
+            <button class="tab" type="button" role="tab" data-tab="local" aria-selected="true">Local folder</button>
+            <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">From Git</button>
+          </div>
+          <form id="add-local" autocomplete="off">
+            <div class="inline">
+              <input class="f" id="local-path" placeholder="~/projects/my-app" aria-label="Folder path" required>
+              <button class="btn" type="submit">Add</button>
+            </div>
+            <div class="muted" style="margin-top:6px">A git repository inside your home folder.</div>
+            <div class="suggest" id="found" hidden></div>
+          </form>
+          <form id="add-git" autocomplete="off" hidden>
+            <div class="inline">
+              <input class="f" id="git-url" placeholder="https://github.com/owner/repo or git@github.com:owner/repo.git" aria-label="Git URL" required>
+              <button class="btn" type="submit">Clone</button>
+            </div>
+            <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span>. Private repos: use the ssh URL (this Mac's ssh key).</div>
+          </form>
+          <div class="msg" id="repo-msg" role="status"></div>
+          <div class="warn-note">⚠ Agents read and run this repo's code (tests, scripts) on this Mac. Add only repositories you trust.</div>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">2</span>Task</h2>
         <form id="task-form" autocomplete="off">
+          <div class="muted" id="starters-label">Start from a common task, or write your own:</div>
+          <div class="starters" id="starters" style="margin-top:6px"></div>
+          <label class="l" for="title">What should it do?</label>
+          <input class="f" id="title" maxlength="200" required placeholder="e.g. Add input validation to the signup API, with tests">
+          <div class="suggest" id="suggest" hidden></div>
+          <label class="l" for="body">Details (optional)</label>
+          <textarea class="f" id="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, what not to change."></textarea>
           <div class="row2">
             <div>
-              <label for="repo">Repository</label>
-              <select id="repo" name="repo" required></select>
-            </div>
-            <div>
-              <label for="agent">Agent</label>
-              <select id="agent" name="agent">
+              <label class="l" for="agent">Agent</label>
+              <select class="f" id="agent">
                 <option value="claude">Claude: code (paid)</option>
                 <option value="hermes">Hermes: docs and drafts (free, local)</option>
                 <option value="auto">Auto: Hermes first, Claude if tests fail</option>
                 <option value="codex">Codex (paid)</option>
-                <option value="noop">Noop: dry run, tests the pipeline</option>
+                <option value="noop">Noop: dry run (free)</option>
               </select>
             </div>
+            <div>
+              <label class="l" for="specialist">Specialist</label>
+              <select class="f" id="specialist"><option value="">None: plain agent</option></select>
+            </div>
           </div>
-          <label for="specialist">Specialist (optional, from The Agency)</label>
-          <select id="specialist" name="specialist"><option value="">None: plain agent</option></select>
           <div class="muted" id="specialist-desc" style="margin-top:4px; min-height:1em"></div>
-          <label for="title">What should it do?</label>
-          <input id="title" name="title" maxlength="200" required placeholder="e.g. Remove the placeholder tiles from the dashboard">
-          <div class="suggest" id="suggest" hidden><span class="muted">Suggested specialists:</span></div>
-          <label for="body">Details (optional)</label>
-          <textarea id="body" name="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, what not to change."></textarea>
-          <button class="btn" id="submit" type="submit">Queue task</button>
+          <div class="modes" role="radiogroup" aria-label="How to run">
+            <label class="mode" id="mode-run"><input type="radio" name="mode" value="run" checked><b>Run now</b><div class="muted">Starts at once on a new branch in its own worktree. Any repo.</div></label>
+            <label class="mode" id="mode-issue"><input type="radio" name="mode" value="issue"><b>GitHub issue → PR</b><div class="muted" id="mode-issue-note">Opens an issue; the agent opens a PR and a reviewer checks it.</div></label>
+          </div>
+          <div class="submit-row">
+            <button class="btn" id="submit" type="submit">Run now</button>
+            <span class="muted" id="submit-note"></span>
+          </div>
           <div class="msg" id="msg" role="status"></div>
-          <div class="muted">Opens a GitHub issue labelled <span class="mono">agent:ready</span>. The poller picks it up within a minute, opens a PR, and a second Claude run reviews it. You approve by merging.</div>
         </form>
       </section>
-
-      <section class="card">
-        <h2>Running now</h2>
-        <div id="running"><div class="empty">Loading…</div></div>
-      </section>
     </div>
+
+    <section class="card stack">
+      <h2>Running now</h2>
+      <div id="running"><div class="empty">Loading…</div></div>
+    </section>
 
     <section class="card log-card" id="log-card">
       <div class="log-head">
@@ -178,7 +261,7 @@
     <section class="board" id="board"></section>
     <div class="muted" id="queue-note" style="margin:-6px 0 16px"></div>
 
-    <section class="card" id="catalog-card">
+    <section class="card stack" id="catalog-card">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px">
         <h2 style="margin:0">Specialists <span class="muted" id="catalog-count"></span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap">
@@ -208,5 +291,6 @@
     </section>
   </main>
   <script src="agents-page.js"></script>
+  <script src="agents-workspace.js"></script>
 </body>
 </html>

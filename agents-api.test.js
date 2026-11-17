@@ -200,3 +200,57 @@ test('createTask adds a specialist label after making sure it exists, and reject
   const list = await call(api, { method: 'GET', url: '/api/agents/specialists' });
   assert.equal(list.payload.specialists.length, 1);
 });
+
+// ---- repos + run now --------------------------------------------------------
+function workspaceApi({ admin = true, dispatchRun } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-ws-'));
+  const added = [];
+  const repoRegistry = {
+    list: () => [
+      { name: 'app', path: path.join(os.homedir(), 'code', 'app'), source: 'local', remote: 'git@github.com:me/app.git', exists: true },
+      { name: 'tool', path: '/opt/tool', source: 'git', remote: 'https://github.com/other/tool', exists: true },
+    ],
+    discover: () => [{ name: 'beta', display: '~/projects/beta' }],
+    addLocal: async (p, actor) => { added.push(['local', p, actor]); return { ok: true, value: { name: 'x', path: p } }; },
+    addGit: async (u) => (u.startsWith('https://') ? { ok: true, value: { name: 'y', path: '/c/y', remote: u } } : { ok: false, error: 'use an https URL' }),
+    remove: () => ({ ok: true }),
+  };
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'r.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs: [] }), capNow: () => ({}),
+    repos: ['me/app'], github: null, repoRegistry, dispatchRun, isAdmin: () => admin, actorOf: () => 'sriad', now: () => 1_700_000_000_000,
+  });
+  return { api, added };
+}
+
+test('repos list shows home paths with ~, GitHub links, and which the poller watches', async () => {
+  const { api } = workspaceApi();
+  const r = await call(api, { method: 'GET', url: '/api/agents/repos' });
+  assert.equal(r.payload.repos[0].path, '~/code/app');
+  assert.deepEqual([r.payload.repos[0].github, r.payload.repos[0].watched], ['me/app', true]);
+  assert.deepEqual([r.payload.repos[1].github, r.payload.repos[1].watched], ['other/tool', false]);
+  assert.deepEqual(r.payload.suggestions, [{ name: 'beta', path: '~/projects/beta' }]);
+  assert.equal(r.payload.canAdd, true);
+});
+
+test('only admins add repos, same-site only; errors come back as 400', async () => {
+  const user = workspaceApi({ admin: false });
+  assert.equal((await call(user.api, { url: '/api/agents/repos', body: { type: 'local', path: '~/x' } })).status, 403);
+  const admin = workspaceApi();
+  assert.equal((await call(admin.api, { url: '/api/agents/repos', body: { type: 'local', path: '~/x' }, headers: { origin: 'https://evil.example' } })).status, 403);
+  const ok = await call(admin.api, { url: '/api/agents/repos', body: { type: 'local', path: '~/x' } });
+  assert.equal(ok.status, 201);
+  assert.deepEqual(admin.added[0], ['local', '~/x', 'sriad']);
+  assert.equal((await call(admin.api, { url: '/api/agents/repos', body: { type: 'git', url: 'ftp://x' } })).status, 400);
+  assert.equal((await call(admin.api, { url: '/api/agents/repos', body: { type: 'zip' } })).status, 400);
+});
+
+test('run now builds the task, picks a fresh branch and goes through dispatch', async () => {
+  const sent = [];
+  const { api } = workspaceApi({ dispatchRun: async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: 'r1', branch: p.branch } }; } });
+  const r = await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'claude', title: 'Add tests', body: 'for utils', specialist: 'testing-api-tester' } });
+  assert.equal(r.status, 202);
+  assert.deepEqual(sent[0], { agent: 'claude', repo: 'app', task: 'Add tests\n\nfor utils', specialist: 'testing-api-tester', branch: `agent/run-${(1_700_000_000_000).toString(36)}` });
+  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: '' } })).status, 400);
+  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x', agent: 'rm' } })).status, 400);
+  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x' }, headers: { 'content-type': 'text/plain' } })).status, 403);
+});
