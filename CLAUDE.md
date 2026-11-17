@@ -91,6 +91,20 @@ where each entry lives. `GET /api/context/overview`; shaping in
 `teamStore.teamContext()`. Without team-store it shows this Mac only. Off on
 the Drisyon portal (8788).
 
+**Specialists (The Agency):** 268 personas from
+[agency-agents](https://github.com/msitarzewski/agency-agents) (MIT), pinned
+in `specialists/catalog.json` (commit, sha256 per file) with bodies in
+`specialists/agents/<slug>.md`. A dispatch may name one (`specialist` in
+`/api/dispatch/run`, a `specialist:<slug>` issue label, or the picker on
+/agents); `specialists.js` appends its guidance after the task, framed as role
+guidance that cannot override the task, repo rules or tool limits, trimmed to
+6000 chars, and refused if the file no longer matches its sha256. Reviews use
+`POLLER_REVIEW_SPECIALIST` (default `engineering-code-reviewer`, `off` for
+none). Update: clone the repo, `node scripts/sync-specialists.js <clone>`
+(imports only division folders, runs nothing, skips files that try to
+override instructions, pipe downloads into a shell, or carry
+credential-looking strings), review the diff, commit.
+
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid
 runs used today against the cap. Each running claude run's log fills step by

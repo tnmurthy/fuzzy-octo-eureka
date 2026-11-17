@@ -82,6 +82,14 @@
     td.task { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .st-done { color: var(--status-green); } .st-failed { color: var(--status-red); } .st-other { color: var(--status-amber); }
     a.lnk { color: var(--status-blue); text-decoration: none; }
+
+    /* specialists catalog */
+    .cat-input { background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; }
+    .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    .spec { background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--div-color, var(--status-blue)); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .spec .n { font-weight: 500; font-size: 0.9rem; }
+    .spec .d { font-size: 0.78rem; color: #c3cedb; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .spec .f { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
   </style>
 </head>
 <body>
@@ -130,6 +138,9 @@
               </select>
             </div>
           </div>
+          <label for="specialist">Specialist (optional, from The Agency)</label>
+          <select id="specialist" name="specialist"><option value="">None: plain agent</option></select>
+          <div class="muted" id="specialist-desc" style="margin-top:4px; min-height:1em"></div>
           <label for="title">What should it do?</label>
           <input id="title" name="title" maxlength="200" required placeholder="e.g. Remove the placeholder tiles from the dashboard">
           <label for="body">Details (optional)</label>
@@ -159,6 +170,19 @@
 
     <section class="board" id="board"></section>
     <div class="muted" id="queue-note" style="margin:-6px 0 16px"></div>
+
+    <section class="card" id="catalog-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px">
+        <h2 style="margin:0">Specialists <span class="muted" id="catalog-count"></span></h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <input type="search" id="catalog-q" placeholder="Search specialists…" aria-label="Search specialists" class="cat-input">
+          <select id="catalog-division" aria-label="Division" class="cat-input"><option value="">All divisions</option></select>
+        </div>
+      </div>
+      <div class="muted" id="catalog-source" style="margin-bottom:10px"></div>
+      <div class="cat-grid" id="catalog"></div>
+      <button class="btn-sm" id="catalog-more" type="button" hidden style="display:block; margin:10px auto 0">Show more</button>
+    </section>
 
     <section class="card">
       <h2>Recent runs</h2>

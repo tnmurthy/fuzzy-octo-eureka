@@ -26,7 +26,7 @@ function setup({ runs = [], active = {}, github = null } = {}) {
 
 test('validateTask accepts a good task and defaults the agent to claude', () => {
   const v = validateTask({ repo: 'me/app', title: '  Fix it  ' }, REPOS);
-  assert.deepEqual(v, { ok: true, value: { repo: 'me/app', title: 'Fix it', body: '', agent: 'claude' } });
+  assert.deepEqual(v, { ok: true, value: { repo: 'me/app', title: 'Fix it', body: '', agent: 'claude', specialist: null } });
 });
 
 test('validateTask rejects unknown repos, empty or long titles, long bodies and unknown agents', () => {
@@ -178,4 +178,25 @@ test('non-admins, cross-site posts and bad values cannot change the limit', asyn
   assert.equal((await call(admin.api, { url: '/api/agents/settings', body: { dailyPaidRuns: 50 }, headers: { origin: 'https://evil.example' } })).status, 403);
   assert.equal((await call(admin.api, { url: '/api/agents/settings', body: { dailyPaidRuns: -1 } })).status, 400);
   assert.equal(admin.settings.cap(), 20);
+});
+
+test('createTask adds a specialist label after making sure it exists, and rejects unknown ones', async () => {
+  const made = [];
+  let sent;
+  const github = {
+    listIssuesWithLabel: async () => [],
+    ensureLabel: async (repo, l) => { made.push(l.name); },
+    createIssue: async (repo, issue) => { sent = issue; return { number: 5, html_url: 'u' }; },
+  };
+  const specialists = { get: (s) => (s === 'engineering-code-reviewer' ? { slug: s } : null), list: () => ({ specialists: [{ slug: 'engineering-code-reviewer' }] }) };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-sp-'));
+  const api = createAgentsApi({ runsFile: path.join(dir, 'r.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs: [] }), capNow: () => ({}), repos: REPOS, github, specialists });
+  const ok = await api.createTask({ repo: 'me/app', title: 'Review it', specialist: 'engineering-code-reviewer' });
+  assert.equal(ok.status, 201);
+  assert.deepEqual(made, ['specialist:engineering-code-reviewer']);
+  assert.deepEqual(sent.labels, ['agent:ready', 'agent:claude', 'specialist:engineering-code-reviewer']);
+  const bad = await api.createTask({ repo: 'me/app', title: 'x', specialist: 'made-up' });
+  assert.equal(bad.status, 400);
+  const list = await call(api, { method: 'GET', url: '/api/agents/specialists' });
+  assert.equal(list.payload.specialists.length, 1);
 });
