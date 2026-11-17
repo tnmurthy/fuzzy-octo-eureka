@@ -268,6 +268,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/team') urlPath = '/team.html';
   if (urlPath === '/costing') urlPath = '/costing.html';
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
+  if (urlPath === '/agents') urlPath = '/agents.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
@@ -675,6 +676,27 @@ const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 const PAID_RUN_CAP = parseCap(process.env.DISPATCH_DAILY_PAID_RUNS);
 let pendingPaidRuns = [];
 
+// Agents page (/agents): runs, issue queue, live logs, "give an agent a task".
+// Repos are the issue poller's: POLLER_REPOS (owner/name=path,...) or origin.
+function pollerRepos() {
+  if (process.env.POLLER_REPOS) {
+    return process.env.POLLER_REPOS.split(',').map((s) => s.trim().split('=')[0]).filter(Boolean);
+  }
+  try {
+    const url = require('child_process').execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: DASHBOARD_DIR, encoding: 'utf8', timeout: 5000 }).trim();
+    const m = url.match(/github\.com[:/]([^/]+\/[^/]+?)(\.git)?$/);
+    return m ? [m[1]] : [];
+  } catch (_) { return []; }
+}
+const agentsApi = require('./agents-api').createAgentsApi({
+  runsFile: RUNS_FILE,
+  stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
+  readRuns,
+  capNow: (runs) => checkDispatchCap({ agent: 'claude', runs, pending: pendingPaidRuns, cap: PAID_RUN_CAP }),
+  repos: pollerRepos(),
+  github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
+});
+
 function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
@@ -931,6 +953,12 @@ function handleRequest(req, res) {
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
+  }
+  if (req.url.startsWith('/api/agents/')) {
+    const isDrisyonPortal = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
+    if (isDrisyonPortal) return sendJson(res, 404, { ok: false, error: 'not found' });
+    if (agentsApi.handle(req, res, { sendJson, readJsonBody })) return;
+    return sendJson(res, 404, { ok: false, error: 'not found' });
   }
   if (req.url.startsWith('/api/runs')) {
     // ?scope=team: every teammate's runs from Supabase; local file if that fails.

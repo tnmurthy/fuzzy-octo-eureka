@@ -75,6 +75,10 @@ function createGitHubClient({ token, fetchImpl = fetch, api = API }) {
       return call('POST', `${repoPath(repo)}/issues/${number}/comments`, { body });
     },
 
+    async createIssue(repo, { title, body, labels }) {
+      return call('POST', `${repoPath(repo)}/issues`, { title, body, labels });
+    },
+
     async createPull(repo, { head, base, title, body }) {
       return call('POST', `${repoPath(repo)}/pulls`, { head, base, title, body });
     },

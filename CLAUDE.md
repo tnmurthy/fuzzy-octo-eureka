@@ -66,6 +66,16 @@ and no agent spawns (the 2026-11-16 outage); recover by hand with
 **Dispatch failures:** output the dispatch script prints before it records a
 run goes to `logs/dispatch.log`.
 
+**Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
+header). A form that queues a task (opens a GitHub issue labelled
+`agent:ready` + `agent:<name>`), the issue queue as four columns (queued,
+working, needs review, failed; cached 30 s), running agents with a live log
+viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):
+`GET /api/agents/overview`, `GET /api/agents/log?id=` (only files inside the
+runs folder, last 64 KB), `POST /api/agents/task` (repo must be one the poller
+watches; JSON-only and same-origin, so another website cannot start a paid
+agent through a local browser). Off on the Drisyon portal (8788).
+
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid
 runs used today against the cap. Each running claude run's log fills step by
