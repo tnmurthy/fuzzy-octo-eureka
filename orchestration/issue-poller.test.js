@@ -25,7 +25,7 @@ function fakeGitHub(issues = []) {
   };
 }
 
-function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors } = {}) {
+function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', readLog } = {}) {
   const github = fakeGitHub(issues);
   const gitCalls = [];
   const dispatched = [];
@@ -38,7 +38,7 @@ function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, g
     loadState: () => JSON.parse(JSON.stringify(state)),
     saveState: (s) => { saved = JSON.parse(JSON.stringify(s)); },
     repos: [{ repo: REPO, path: '/work/demo', name: 'demo' }],
-    authors, maxConcurrent, now, log: () => {},
+    authors, maxConcurrent, now, log: () => {}, reviewAgent, readLog,
   });
   return { poller, github, gitCalls, dispatched, saved: () => saved };
 }
@@ -167,6 +167,69 @@ test('a push that keeps failing is retried, then given up on with a comment', as
   await s.poller.tick();
   assert.deepEqual(s.saved().active, {});
   assert.match(commentsOf(s.github).pop(), /could not be handed back: Permission denied/);
+});
+
+const prRun = { id: 'r1', status: 'done', commits_ahead: 2, duration_s: 30, worktree: '/work/demo--agent-issue-7-x' };
+const jobWithMeta = { ...job, name: 'demo', issueBody: 'Make it faster' };
+
+test('a new PR gets a read-only review run on the same branch, and keeps its worktree for it', async () => {
+  const { poller, github, gitCalls, dispatched, saved } = setup({ state: { active: { r1: jobWithMeta } }, runs: [prRun], reviewAgent: 'claude' });
+  await poller.tick();
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].readOnly, true);
+  assert.equal(dispatched[0].agent, 'claude');
+  assert.equal(dispatched[0].branch, 'agent/issue-7-x');
+  assert.equal(dispatched[0].repo, 'demo');
+  assert.match(dispatched[0].task, /pull request #99/);
+  assert.match(dispatched[0].task, /do not edit files and do not commit/);
+  assert.match(dispatched[0].task, /Make it faster/);
+  assert.ok(!gitCalls.some((c) => c[0] === 'worktree'));
+  const review = saved().active['run-1'];
+  assert.equal(review.kind, 'review');
+  assert.equal(review.pr, 99);
+  assert.equal(review.commitsBefore, 2);
+  assert.match(commentsOf(github)[0], /agent review \(`claude`\) will be posted/);
+});
+
+test('a finished review is posted on the PR, then the worktree is removed', async () => {
+  const reviewJob = { ...jobWithMeta, kind: 'review', pr: 99, commitsBefore: 2, worktree: '/work/demo--agent-issue-7-x' };
+  const { poller, github, gitCalls, saved } = setup({
+    state: { active: { rv: reviewJob } },
+    runs: [{ id: 'rv', status: 'done', commits_ahead: 2, log: '/runs/rv.log' }],
+    readLog: (f) => (f === '/runs/rv.log' ? '**Verdict:** approve\nNo blocking issues' : ''),
+  });
+  await poller.tick();
+  const posted = github.calls.find((c) => c[0] === 'comment');
+  assert.equal(posted[2], 99);
+  assert.match(posted[3], /Agent review \(`claude`, run `rv`\)/);
+  assert.match(posted[3], /Verdict:\*\* approve/);
+  assert.ok(!/Warning/.test(posted[3]));
+  assert.deepEqual(gitCalls, [['worktree', 'remove', '/work/demo--agent-issue-7-x']]);
+  assert.ok(!github.calls.some((c) => c[0] === 'add' || c[0] === 'remove'));
+  assert.deepEqual(saved().active, {});
+});
+
+test('a review that changed the branch is flagged; a failed review asks for a human', async () => {
+  const reviewJob = { ...jobWithMeta, kind: 'review', pr: 99, commitsBefore: 2 };
+  const changed = setup({ state: { active: { rv: reviewJob } }, runs: [{ id: 'rv', status: 'done', commits_ahead: 3 }], readLog: () => 'ok' });
+  await changed.poller.tick();
+  assert.match(commentsOf(changed.github)[0], /Warning:\*\* the branch changed during the review \(2 -> 3/);
+
+  const failed = setup({ state: { active: { rv: reviewJob } }, runs: [{ id: 'rv', status: 'timed_out', log: '/runs/rv.log' }] });
+  await failed.poller.tick();
+  assert.match(commentsOf(failed.github)[0], /ended \*\*timed_out\*\*.*Review this PR by hand/);
+});
+
+test('a review that cannot start leaves a note on the PR and cleans up', async () => {
+  const { poller, github, gitCalls, saved } = setup({
+    state: { active: { r1: jobWithMeta } }, runs: [prRun], reviewAgent: 'claude',
+    dispatchImpl: async () => { throw new Error('dashboard HTTP 500'); },
+  });
+  await poller.tick();
+  const onPr = github.calls.filter((c) => c[0] === 'comment' && c[2] === 99);
+  assert.match(onPr[0][3], /Could not start the agent review: dashboard HTTP 500/);
+  assert.deepEqual(gitCalls.at(-1), ['worktree', 'remove', prRun.worktree]);
+  assert.deepEqual(saved().active, {});
 });
 
 test('the GitHub client sends the token as a header and never puts it in an error', async () => {
