@@ -14,8 +14,32 @@ The process list is defined in `ecosystem.config.js` (the source of truth -
 | `ArunachalaDashboard` | `server.js` | Port 8787 (`https://team.mytestbed.tech`); reports runs to bridge `:3100` |
 | `DrisyonDashboard` | `server.js` (`DASHBOARD_ENV_FILE=.env.drisyon`) | Port 8788 (`https://drisyon.mytestbed.tech`); reports runs to bridge `:3101` |
 | `ArunachalaTelemetry` | `telemetry-daemon.js` | Real-time CPU, GPU & TCP telemetry |
-| `ArunachalaBuzzBridge` | `buzz-bridge/bridge.js` | `wss://buzz.mytestbed.tech`, notify `:3100`, dashboard `:8787` |
-| `ArunachalaDrisyonBridge` | `buzz-bridge/bridge.js` (`BRIDGE_ENV_FILE=buzz-bridge/.env.drisyon`) | `wss://drisyon-ai.communities.buzz.xyz`, notify `:3101`, dashboard `:8788`. This is "the team" that login / `POST /api/team/activate` starts (`team-manager.js`). |
+| `IssuePoller` | `orchestration/issue-poller.js` | The agents' work queue: GitHub issues labelled `agent:ready` -> `/api/dispatch/run` on 8787 -> PR. See "Issue queue" below. |
+
+The Buzz bridges (`ArunachalaBuzzBridge`, `ArunachalaDrisyonBridge`) were
+retired on 2026-11-17: the bot obeyed an operator key that had leaked into git
+history, and chat is a poor work queue. The code in `buzz-bridge/` is kept;
+login / `POST /api/team/activate` now answers `status: "disabled"`.
+
+### Issue queue - `orchestration/issue-poller.js`
+
+Label an issue `agent:ready` -> the poller (every 60 s) relabels it
+`agent:running`, branches `agent/issue-<n>-<ts>` from `origin/<default>`, and
+dispatches it. On finish: commits -> it pushes the branch over SSH and opens a
+PR that `Closes #n` (`agent:review`); no commits -> `agent:no-changes`;
+failed / timed out / never recorded -> `agent:failed` with the log path (the
+worktree is kept for inspection).
+
+- Agent: `agent:claude|hermes|codex|noop|auto` label, else
+  `POLLER_DEFAULT_AGENT` (claude). Use `agent:hermes` for docs and drafts; code
+  goes to claude.
+- Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run.
+- Text the safety filter refuses needs `agent:confirmed`.
+- `POLLER_MAX_CONCURRENT` (2) runs at once across all repos.
+- Needs `GITHUB_TOKEN` (fine-grained; Issues + Pull requests read/write) in
+  the secrets file; idles and logs once an hour without it.
+- State: `logs/issue-poller-state.json` (run id -> issue). Tests:
+  `orchestration/issue-poller.test.js`.
 
 Not under PM2 on this Mac (as of 2026-11-17): `openclaw` is not installed, and
 `cloudflared` has no tunnel credentials in `~/.cloudflared`, so

@@ -6,10 +6,10 @@
 // Secrets are not here: each process reads its own .env file (load-env.js,
 // bridge.js), named below by path only.
 //
-// The two dashboards and the two bridges are pairs. A bridge triggers runs on
-// its own dashboard (DASHBOARD_URL), and that dashboard's agent-dispatch.sh
-// reports back to its own bridge (BRIDGE_NOTIFY_PORT) - cross them and a
-// finished run is announced to a bridge that never asked for it.
+// The Buzz bridges (buzz-bridge/bridge.js) are retired as of 2026-11-17: work
+// arrives as GitHub issues (IssuePoller) instead of chat messages. To bring one
+// back, add an app with script buzz-bridge/bridge.js, BRIDGE_ENV_FILE and
+// DASHBOARD_URL, paired with its dashboard's BRIDGE_NOTIFY_PORT.
 
 const path = require('path');
 
@@ -51,19 +51,13 @@ module.exports = {
       script: path.join(ROOT, 'telemetry-daemon.js'),
     },
     {
+      // GitHub issues labelled agent:ready -> agent runs -> PRs. Idles (and
+      // says so once an hour) until GITHUB_TOKEN is in the secrets file.
       ...base,
-      name: 'ArunachalaBuzzBridge',
-      script: path.join(ROOT, 'buzz-bridge', 'bridge.js'),
+      name: 'IssuePoller',
+      script: path.join(ROOT, 'orchestration', 'issue-poller.js'),
+      max_memory_restart: '256M',
       env: { DASHBOARD_URL: 'http://127.0.0.1:8787' },
-    },
-    {
-      ...base,
-      name: 'ArunachalaDrisyonBridge',
-      script: path.join(ROOT, 'buzz-bridge', 'bridge.js'),
-      env: {
-        BRIDGE_ENV_FILE: path.join(ROOT, 'buzz-bridge', '.env.drisyon'),
-        DASHBOARD_URL: 'http://127.0.0.1:8788',
-      },
     },
   ],
 };

@@ -45,6 +45,10 @@ function createTeamManager(deps = {}) {
   const env = deps.env || process.env;
   const existsSync = deps.existsSync || fs.existsSync;
   const execPath = deps.execPath || process.execPath;
+  // The bridge can only be (re)started if the ecosystem file still defines it.
+  const ecosystemApps = deps.ecosystemApps || (() => {
+    try { return require(ECOSYSTEM_FILE).apps.map((a) => a.name); } catch (_) { return []; }
+  });
 
   let lastActivatedAt = Date.now();
   let lastActivatedBy = 'system';
@@ -113,6 +117,14 @@ function createTeamManager(deps = {}) {
       const status = getTeamStatus();
       if (status.active) {
         return { ok: true, status: 'already_active', details: status };
+      }
+
+      if (!ecosystemApps().includes(PM2_NAME)) {
+        return {
+          ok: false,
+          status: 'disabled',
+          error: `${PM2_NAME} is not defined in ecosystem.config.js (Buzz bridge retired; work arrives as GitHub issues)`,
+        };
       }
 
       if (status.processStatus === 'not_registered') {

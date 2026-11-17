@@ -10,7 +10,7 @@ const { createTeamManager, resolvePm2Bin, PM2_NAME } = require('./team-manager')
 
 const CHANNEL = '04ad4d05-a062-5233-b605-4d69ace72555';
 
-function stubbed({ procs = [], env = { PATH: '/usr/bin' }, exists = () => true } = {}) {
+function stubbed({ procs = [], env = { PATH: '/usr/bin' }, exists = () => true, bridgeDefined = true } = {}) {
   const calls = [];
   const state = { procs };
   const execFileSync = (bin, args, opts) => {
@@ -23,7 +23,10 @@ function stubbed({ procs = [], env = { PATH: '/usr/bin' }, exists = () => true }
     if (args[0] === 'messages') return JSON.stringify({ id: 'evt1' });
     return '';
   };
-  const tm = createTeamManager({ execFileSync, env, existsSync: exists, execPath: '/opt/node/bin/node' });
+  const tm = createTeamManager({
+    execFileSync, env, existsSync: exists, execPath: '/opt/node/bin/node',
+    ecosystemApps: () => (bridgeDefined ? [PM2_NAME] : []),
+  });
   return { tm, calls };
 }
 
@@ -61,6 +64,14 @@ test('activating a stopped bridge restarts it with the current env', () => {
   const result = tm.activateTeam('test');
   assert.equal(result.ok, true);
   assert.deepEqual(calls.find((c) => c.args[0] === 'restart').args, ['restart', PM2_NAME, '--update-env']);
+});
+
+test('a bridge retired from the ecosystem file reports disabled and starts nothing', () => {
+  const { tm, calls } = stubbed({ procs: [], bridgeDefined: false });
+  const result = tm.activateTeam('test');
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'disabled');
+  assert.ok(calls.every((c) => c.args[0] === 'jlist'));
 });
 
 test('activating an online bridge does nothing', () => {
