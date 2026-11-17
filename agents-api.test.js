@@ -127,3 +127,55 @@ test('createTask refuses without a token or with bad input', async () => {
   const { api } = setup({ github: { createIssue: async () => { throw new Error('should not be called'); } } });
   assert.equal((await api.createTask({ repo: 'other/x', title: 't' })).status, 400);
 });
+
+// ---- admin: change the daily limit ----------------------------------------
+const { Readable } = require('stream');
+const { createDispatchSettings } = require('./dispatch-settings');
+
+function call(api, { method = 'POST', url, body, headers = {} }) {
+  return new Promise((resolve) => {
+    const req = Readable.from(body == null ? [] : [JSON.stringify(body)]);
+    Object.assign(req, { method, url, headers: { 'content-type': 'application/json', host: '127.0.0.1:8787', ...headers } });
+    const sendJson = (_res, status, payload) => resolve({ status, payload });
+    const readJsonBody = (r) => new Promise((ok, bad) => {
+      let s = '';
+      r.on('data', (c) => { s += c; });
+      r.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { bad(e); } });
+    });
+    api.handle(req, {}, { sendJson, readJsonBody });
+  });
+}
+
+function settingsApi(admin) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-set-'));
+  const settings = createDispatchSettings({ file: path.join(dir, 's.json'), envCap: 20 });
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 'st.json'),
+    readRuns: () => ({ runs: [] }), capNow: () => ({ used: 0, cap: settings.cap() }),
+    repos: REPOS, github: null, settings, isAdmin: () => admin, actorOf: () => 'sriad',
+  });
+  return { api, settings };
+}
+
+test('an admin can change the daily limit; it applies at once and is reported', async () => {
+  const { api, settings } = settingsApi(true);
+  const r = await call(api, { url: '/api/agents/settings', body: { dailyPaidRuns: 50 } });
+  assert.equal(r.status, 200);
+  assert.equal(settings.cap(), 50);
+  assert.equal(r.payload.capSettings.updatedBy, 'sriad');
+  const o = await api.overview({ headers: {} });
+  assert.equal(o.admin, true);
+  assert.equal(o.capSettings.dailyPaidRuns, 50);
+});
+
+test('non-admins, cross-site posts and bad values cannot change the limit', async () => {
+  const user = settingsApi(false);
+  assert.equal((await call(user.api, { url: '/api/agents/settings', body: { dailyPaidRuns: 999 } })).status, 403);
+  assert.equal(user.settings.cap(), 20);
+  assert.equal((await user.api.overview({ headers: {} })).admin, false);
+
+  const admin = settingsApi(true);
+  assert.equal((await call(admin.api, { url: '/api/agents/settings', body: { dailyPaidRuns: 50 }, headers: { origin: 'https://evil.example' } })).status, 403);
+  assert.equal((await call(admin.api, { url: '/api/agents/settings', body: { dailyPaidRuns: -1 } })).status, 400);
+  assert.equal(admin.settings.cap(), 20);
+});

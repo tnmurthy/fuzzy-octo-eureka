@@ -27,6 +27,10 @@
     .cap-fill { height: 100%; background: var(--status-green); transition: width .3s; }
     .cap.warn .cap-fill { background: var(--status-amber); }
     .cap.full .cap-fill { background: var(--status-red); }
+    .cap-form { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .cap-form[hidden] { display: none; }
+    .cap-form input { width: 80px; background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.85rem; }
+    .cap-note { width: 100%; text-align: right; }
 
     /* form */
     form label { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin: 10px 0 4px; }
@@ -92,8 +96,16 @@
           <span class="muted">Paid runs today</span>
           <div class="cap-bar"><div class="cap-fill" id="cap-fill" style="width:0"></div></div>
           <span class="mono" id="cap-text">-</span>
+          <button class="btn-sm" id="cap-edit" type="button" hidden>Change</button>
         </div>
+        <form class="cap-form" id="cap-form" hidden>
+          <label for="cap-input" class="muted">Daily paid runs</label>
+          <input id="cap-input" type="number" min="0" max="1000" step="1" required>
+          <button class="btn-sm" type="submit">Save</button>
+          <button class="btn-sm" type="button" id="cap-cancel">Cancel</button>
+        </form>
         <a href="/">← Dashboard</a>
+        <div class="muted cap-note" id="cap-note"></div>
       </div>
     </div>
 

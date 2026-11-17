@@ -5,6 +5,7 @@
 //   GET  /api/agents/overview   cap, running + recent runs, issue queue
 //   GET  /api/agents/log?id=R   tail of run R's log (only files in the runs dir)
 //   POST /api/agents/task       { repo, title, body, agent } -> new issue
+//   POST /api/agents/settings   { dailyPaidRuns } (admin only) -> new cap
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -79,9 +80,12 @@ const slimRun = (r, active) => ({
  * @param {(runs: object[]) => {used: number, cap: number, blocked?: boolean}} deps.capNow
  * @param {string[]} deps.repos             owner/name the poller watches
  * @param {object|null} deps.github         github-client, or null without a token
+ * @param {object} [deps.settings]          dispatch-settings store (admin-editable cap)
+ * @param {(req) => boolean} [deps.isAdmin]
+ * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -111,13 +115,15 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     return queueCache.value;
   }
 
-  async function overview() {
+  async function overview(req) {
     const runs = loadRuns();
     const active = loadActive();
     let q;
     try { q = await queue(); } catch (err) { q = { available: false, note: `GitHub queue unavailable (${err.status || 'network'})` }; }
     return {
       cap: capNow(runs),
+      capSettings: settings ? settings.describe() : null,
+      admin: Boolean(req && isAdmin(req)),
       repos,
       agents: AGENTS,
       running: runs.filter((r) => r.status === 'running').map((r) => slimRun(r, active)),
@@ -165,12 +171,31 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   function handle(req, res, { sendJson, readJsonBody }) {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/agents/overview' && req.method === 'GET') {
-      overview().then((b) => sendJson(res, 200, b)).catch(() => sendJson(res, 500, { ok: false, error: 'could not read agent runs' }));
+      overview(req).then((b) => sendJson(res, 200, b)).catch(() => sendJson(res, 500, { ok: false, error: 'could not read agent runs' }));
       return true;
     }
     if (url.pathname === '/api/agents/log' && req.method === 'GET') {
       const r = log(url.searchParams.get('id'));
       sendJson(res, r.status, r.body);
+      return true;
+    }
+    if (url.pathname === '/api/agents/settings' && req.method === 'POST') {
+      if (!isSameSiteJson(req)) {
+        sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+        return true;
+      }
+      if (!settings || !isAdmin(req)) {
+        sendJson(res, 403, { ok: false, error: 'only an admin can change the daily limit' });
+        return true;
+      }
+      readJsonBody(req, 1024)
+        .then((b) => {
+          const r = settings.setCap(b.dailyPaidRuns, actorOf(req));
+          if (!r.ok) return sendJson(res, 400, { ok: false, error: r.error });
+          console.log(`dispatch cap set to ${r.value.dailyPaidRuns} by ${r.value.updatedBy}`);
+          return sendJson(res, 200, { ok: true, capSettings: settings.describe() });
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
     if (url.pathname === '/api/agents/task' && req.method === 'POST') {

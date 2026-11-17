@@ -75,6 +75,11 @@ viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):
 runs folder, last 64 KB), `POST /api/agents/task` (repo must be one the poller
 watches; JSON-only and same-origin, so another website cannot start a paid
 agent through a local browser). Off on the Drisyon portal (8788).
+Admins see **Change** next to the paid-runs meter: `POST /api/agents/settings`
+{dailyPaidRuns 0-1000} saves `logs/dispatch-settings.json` (who + when), which
+wins over `.env` from the next dispatch on, no restart (both dashboards re-read
+it on change). Delete the file to fall back to `.env`. Admin = a local request
+at this Mac, or a signed-in user in `ADMIN_USERS` (default `AUTH_USERNAME`).
 
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid

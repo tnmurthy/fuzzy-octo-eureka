@@ -58,6 +58,38 @@
   $('log-close').addEventListener('click', () => { stopLogTimer(); logId = null; $('log-card').classList.remove('open'); });
 
   // ---- render -----------------------------------------------------------
+  // ---- admin: change the daily limit ------------------------------------
+  let capEditing = false;
+  function renderCapAdmin(admin, s) {
+    $('cap-edit').hidden = !admin || capEditing;
+    $('cap-form').hidden = !capEditing;
+    if (!s) { $('cap-note').textContent = ''; return; }
+    $('cap-note').textContent = s.source === 'admin'
+      ? `Limit ${s.dailyPaidRuns}/day, set by ${s.updatedBy} on ${new Date(s.updatedAt).toLocaleString()} (default ${s.envDefault})`
+      : `Limit ${s.dailyPaidRuns}/day (default from .env)`;
+    if (!capEditing) $('cap-input').value = s.dailyPaidRuns;
+  }
+  $('cap-edit').addEventListener('click', () => { capEditing = true; $('cap-edit').hidden = true; $('cap-form').hidden = false; $('cap-input').focus(); });
+  $('cap-cancel').addEventListener('click', () => { capEditing = false; refresh(); });
+  $('cap-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const n = Number($('cap-input').value);
+    if (n === 0 && !confirm('0 turns paid agent runs OFF (Claude, Codex, Auto). Hermes and Noop still run. Continue?')) return;
+    try {
+      const r = await fetch('/api/agents/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyPaidRuns: n }),
+      });
+      const b = await r.json();
+      if (!r.ok || !b.ok) throw new Error(b.error || `HTTP ${r.status}`);
+      capEditing = false;
+      refresh();
+    } catch (err) {
+      alert(`Not saved: ${err.message}`);
+    }
+  });
+
   function renderCap(cap) {
     if (!cap) return;
     const pct = cap.cap > 0 ? Math.min(100, (cap.used / cap.cap) * 100) : 100;
@@ -145,6 +177,7 @@
       const b = await r.json();
       fillRepos(b.repos);
       renderCap(b.cap);
+      renderCapAdmin(b.admin, b.capSettings);
       renderRunning(b.running || []);
       renderBoard(b.queue);
       renderRecent(b.recent || []);
