@@ -66,6 +66,22 @@ and no agent spawns (the 2026-11-16 outage); recover by hand with
 **Dispatch failures:** output the dispatch script prints before it records a
 run goes to `logs/dispatch.log`.
 
+**Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
+lists running runs with the issue or PR each serves, recent runs, and paid
+runs used today against the cap. Each running claude run's log fills step by
+step: `tail -f <run log path>` shows every file read, edit and command as it
+happens (`orchestration/stream-log.js`; tool inputs are summarised, never
+dumped).
+
+**Paid-run cap:** `DISPATCH_DAILY_PAID_RUNS` (default 20, 0 = off) caps paid
+agent runs per local day - claude, codex, agy, mantis and auto; hermes and
+noop are free. It is checked in `spawnAgentDispatch` before any run starts
+(API, dashboard chat, Mantis sweep), counting today's run-log start lines
+plus runs started but not yet logged (`dispatch-cap.js`). Over the cap the
+API answers 429 and the issue poller labels the issue `agent:failed` with the
+reason. Each agent PR uses two paid runs (work + review). `/api/costs` reports
+`paidRunsToday {used, cap, blocked}`.
+
 ### Service Management Commands
 
 ```bash
@@ -133,9 +149,12 @@ every object is prefixed `arunachala_`.
   `auto` server-side. Tests: `orchestration/agent-dispatch.test.js` (stubs).
 - Claude runs: dispatched with `--model $CLAUDE_MODEL` (sonnet), `--max-turns`
   (40) and, with `CLAUDE_LEAN=true`, no MCP servers / skills / user settings
-  (measured 64k -> 39k context tokens). `--output-format json` output goes to
-  `<runId>.claude.json`; `claude-usage.mjs` writes tokens + `cost_usd` to the
-  AI ledger (provider `anthropic`, purpose `dispatch`) and prints the result.
+  (measured 64k -> 39k context tokens). `--output-format stream-json` is
+  turned into readable progress lines in the run log by `stream-log.js`, which
+  saves the final result event to `<runId>.claude.json`; `claude-usage.mjs`
+  writes tokens + `cost_usd` from it to the AI ledger (provider `anthropic`,
+  purpose `dispatch`) and prints the result after a `== result` line. The
+  issue poller posts a review's text from `<runId>.claude.json`, not the log.
 - Costs: `GET /api/costs?days=7[&scope=team]` and the dashboard's Costs tab -
   paid vs local calls, tokens, cost by purpose and model, auto-run local
   share, caps, and advice (`team-store/costs.js`, pure + tested).

@@ -397,8 +397,14 @@ if (require.main === module) {
           // claude (default) | noop | off. Only agents the dashboard can
           // lock to read-only tools may review.
           reviewAgent: process.env.POLLER_REVIEW_AGENT || 'claude',
+          // A claude run's log now holds its step-by-step trace; the review
+          // to post is only its final answer, saved beside the log.
           readLog: (file) => {
             if (!file) return '';
+            try {
+              const result = JSON.parse(fs.readFileSync(file.replace(/\.log$/, '.claude.json'), 'utf8'));
+              if (typeof result.result === 'string') return result.result;
+            } catch (_) { /* not a claude run, or no result: fall back to the log */ }
             try {
               const text = fs.readFileSync(file, 'utf8');
               return text.length > 200000 ? text.slice(-200000) : text;

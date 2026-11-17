@@ -71,6 +71,7 @@ const teamStore = require('./team-store').createTeamStore(process.env, {
 if (teamStore) teamStore.start();
 const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require('./tasks-md');
 const { validateDispatchSafety } = require('./safety-filter');
+const { checkDispatchCap, parseCap } = require('./dispatch-cap');
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 const {
   recordTranscript,
@@ -587,8 +588,12 @@ function computeCosts(days, wantTeam) {
   const build = (source, calls, limits, note) => {
     const summary = summarizeCalls(calls, { days });
     const paidCallsToday = paidCallsSince(calls, midnight);
+    // The hard cap on paid agent runs (dispatch-cap.js), as the next paid
+    // dispatch would see it.
+    const capNow = checkDispatchCap({ agent: 'claude', runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: PAID_RUN_CAP });
+    const paidRunsToday = { used: capNow.used, cap: capNow.cap, blocked: !capNow.ok };
     return {
-      ok: true, source, days, summary, auto, limits, paidCallsToday,
+      ok: true, source, days, summary, auto, limits, paidCallsToday, paidRunsToday,
       advice: advice({ summary, auto, limits, paidCallsToday, localFirstEnabled: process.env.DISPATCH_LOCAL_FIRST === 'true' }),
       ...(note ? { note } : {}),
     };
@@ -665,9 +670,22 @@ const READ_ONLY_ALLOWED_TOOLS = 'Read Glob Grep Bash(git diff:*) Bash(git log:*)
 const READ_ONLY_DENIED_TOOLS = 'Edit Write NotebookEdit Bash(git commit:*) Bash(git push:*) Bash(git reset:*) Bash(git checkout:*) Bash(gh:*)';
 const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 
+// Paid runs this server started, kept until their start line is surely in
+// RUNS_FILE (dispatch-cap.js counts both, de-duplicated by run id).
+const PAID_RUN_CAP = parseCap(process.env.DISPATCH_DAILY_PAID_RUNS);
+let pendingPaidRuns = [];
+
 function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const now = Date.now();
+  pendingPaidRuns = pendingPaidRuns.filter((p) => now - p.at < 24 * 60 * 60 * 1000);
+  const cap = checkDispatchCap({ agent, runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: PAID_RUN_CAP, now });
+  if (!cap.ok) {
+    return Promise.reject(Object.assign(new Error(cap.error), { status: 429, cap }));
+  }
+  if (cap.paid) pendingPaidRuns.push({ id: effectiveRunId, agent, at: now });
 
   // A review's output is posted on the PR (public for a public repo), so it
   // gets no team memories that it could quote back.
@@ -1392,7 +1410,7 @@ function handleRequest(req, res) {
       }
       spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly })
         .then((result) => sendJson(res, 202, { ok: true, ...result, note: 'started; poll /api/runs for completion' }))
-        .catch((err) => sendJson(res, 500, { ok: false, error: `dispatch failed: ${err.message}` }));
+        .catch((err) => sendJson(res, err.status || 500, { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` }));
     });
     return;
   }
@@ -1425,7 +1443,7 @@ function handleRequest(req, res) {
           note: 'Mantis security sweep initiated; poll /api/runs for completion'
         });
       })
-      .catch((err) => sendJson(res, 500, { ok: false, error: `Mantis sweep failed: ${err.message}` }));
+      .catch((err) => sendJson(res, err.status || 500, { ok: false, error: `Mantis sweep failed: ${err.message}` }));
     return;
   }
 
