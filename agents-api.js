@@ -66,6 +66,7 @@ function linkOf(run, active) {
 const slimRun = (r, active) => ({
   id: r.id,
   agent: r.agent,
+  specialist: r.specialist || (active[r.id] && active[r.id].specialist) || null,
   status: r.status,
   started_at: r.started_at,
   finished_at: r.finished_at,
