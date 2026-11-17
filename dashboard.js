@@ -1255,8 +1255,7 @@
     const previousServiceStates = {
       ollama: null,
       openclaw: null,
-      watchtower: null,
-      buzz: null
+      watchtower: null
     };
 
     function checkServiceStatusTransitions(services) {
@@ -1279,7 +1278,6 @@
       checkFlip('ollama', 'Ollama Local Cluster', '🧠');
       checkFlip('openclaw', 'OpenClaw Gateway', '🦁');
       checkFlip('watchtower', 'Docker Watchtower', '🐳');
-      checkFlip('buzz', 'Buzz Relay', '🐝');
     }
 
     function updateServiceDots(data) {
@@ -1290,7 +1288,6 @@
       if (data.services.openclaw) setServiceDot('id-openclaw-dot', data.services.openclaw.online, 'Online', 'Offline');
       if (data.services.openhands) setServiceDot('id-openhands-dot', data.services.openhands.online, 'Online', 'Offline');
       if (data.services.watchtower) setServiceDot('id-watchtower-dot', data.services.watchtower.online, 'Online', 'Offline');
-      if (data.services.buzz) setServiceDot('id-buzz-dot', data.services.buzz.online, 'Online', 'Offline');
     }
 
     let dynamicModelsLoaded = false;
@@ -1552,40 +1549,6 @@
         }
         if (wStats) {
           wStats.innerText = wt.status || (wt.online ? 'Running' : 'Stopped');
-        }
-      }
-      if (data.services && data.services.buzz) {
-        const bz = data.services.buzz;
-        const bBadge = document.getElementById('id-buzz-status-badge');
-        const bStats = document.getElementById('id-buzz-stats');
-        // Four states: "port is open" is not the same as "you can log in".
-        const paint = (text, colour, rgba) => {
-          if (!bBadge) return;
-          bBadge.innerText = text;
-          bBadge.style.backgroundColor = rgba;
-          bBadge.style.color = colour;
-          bBadge.style.borderColor = colour;
-        };
-        const RED = ['var(--status-red)', 'rgba(255,23,68,0.15)'];
-        const AMBER = ['var(--status-amber)', 'rgba(255,171,0,0.15)'];
-        const GREEN = ['var(--status-green)', 'rgba(0,230,118,0.15)'];
-        if (!bz.online) {
-          paint('OFFLINE', RED[0], RED[1]);
-        } else if (bz.realMembers === 0) {
-          paint('UNCLAIMED', RED[0], RED[1]);
-        } else if (!bz.ui) {
-          paint('HOST MISMATCH', AMBER[0], AMBER[1]);
-        } else if (!bz.metrics) {
-          paint('NO METRICS', AMBER[0], AMBER[1]);
-        } else {
-          paint('HEALTHY', GREEN[0], GREEN[1]);
-        }
-        if (bStats) {
-          const members = bz.realMembers >= 0
-            ? bz.realMembers + ' member' + (bz.realMembers === 1 ? '' : 's')
-            : 'members ?';
-          const lat = (bz.latencyMs !== null && bz.latencyMs !== undefined) ? bz.latencyMs + 'ms' : '--';
-          bStats.innerText = (bz.containers || 0) + ' containers / ' + members + ' / ' + lat;
         }
       }
     }
@@ -1870,7 +1833,7 @@
       if (status) {
         status.style.display = 'block';
         status.style.color = '#818cf8';
-        status.textContent = '📊 Compiling 7-day AI operations ledger and broadcasting to Buzz...';
+        status.textContent = '📊 Compiling 7-day AI operations ledger...';
       }
       fetch('/api/patrol/digest', { method: 'POST' })
         .then((r) => r.json())
@@ -1879,7 +1842,7 @@
           if (data.ok) {
             status.style.color = '#a7f3d0';
             const preview = data.text ? data.text.split('\n').slice(0, 3).join(' | ') : '';
-            status.innerHTML = `✅ <strong>Weekly Digest Broadcast:</strong> ${data.message || 'Broadcast sent to Buzz channels.'}<div style="margin-top:4px; font-family:monospace; font-size:0.75rem; color:#cbd5e1;">${preview}</div>`;
+            status.innerHTML = `✅ <strong>Weekly Digest:</strong> ${data.message || 'Generated.'}<div style="margin-top:4px; font-family:monospace; font-size:0.75rem; color:#cbd5e1;">${preview}</div>`;
           } else {
             status.style.color = '#f87171';
             status.textContent = `❌ Digest Failed: ${data.error || 'Unknown error'}`;

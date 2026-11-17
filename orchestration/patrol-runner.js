@@ -2,14 +2,13 @@
 // orchestration/patrol-runner.js - Continuous Scheduled Patrol Daemon & Automated Watchdog
 // Executes:
 // 1. Periodic Google Mantis AppSec security audits (every 6h or custom interval)
-// 2. Weekly AI operations & spend digest broadcasts to Buzz channels (Mondays 09:00 IST)
+// 2. Weekly AI operations & spend digest, logged (Mondays 09:00 IST)
 // 3. Periodic health & ReBAC authorization invariant verification (every 5m)
 // 4. Exposes state via logs/patrol-state.json and /api/patrol/status
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
 const { isDigestDue } = require('../digest');
 
 const DASHBOARD_DIR = path.resolve(__dirname, '..');
@@ -144,7 +143,7 @@ async function runMantisPatrol({ host = DEFAULT_HOST, port = DEFAULT_PORT, repo 
   }
 }
 
-async function runWeeklyDigest({ host = DEFAULT_HOST, port = DEFAULT_PORT, broadcast = true } = {}) {
+async function runWeeklyDigest({ host = DEFAULT_HOST, port = DEFAULT_PORT } = {}) {
   const timestamp = new Date().toISOString();
   console.log(`📊 [digest ${timestamp}] Generating weekly AI operations & spend digest...`);
   try {
@@ -154,31 +153,7 @@ async function runWeeklyDigest({ host = DEFAULT_HOST, port = DEFAULT_PORT, broad
       console.log('--- WEEKLY DIGEST REPORT ---');
       console.log(digestText);
       console.log('----------------------------');
-
-      let broadcastOk = false;
-      if (broadcast) {
-        const pubScript = path.join(DASHBOARD_DIR, 'buzz-bridge', 'publish-once.js');
-        if (fs.existsSync(pubScript)) {
-          console.log('📡 [digest] Broadcasting digest to Buzz channels via publish-once.js...');
-          broadcastOk = await new Promise(resolve => {
-            const child = spawn('node', [pubScript, digestText], {
-              cwd: path.join(DASHBOARD_DIR, 'buzz-bridge'),
-              stdio: 'inherit'
-            });
-            child.on('close', code => {
-              console.log(`📡 [digest] Broadcast exited with code: ${code}`);
-              resolve(code === 0);
-            });
-            child.on('error', err => {
-              console.error('❌ [digest] Broadcast failed:', err.message);
-              resolve(false);
-            });
-          });
-        } else {
-          console.log('ℹ️ [digest] publish-once.js not found; broadcast skipped.');
-        }
-      }
-      return { ok: true, timestamp, text: digestText, broadcast: broadcastOk };
+      return { ok: true, timestamp, text: digestText };
     } else {
       console.error('❌ [digest] Failed to generate digest:', res.data);
       return { ok: false, timestamp, error: res.data };

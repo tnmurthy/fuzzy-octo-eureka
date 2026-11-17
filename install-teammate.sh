@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # install-teammate.sh - Set up Arunachala on macOS / Linux:
 # Prerequisites check, local models, configuration (.env), npm dependencies,
-# PM2 background services, and the n8n dispatch workflow.
+# and PM2 background services (from ecosystem.config.js).
 #
 # Usage:
 #   ./install-teammate.sh --dry-run
 #   ./install-teammate.sh
-#   ./install-teammate.sh --supabase-url https://<ref>.supabase.co --supabase-key sb_publishable_... --team-id <uuid> --buzz-channels <hex>
+#   ./install-teammate.sh --supabase-url https://<ref>.supabase.co --supabase-key sb_publishable_... --team-id <uuid>
 set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 LOGS="$ROOT/logs"
-BRIDGE="$ROOT/buzz-bridge"
 ENV_FILE="$ROOT/.env"
-BRIDGE_ENV_FILE="$BRIDGE/.env"
 MODELS=("gemma3:4b" "qwen2.5-coder:3b" "nomic-embed-text")
 MIN_NODE_MAJOR=20
 MIN_NODE_MINOR=12
@@ -22,7 +20,6 @@ DRY_RUN=false
 SUPABASE_URL=""
 SUPABASE_KEY=""
 TEAM_ID=""
-BUZZ_CHANNELS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,7 +27,6 @@ while [[ $# -gt 0 ]]; do
     --supabase-url) SUPABASE_URL="$2"; shift 2 ;;
     --supabase-key) SUPABASE_KEY="$2"; shift 2 ;;
     --team-id) TEAM_ID="$2"; shift 2 ;;
-    --buzz-channels) BUZZ_CHANNELS="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -192,86 +188,7 @@ configure_env() {
   fi
 }
 
-configure_bridge_env() {
-  step "Buzz bridge settings (buzz-bridge/.env)"
-  if [ "$DRY_RUN" = true ]; then
-    [ -f "$BRIDGE_ENV_FILE" ] && say "buzz-bridge/.env exists" || say "would create buzz-bridge/.env"
-    return
-  fi
-
-  if [ ! -f "$BRIDGE_ENV_FILE" ]; then
-    cp "$BRIDGE/.env.example" "$BRIDGE_ENV_FILE"
-    say "created buzz-bridge/.env from .env.example"
-  fi
-
-  local ops bname chans
-  ops="$(ask "Your Buzz public key (64 hex characters)" "$(get_env_val "$BRIDGE_ENV_FILE" "BUZZ_OPERATORS")")"
-  set_env_val "$BRIDGE_ENV_FILE" "BUZZ_OPERATORS" "$ops"
-
-  bname="$(ask "Your bot's name, unique on the team" "$(get_env_val "$BRIDGE_ENV_FILE" "BUZZ_BOT_NAME")")"
-  set_env_val "$BRIDGE_ENV_FILE" "BUZZ_BOT_NAME" "$bname"
-
-  chans="${BUZZ_CHANNELS:-$(get_env_val "$BRIDGE_ENV_FILE" "BUZZ_BOT_CHANNELS")}"
-  [ -z "$chans" ] && chans="$(ask "Buzz channel id(s) (comma-separated hex)" "")"
-  set_env_val "$BRIDGE_ENV_FILE" "BUZZ_BOT_CHANNELS" "$chans"
-}
-
-# --- 4. Packages --------------------------------------------------------------
-install_packages() {
-  step "Dependencies (buzz-bridge npm packages)"
-  if [ -d "$BRIDGE/node_modules/nostr-tools" ]; then
-    say "packages already installed"
-    return
-  fi
-  if [ "$DRY_RUN" = true ]; then
-    say "would run npm ci in buzz-bridge"
-    return
-  fi
-  (cd "$BRIDGE" && npm ci)
-}
-
-# --- 5. n8n Dispatch Workflow -------------------------------------------------
-install_n8n() {
-  step "n8n dispatch workflow"
-  if ! command -v docker >/dev/null 2>&1; then
-    say "skipped - Docker not installed"
-    return
-  fi
-
-  local workflow="$ROOT/n8n/buzz-dispatch-workflow.json"
-  local running
-  running="$(docker ps --filter 'name=^n8n$' --format '{{.Names}}' 2>/dev/null || true)"
-
-  if [ "$DRY_RUN" = true ]; then
-    if [ -n "$running" ]; then
-      say "n8n container running - would import buzz-dispatch workflow"
-    else
-      say "would start n8n container and import workflow"
-    fi
-    return
-  fi
-
-  if [ -z "$running" ]; then
-    local exists
-    exists="$(docker ps -a --filter 'name=^n8n$' --format '{{.Names}}' 2>/dev/null || true)"
-    if [ -n "$exists" ]; then
-      docker start n8n >/dev/null
-    else
-      docker run -d --name n8n \
-        --restart unless-stopped \
-        -p 127.0.0.1:5678:5678 \
-        -v n8n_data:/home/node/.n8n \
-        docker.n8n.io/n8nio/n8n:latest >/dev/null
-    fi
-    sleep 8
-  fi
-
-  docker cp "$workflow" n8n:/tmp/buzz-dispatch-workflow.json
-  docker exec n8n n8n import:workflow --input=/tmp/buzz-dispatch-workflow.json || true
-  say "Imported workflow to n8n (http://127.0.0.1:5678)"
-}
-
-# --- 6. Services --------------------------------------------------------------
+# --- 4. Services --------------------------------------------------------------
 start_services() {
   step "Services (PM2)"
   mkdir -p "$LOGS"
@@ -279,24 +196,21 @@ start_services() {
   if ! command -v pm2 >/dev/null 2>&1; then
     say "PM2 not found. You can run manually:"
     say "  node server.js &"
-    say "  node buzz-bridge/bridge.js &"
     say "  node telemetry-daemon.js &"
     return
   fi
 
   if [ "$DRY_RUN" = true ]; then
-    say "would start ArunachalaDashboard, ArunachalaBuzzBridge, ArunachalaTelemetry via pm2"
+    say "would start the services in ecosystem.config.js via pm2"
     return
   fi
 
-  pm2 start "$ROOT/server.js" --name "ArunachalaDashboard" || true
-  pm2 start "$ROOT/buzz-bridge/bridge.js" --name "ArunachalaBuzzBridge" || true
-  pm2 start "$ROOT/telemetry-daemon.js" --name "ArunachalaTelemetry" || true
+  pm2 start "$ROOT/ecosystem.config.js" || true
   pm2 save || true
   say "PM2 services started and saved"
 }
 
-# --- 7. Check -----------------------------------------------------------------
+# --- 5. Check -----------------------------------------------------------------
 test_install() {
   step "Verify installation"
   if [ "$DRY_RUN" = true ]; then
@@ -327,9 +241,6 @@ fi
 
 install_models
 configure_env
-configure_bridge_env
-install_packages
-install_n8n
 start_services
 test_install
 

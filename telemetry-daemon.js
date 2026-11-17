@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // telemetry-daemon.js - Cross-platform background telemetry collector (Node.js)
-// Periodically probes local services (Ollama, Buzz, OpenClaw, Watchtower),
+// Periodically probes local services (Ollama, OpenClaw, OpenHands, Watchtower),
 // captures system CPU load, and writes telemetry.json and history.json.
 
 const http = require('http');
@@ -37,7 +37,6 @@ const OLLAMA_HOST = envValues['OLLAMA_HOST'] || '127.0.0.1';
 const OLLAMA_PORT = Number(envValues['OLLAMA_PORT']) || 11434;
 const OPENCLAW_PORT = 18789;
 const OPENHANDS_PORT = 8000;
-const BUZZ_PORT = 3000;
 
 function writeDaemonLog(msg, level = 'INFO') {
   try {
@@ -170,36 +169,6 @@ function httpGetJson(url, timeoutMs = 2500) {
   });
 }
 
-async function getBuzzStatus() {
-  const result = {
-    online: false,
-    port: BUZZ_PORT,
-    latencyMs: null,
-    ui: false,
-    metrics: false,
-    containers: 0,
-    realMembers: -1
-  };
-
-  let res = await httpGetJson(`http://127.0.0.1:${BUZZ_PORT}/health`, 2000);
-  if (!res.ok) {
-    const relayHttp = (envValues['BUZZ_RELAY_URL'] || envValues['BRIDGE_RELAY_URL'] || 'https://drisyon-ai.communities.buzz.xyz').replace(/^ws/, 'http');
-    try {
-      const t0 = Date.now();
-      const r = await fetch(`${relayHttp}/health`, { signal: AbortSignal.timeout(2500) });
-      if (r.ok) {
-        res = { ok: true, latencyMs: Date.now() - t0 };
-      }
-    } catch (_) {}
-  }
-  if (res.ok) {
-    result.online = true;
-    result.latencyMs = res.latencyMs;
-    result.ui = true;
-  }
-  return result;
-}
-
 async function getActiveOllamaModels(ollamaOnline) {
   if (!ollamaOnline) return [];
   const res = await httpGetJson(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/ps`, 2000);
@@ -252,11 +221,10 @@ function updateHistory(newPoint) {
 
 async function tick() {
   const cpu = getCpuUsage();
-  const [ollamaTcp, openclawTcp, openhandsTcp, buzzStatus] = await Promise.all([
+  const [ollamaTcp, openclawTcp, openhandsTcp] = await Promise.all([
     testTcpPort(OLLAMA_PORT, OLLAMA_HOST),
     testTcpPort(OPENCLAW_PORT),
-    testTcpPort(OPENHANDS_PORT),
-    getBuzzStatus()
+    testTcpPort(OPENHANDS_PORT)
   ]);
 
   let ollamaLatencyMs = ollamaTcp.latencyMs;
@@ -277,8 +245,7 @@ async function tick() {
       ollama: { online: ollamaTcp.online, port: OLLAMA_PORT, latencyMs: ollamaLatencyMs },
       openclaw: { online: openclawTcp.online, port: OPENCLAW_PORT, latencyMs: openclawTcp.latencyMs },
       openhands: { online: openhandsTcp.online, port: OPENHANDS_PORT, latencyMs: openhandsTcp.latencyMs },
-      watchtower: { online: true, name: 'watchtower', status: 'Monitoring disabled', image: 'containrrr/watchtower' },
-      buzz: buzzStatus
+      watchtower: { online: true, name: 'watchtower', status: 'Monitoring disabled', image: 'containrrr/watchtower' }
     },
     activeModels,
     logs: getAppLogTail(15),
@@ -303,7 +270,7 @@ async function tick() {
   updateHistory({ timestamp, cpu, ollamaLatencyMs });
 
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-  console.log(`[${timeStr}] [telemetry] Synced. CPU: ${cpu}% | Ollama: ${ollamaTcp.online} (${ollamaLatencyMs}ms) | Buzz: ${buzzStatus.online}`);
+  console.log(`[${timeStr}] [telemetry] Synced. CPU: ${cpu}% | Ollama: ${ollamaTcp.online} (${ollamaLatencyMs}ms)`);
 }
 
 async function main() {

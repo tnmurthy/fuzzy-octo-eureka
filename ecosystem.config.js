@@ -3,13 +3,8 @@
 //
 //   pm2 start ecosystem.config.js && pm2 save
 //
-// Secrets are not here: each process reads its own .env file (load-env.js,
-// bridge.js), named below by path only.
-//
-// The Buzz bridges (buzz-bridge/bridge.js) are retired as of 2026-11-17: work
-// arrives as GitHub issues (IssuePoller) instead of chat messages. To bring one
-// back, add an app with script buzz-bridge/bridge.js, BRIDGE_ENV_FILE and
-// DASHBOARD_URL, paired with its dashboard's BRIDGE_NOTIFY_PORT.
+// Secrets are not here: each process reads its own .env file (load-env.js),
+// named below by path only. Work arrives as GitHub issues (IssuePoller).
 
 const path = require('path');
 
@@ -33,7 +28,7 @@ module.exports = {
       ...base,
       name: 'ArunachalaDashboard',
       script: path.join(ROOT, 'server.js'),
-      env: { PORT: '8787', BRIDGE_NOTIFY_PORT: '3100' },
+      env: { PORT: '8787' },
     },
     {
       ...base,
@@ -42,7 +37,6 @@ module.exports = {
       env: {
         PORT: '8788',
         DASHBOARD_ENV_FILE: path.join(ROOT, '.env.drisyon'),
-        BRIDGE_NOTIFY_PORT: '3101',
       },
     },
     {
