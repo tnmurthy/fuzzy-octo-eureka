@@ -81,6 +81,16 @@ wins over `.env` from the next dispatch on, no restart (both dashboards re-read
 it on change). Delete the file to fall back to `.env`. Admin = a local request
 at this Mac, or a signed-in user in `ADMIN_USERS` (default `AUTH_USERNAME`).
 
+**Context page:** `http://127.0.0.1:8787/context` (🧠 Context on the
+dashboard header). Team members table (role, shared memories, agent runs, last
+run, AI calls and tokens over 7 days) and memory in three tabs: Mine (written
+by you, here or on another machine), Shared (the team's `arunachala_memory`)
+and Combined (both, a local entry and its synced row counted once). Badges say
+where each entry lives. `GET /api/context/overview`; shaping in
+`context-view.js` (pure, `context-view.test.js`), data from
+`teamStore.teamContext()`. Without team-store it shows this Mac only. Off on
+the Drisyon portal (8788).
+
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid
 runs used today against the cap. Each running claude run's log fills step by
