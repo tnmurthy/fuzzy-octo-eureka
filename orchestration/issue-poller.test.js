@@ -5,7 +5,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createPoller, pickAgent, buildTask, LABELS, LOST_AFTER_MS } = require('./issue-poller');
+const { createPoller, pickAgent, buildTask, LABELS, LOST_AFTER_MS, verdictOf, buildFixTask } = require('./issue-poller');
 const { createGitHubClient } = require('./github-client');
 
 const REPO = 'tnmurthy/demo';
@@ -25,7 +25,7 @@ function fakeGitHub(issues = []) {
   };
 }
 
-function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, suggestSpecialist = null, readLog } = {}) {
+function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, suggestSpecialist = null, readLog, fixRounds = 0 } = {}) {
   const github = fakeGitHub(issues);
   const gitCalls = [];
   const dispatched = [];
@@ -38,7 +38,7 @@ function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, g
     loadState: () => JSON.parse(JSON.stringify(state)),
     saveState: (s) => { saved = JSON.parse(JSON.stringify(s)); },
     repos: [{ repo: REPO, path: '/work/demo', name: 'demo' }],
-    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, suggestSpecialist, readLog,
+    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, suggestSpecialist, readLog, fixRounds,
   });
   return { poller, github, gitCalls, dispatched, saved: () => saved };
 }
@@ -301,4 +301,69 @@ test('an explicit specialist label wins, and a failed suggestion never blocks th
   await b.poller.tick();
   assert.equal(b.dispatched.length, 1);
   assert.equal('specialist' in b.dispatched[0], false);
+});
+
+// ---- agents talking to each other: review -> fix -> re-review -------------------
+const reviewJobFor = (o = {}) => ({ ...jobWithMeta, kind: 'review', pr: 99, commitsBefore: 2, worktree: '/work/demo--agent-issue-7-x', workRunId: 'r1', round: 0, ...o });
+const CHANGES = '**Verdict:** request changes\n- `app.js:3` no input check';
+
+test('verdictOf reads the reviewer\'s verdict line', () => {
+  assert.equal(verdictOf('**Verdict:** request changes\n- x'), 'request changes');
+  assert.equal(verdictOf('**Verdict:** Approve'), 'approve');
+  assert.equal(verdictOf('**Verdict**: request changes'), 'request changes');
+  assert.equal(verdictOf('looks fine'), null);
+  assert.match(buildFixTask(CHANGES, 1, 2), /round 1 of 2[\s\S]*app\.js:3[\s\S]*say why in your final answer/);
+});
+
+test('"request changes" sends the review back to the worker\'s session and keeps the worktree', async () => {
+  const { poller, github, gitCalls, dispatched, saved } = setup({
+    state: { active: { rv1: reviewJobFor() } }, runs: [{ id: 'rv1', status: 'done', commits_ahead: 2, log: '/l/rv1.log' }],
+    readLog: () => CHANGES, fixRounds: 1,
+  });
+  await poller.tick();
+  assert.equal(dispatched[0].followUpOf, 'r1', 'resumes the worker run');
+  assert.match(dispatched[0].task, /app\.js:3/);
+  const fix = saved().active['run-1'];
+  assert.deepEqual([fix.kind, fix.round, fix.pr], ['fix', 1, 99]);
+  assert.match(commentsOf(github).at(-1), /Sent the review back to the agent/);
+  assert.equal(gitCalls.some((a) => a[0] === 'worktree'), false, 'worktree kept for the fix');
+});
+
+test('approval, a used-up round budget or rounds off end the loop and clean up', async () => {
+  for (const [readLog, job, fixRounds] of [
+    [() => '**Verdict:** approve', reviewJobFor(), 1],
+    [() => CHANGES, reviewJobFor({ round: 1 }), 1],
+    [() => CHANGES, reviewJobFor(), 0],
+  ]) {
+    const { poller, gitCalls, dispatched } = setup({ state: { active: { rv1: job } }, runs: [{ id: 'rv1', status: 'done', commits_ahead: 2 }], readLog, fixRounds });
+    await poller.tick();
+    assert.equal(dispatched.length, 0);
+    assert.ok(gitCalls.some((a) => a[0] === 'worktree' && a[1] === 'remove'));
+  }
+});
+
+test('fixes with new commits are pushed to the PR and reviewed again, as the next round', async () => {
+  const fixJob = { ...reviewJobFor(), kind: 'fix', round: 1 };
+  const { poller, github, gitCalls, dispatched, saved } = setup({
+    state: { active: { fx1: fixJob } }, runs: [{ id: 'fx1', status: 'done', commits_ahead: 3, log: '/l/fx1.log' }],
+    readLog: () => 'Added the input check.', reviewAgent: 'claude', fixRounds: 1,
+  });
+  await poller.tick();
+  assert.ok(gitCalls.some((a) => a[0] === 'push' && a.includes(`${fixJob.branch}:${fixJob.branch}`)));
+  assert.match(commentsOf(github)[0], /Agent fixes \(round 1[\s\S]*1 new commit\(s\)[\s\S]*Added the input check/);
+  assert.equal(dispatched[0].readOnly, true, 're-review');
+  const review = saved().active['run-1'];
+  assert.deepEqual([review.kind, review.workRunId, review.round, review.commitsBefore], ['review', 'fx1', 1, 3]);
+});
+
+test('a fix run that changes nothing posts its answer and cleans up', async () => {
+  const fixJob = { ...reviewJobFor(), kind: 'fix', round: 1 };
+  const { poller, github, gitCalls, dispatched } = setup({
+    state: { active: { fx1: fixJob } }, runs: [{ id: 'fx1', status: 'done', commits_ahead: 2 }],
+    readLog: () => 'The check already exists in validate.js.', fixRounds: 1,
+  });
+  await poller.tick();
+  assert.equal(dispatched.length, 0);
+  assert.match(commentsOf(github)[0], /Agent reply[\s\S]*No new commits[\s\S]*already exists/);
+  assert.ok(gitCalls.some((a) => a[0] === 'worktree' && a[1] === 'remove'));
 });

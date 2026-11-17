@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test auth.test.js agent-chat.test.js chat-transcripts.test.js access-auth.test.js runs-reader.test.js team-store/team-store.test.js team-store/ai-ledger.test.js team-store/memory-tasks.test.js orchestration/agent-dispatch.test.js orchestration/patrol-runner.test.js orchestration/issue-poller.test.js orchestration/stream-log.test.js dispatch-cap.test.js scripts/agents.test.js agents-api.test.js dispatch-settings.test.js context-view.test.js specialists.test.js specialist-suggest.test.js specialist-recommend.test.js repo-registry.test.js invoicing.test.js embeddings.test.js orchestration/claude-usage.test.js team-store/costs.test.js dispatch-context.test.js digest.test.js load-env.test.js scripts/ingest-context.test.js",
+    "test": "node --test auth.test.js agent-chat.test.js chat-transcripts.test.js access-auth.test.js runs-reader.test.js team-store/team-store.test.js team-store/ai-ledger.test.js team-store/memory-tasks.test.js orchestration/agent-dispatch.test.js orchestration/patrol-runner.test.js orchestration/issue-poller.test.js orchestration/stream-log.test.js dispatch-cap.test.js scripts/agents.test.js agents-api.test.js dispatch-settings.test.js context-view.test.js specialists.test.js specialist-suggest.test.js specialist-recommend.test.js repo-registry.test.js followup.test.js invoicing.test.js embeddings.test.js orchestration/claude-usage.test.js team-store/costs.test.js dispatch-context.test.js digest.test.js load-env.test.js scripts/ingest-context.test.js",
     "ingest": "node scripts/ingest-context.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

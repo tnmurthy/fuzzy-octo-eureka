@@ -82,6 +82,23 @@ same-origin JSON, and the page warns. When only built-ins exist the page
 recommends repos found in common dev folders. Role and repo choice are kept
 in localStorage.
 
+**Follow-ups and agents talking to each other** (`followup.js`): a claude
+run saves its session id in `<run>.claude.json`; a follow-up resumes that
+session (`claude --resume`, `AGENT_RESUME_SESSION`) in the same repo and
+branch (the dispatch script reuses the worktree), so the agent remembers what
+it did. Runs record `parent`. Only claude/auto runs that saved a session can
+be followed up; the repo must still be known at the same path.
+- People: **Follow up** on a finished run in Recent runs (`POST
+  /api/agents/followup` {runId, message}); `startDispatch` takes
+  `followUpOf`. Same safety filter and paid cap.
+- Agents: when the PR reviewer's verdict is **request changes**, the poller
+  resumes the worker's session with the review (`buildFixTask`), pushes any
+  new commits to the PR, comments, and starts a re-review; a reply without
+  commits is posted as the agent's answer. `POLLER_FIX_ROUNDS` (default 1,
+  max 3, 0 = off) caps rounds per PR; each round is one paid fix run plus a
+  re-review. Verified live 2026-11-17: a follow-up recalled the file its
+  earlier session read ($0.20, the resumed context is re-read).
+
 **Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
 header). A form that queues a task (opens a GitHub issue labelled
 `agent:ready` + `agent:<name>`), the issue queue as four columns (queued,

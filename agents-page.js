@@ -153,22 +153,76 @@
     }
   }
 
+  // ---- follow up: talk to a finished claude run -------------------------------
+  let openFollowUp = null;     // run id whose follow-up box is open
+  const drafts = {};           // run id -> unsent text (survives the 5 s refresh)
+
+  function toggleFollowUp(r, tr) {
+    openFollowUp = openFollowUp === r.id ? null : r.id;
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains('fu-row')) next.remove();
+    if (openFollowUp) { tr.after(followUpRow(r)); const t = document.getElementById(`fu-${r.id}`); if (t) t.focus(); }
+  }
+
+  function followUpRow(r) {
+    const ta = el('textarea', { className: 'f', id: `fu-${r.id}`, rows: 3, maxLength: 8000, placeholder: 'e.g. Also add tests for empty input, then rerun the suite.', value: drafts[r.id] || '' });
+    ta.addEventListener('input', () => { drafts[r.id] = ta.value; });
+    const send = el('button', { className: 'btn', type: 'button', textContent: 'Send to agent' });
+    const note = el('span', { className: 'muted', textContent: `Resumes this run's Claude session on ${r.task ? 'the same branch' : 'its branch'}; counts as a paid run.` });
+    const out = el('div', { className: 'msg' });
+    send.addEventListener('click', async () => {
+      send.disabled = true;
+      out.className = 'msg';
+      out.textContent = 'Sending…';
+      try {
+        const res = await fetch('/api/agents/followup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ runId: r.id, message: ta.value }) });
+        const b = await res.json();
+        if (!res.ok || !b.ok) throw new Error(b.error || `HTTP ${res.status}`);
+        delete drafts[r.id];
+        openFollowUp = null;
+        openLog(b.runId);
+        refresh();
+      } catch (err) {
+        out.className = 'msg err';
+        out.textContent = err.message;
+        send.disabled = false;
+      }
+    });
+    return el('tr', { className: 'fu-row' }, el('td', { colSpan: 7 },
+      el('div', { className: 'fu' }, ta, el('div', { className: 'submit-row' }, send, note), out)));
+  }
+
   function renderRecent(runs) {
+    // Hold the list still while a follow-up is being written.
+    if (openFollowUp && document.getElementById(`fu-${openFollowUp}`)) return;
     const tb = $('recent');
     tb.replaceChildren();
     if (!runs.length) { tb.append(el('tr', {}, el('td', { colSpan: 7, className: 'empty', textContent: 'No runs yet.' }))); return; }
     for (const r of runs) {
       const st = r.status === 'done' ? 'st-done' : r.status === 'failed' ? 'st-failed' : 'st-other';
-      const btn = r.hasLog ? el('button', { className: 'btn-sm', type: 'button', textContent: 'Log' }) : '';
-      if (btn) btn.addEventListener('click', () => openLog(r.id));
-      tb.append(el('tr', {},
+      const actions = el('td', { className: 'actions' });
+      if (r.hasLog) {
+        const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Log' });
+        btn.addEventListener('click', () => openLog(r.id));
+        actions.append(btn);
+      }
+      if (r.canFollowUp) {
+        const fu = el('button', { className: 'btn-sm', type: 'button', textContent: 'Follow up', title: 'Send this agent a message; it continues where it left off' });
+        fu.addEventListener('click', () => toggleFollowUp(r, tr));
+        actions.append(fu);
+      }
+      const taskCell = el('td', { className: 'task', title: r.task },
+        r.parent ? el('span', { className: 'muted', textContent: `↳ follow-up of ${r.parent.slice(-6)} · ` }) : null, r.task);
+      const tr = el('tr', {},
         el('td', { className: st, textContent: r.status }),
         el('td', { textContent: agentLabel(r) }),
         el('td', { className: 'mono', textContent: Number.isFinite(r.duration_s) ? ago(r.duration_s * 1000) : '-' }),
         el('td', { textContent: r.commits_ahead ? String(r.commits_ahead) : '-' }),
         el('td', {}, linkNode(r.link) || '-'),
-        el('td', { className: 'task', title: r.task, textContent: r.task }),
-        el('td', {}, btn)));
+        taskCell,
+        actions);
+      tb.append(tr);
+      if (openFollowUp === r.id) tb.append(followUpRow(r));
     }
   }
 

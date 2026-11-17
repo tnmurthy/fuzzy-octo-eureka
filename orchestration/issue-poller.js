@@ -49,6 +49,26 @@ function pickAgent(labels, fallback) {
 }
 
 const MAX_REVIEW_CHARS = 60000;
+const MAX_FIX_REVIEW_CHARS = 12000;
+
+/** The reviewer's verdict from its answer's "**Verdict:** ..." line. */
+function verdictOf(text) {
+  const m = String(text || '').match(/\*\*Verdict:?\*\*:?\s*\**\s*(approve|request changes)/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** What the worker agent hears back: the review, and how to respond. */
+function buildFixTask(reviewText, round, rounds) {
+  return [
+    `Review feedback (round ${round} of ${rounds}): a reviewer agent checked your pull request and asked for changes.`,
+    '',
+    String(reviewText || '').slice(0, MAX_FIX_REVIEW_CHARS),
+    '',
+    'Address each finding you agree with, commit on this branch, and keep the tests passing.',
+    'If you disagree with a finding, do not change the code for it; say why in your final answer.',
+    'End with a short summary of what you changed.',
+  ].join('\n');
+}
 
 function buildReviewTask({ repo, number, pr, base, title, issueBody }) {
   return [
@@ -101,6 +121,9 @@ function createPoller(deps) {
     github, dispatch, git, readRuns, loadState, saveState, repos,
     maxConcurrent = 2, defaultAgent = 'claude', reviewAgent = 'claude',
     reviewSpecialist = null,
+    // Review -> fix rounds: when the reviewer asks for changes, the worker's
+    // session resumes with the review, pushes fixes, and is reviewed again.
+    fixRounds = 0,
     // (text) => Promise<slug|null>: picks a specialist for issues without a
     // specialist:<slug> label. Null turns auto-picking off.
     suggestSpecialist = null,
@@ -146,16 +169,50 @@ function createPoller(deps) {
     });
     state.active[runId] = {
       ...job, kind: 'review', pr, agent: reviewAgent, dispatchedAt: now(),
-      commitsBefore: Number(run.commits_ahead) || 0, worktree: run.worktree,
+      commitsBefore: Number(run.commits_ahead) || 0, worktree: run.worktree || job.worktree,
+      workRunId: run.id || job.workRunId, round: job.round || 0,
     };
     log(`[poller] ${job.repo}#${pr} review -> ${reviewAgent} run ${runId}`);
+  }
+
+  // Agent to agent: hand the review to the worker by resuming its session.
+  async function startFix(job, reviewText) {
+    const round = (job.round || 0) + 1;
+    const { runId } = await dispatch({ followUpOf: job.workRunId, task: buildFixTask(reviewText, round, fixRounds) });
+    state.active[runId] = { ...job, kind: 'fix', round, dispatchedAt: now() };
+    await github.comment(job.repo, job.pr, `Sent the review back to the agent that wrote this PR (round ${round} of ${fixRounds}, run \`${runId}\`). It will push fixes here, or explain why not.`);
+    log(`[poller] ${job.repo}#${job.pr} fix round ${round} -> run ${runId}`);
+  }
+
+  async function finishFix(runId, job, run) {
+    const { repo, pr, path, branch } = job;
+    const answer = String(readLog(run.log) || '').trim().slice(0, 4000);
+    const commits = Number(run.commits_ahead) || 0;
+    if (run.status === 'done' && commits > job.commitsBefore) {
+      git(['push', 'origin', `${branch}:${branch}`], path);
+      await github.comment(repo, pr, `### Agent fixes (round ${job.round}, run \`${runId}\`)\n\n${commits - job.commitsBefore} new commit(s).${answer ? `\n\n${answer}` : ''}`);
+      const pseudoRun = { ...run, id: runId, commits_ahead: commits, worktree: job.worktree };
+      try {
+        await startReview({ ...job, workRunId: runId }, pr, pseudoRun);
+        return;
+      } catch (err) {
+        await github.comment(repo, pr, `Could not start the follow-up review: ${err.message}. Review this PR by hand.`);
+      }
+    } else if (run.status === 'done') {
+      await github.comment(repo, pr, `### Agent reply (round ${job.round}, run \`${runId}\`)\n\nNo new commits.${answer ? `\n\n${answer}` : ''}`);
+    } else {
+      await github.comment(repo, pr, `The fix run \`${runId}\` ended **${run.status}**.${run.log ? ` Log on the agent host: \`${run.log}\`.` : ''} Review this PR by hand.`);
+      return; // keep the worktree for inspection
+    }
+    if (job.worktree) quietGit(['worktree', 'remove', job.worktree], path);
   }
 
   async function finishReview(runId, job, run) {
     const { repo, pr, path } = job;
     let body;
+    let text = '';
     if (run.status === 'done') {
-      const text = String(readLog(run.log) || '').trim().slice(0, MAX_REVIEW_CHARS);
+      text = String(readLog(run.log) || '').trim().slice(0, MAX_REVIEW_CHARS);
       body = `### Agent review (\`${job.agent}\`, run \`${runId}\`)\n\n${text || '_The reviewer returned no text._'}`;
       if ((Number(run.commits_ahead) || 0) !== job.commitsBefore) {
         body += `\n\n> **Warning:** the branch changed during the review (${job.commitsBefore} -> ${run.commits_ahead} commits). Check the branch before merging.`;
@@ -164,11 +221,20 @@ function createPoller(deps) {
       body = `Agent review run \`${runId}\` ended **${run.status}**.${run.log ? ` Log on the agent host: \`${run.log}\`.` : ''} Review this PR by hand.`;
     }
     await github.comment(repo, pr, body);
+    if (run.status === 'done' && verdictOf(text) === 'request changes' && (job.round || 0) < fixRounds && job.workRunId) {
+      try {
+        await startFix(job, text);
+        return; // the worktree stays for the fix run
+      } catch (err) {
+        await github.comment(repo, pr, `Could not send the review back to the agent: ${err.message}. Address it by hand.`);
+      }
+    }
     if (job.worktree) quietGit(['worktree', 'remove', job.worktree], path);
   }
 
   async function finish(runId, job, run) {
     if (job.kind === 'review') return finishReview(runId, job, run);
+    if (job.kind === 'fix') return finishFix(runId, job, run);
     const { repo, number, branch, path } = job;
     const commits = Number(run.commits_ahead) || 0;
 
@@ -231,7 +297,7 @@ function createPoller(deps) {
         if (job.attempts >= MAX_FINISH_ATTEMPTS) {
           delete state.active[runId];
           try {
-            if (job.kind === 'review') {
+            if (job.kind === 'review' || job.kind === 'fix') {
               await github.comment(job.repo, job.pr, `Agent review run \`${runId}\` could not be posted: ${err.message}. Review this PR by hand.`);
             } else {
               await setLabel(job.repo, job.number, LABELS.running, LABELS.failed);
@@ -328,7 +394,7 @@ function createPoller(deps) {
   };
 }
 
-module.exports = { createPoller, pickAgent, buildTask, buildReviewTask, LABELS, LABEL_DEFS, LOST_AFTER_MS };
+module.exports = { createPoller, pickAgent, buildTask, buildReviewTask, buildFixTask, verdictOf, LABELS, LABEL_DEFS, LOST_AFTER_MS };
 
 // ---------------------------------------------------------------------------
 // Process entry point (PM2: IssuePoller in ecosystem.config.js).
@@ -430,6 +496,9 @@ if (require.main === module) {
             const top = res.ok && Array.isArray(body.suggestions) ? body.suggestions[0] : null;
             return top && /^[a-z0-9][a-z0-9-]{1,60}$/.test(top.slug) ? top.slug : null;
           },
+          // Review -> fix rounds per PR (0 = reviewer only comments). Each
+          // round is one more paid claude run plus a re-review.
+          fixRounds: Math.max(0, Math.min(3, Number(process.env.POLLER_FIX_ROUNDS ?? 1) || 0)),
           reviewSpecialist: ['off', 'none', ''].includes(String(process.env.POLLER_REVIEW_SPECIALIST ?? 'engineering-code-reviewer').trim())
             ? null : String(process.env.POLLER_REVIEW_SPECIALIST ?? 'engineering-code-reviewer').trim(),
           // A claude run's log now holds its step-by-step trace; the review

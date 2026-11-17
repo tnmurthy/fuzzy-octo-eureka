@@ -73,6 +73,7 @@ const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require(
 const { validateDispatchSafety } = require('./safety-filter');
 const { checkDispatchCap, parseCap } = require('./dispatch-cap');
 const { buildContextView } = require('./context-view');
+const { resolveFollowUp, followUpStatus } = require('./followup');
 // agency-agents personas (specialists/), optional role guidance per dispatch.
 const specialists = require('./specialists').createSpecialists();
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
@@ -664,10 +665,19 @@ function listAvailableRepos() {
 // issue poller, scripts) and the Agents page's "Run now"; resolves to
 // { status, body } for the caller to send.
 async function startDispatch(payload) {
-  const { repo, branch, task } = payload || {};
+  payload = payload || {};
+  // followUpOf: continue a finished claude run (followup.js) - same repo and
+  // branch, its session resumed. The repo/branch/agent come from that run.
+  let followUp = null;
+  if (payload.followUpOf != null) {
+    followUp = resolveFollowUp({ runs: readRuns(RUNS_FILE, 5000).runs || [], runId: String(payload.followUpOf), resolveRepo: (name) => resolveRepoPath(name) });
+    if (!followUp.ok) return { status: 400, body: { ok: false, error: followUp.error } };
+    payload = { ...payload, agent: 'claude', repo: followUp.repo, branch: followUp.branch, readOnly: false };
+  }
+  const { repo, branch, task } = payload;
   // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
   // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
-  const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
+  const agent = !followUp && payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
   const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto', 'mantis', 'openhands']);
   if (!allowedAgents.has(agent)) return { status: 400, body: { ok: false, error: `unknown agent: ${agent}` } };
   if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
@@ -692,7 +702,10 @@ async function startDispatch(payload) {
     return { status: 400, body: { ok: false, error: 'unknown specialist (see /api/agents/specialists)' } };
   }
   try {
-    const result = await spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly, specialist });
+    const result = await spawnAgentDispatch({
+      agent, repo, repoPath, branch, task, readOnly, specialist,
+      ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
+    });
     return { status: 202, body: { ok: true, ...result, note: 'started; poll /api/runs for completion' } };
   } catch (err) {
     return { status: err.status || 500, body: { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` } };
@@ -790,12 +803,13 @@ const agentsApi = require('./agents-api').createAgentsApi({
   recommender: specialistRecommender,
   repoRegistry,
   dispatchRun: startDispatch,
+  canFollowUp: (run) => followUpStatus(run).ok,
   isAdmin,
   actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
 });
 
-function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null }) {
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null, resumeSession = null, parentRun = null }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -809,7 +823,7 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
 
   // A review's output is posted on the PR (public for a public repo), so it
   // gets no team memories that it could quote back.
-  return (readOnly ? Promise.resolve([]) : dispatchMemories(repo, task)).then((memories) => {
+  return (readOnly || resumeSession ? Promise.resolve([]) : dispatchMemories(repo, task)).then((memories) => {
     const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
     fs.mkdirSync(tmpDir, { recursive: true });
     const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
@@ -844,6 +858,9 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
     dispatchEnv.AGENT_TASK_TITLE = String(task).slice(0, 160);
     if (specialist && specialists.get(specialist)) dispatchEnv.AGENT_SPECIALIST = specialist;
     else delete dispatchEnv.AGENT_SPECIALIST;
+    // Follow-ups: resume the earlier session; record which run this continues.
+    if (resumeSession) dispatchEnv.AGENT_RESUME_SESSION = resumeSession; else delete dispatchEnv.AGENT_RESUME_SESSION;
+    if (parentRun) dispatchEnv.AGENT_PARENT_RUN = parentRun; else delete dispatchEnv.AGENT_PARENT_RUN;
     if (readOnly) {
       dispatchEnv.CLAUDE_ALLOWED_TOOLS = READ_ONLY_ALLOWED_TOOLS;
       dispatchEnv.CLAUDE_DENIED_TOOLS = READ_ONLY_DENIED_TOOLS;
