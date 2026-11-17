@@ -15,7 +15,7 @@ const local = [
   { id: 'L3', content: '' }, // empty: skipped
 ];
 const team = [
-  { id: 'r1', client_id: 'L1', owner: ME, title: 'Synced note', content: 'a', project_id: 'app', created_at: '2026-11-10T00:00:00Z' },
+  { id: 'r1', client_id: 'L1', owner: ME, title: 'Synced note', content: 'a', project_id: 'app', visibility: 'private', created_at: '2026-11-10T00:00:00Z' },
   { id: 'r2', client_id: 'P1', owner: MATE, title: 'Teammate note', content: 'c', project_id: 'web', created_at: '2026-11-11T00:00:00Z' },
   { id: 'r3', client_id: 'M2', owner: ME, title: 'From my laptop', content: 'd', created_at: '2026-11-09T00:00:00Z' },
   { id: 'r4', client_id: null, owner: 'u-gone', title: 'Old', content: 'e', created_at: '2026-11-01T00:00:00Z' },
@@ -25,8 +25,8 @@ test('combineMemory merges a local entry with its synced row and labels every so
   const out = combineMemory({ local, team, members, me: ME });
   const by = Object.fromEntries(out.map((e) => [e.id, e]));
   assert.equal(out.length, 5, 'L1 counted once; empty L3 skipped');
-  assert.deepEqual([by.L1.mine, by.L1.local, by.L1.shared], [true, true, true]);
-  assert.deepEqual([by.L2.mine, by.L2.local, by.L2.shared], [true, true, false]);
+  assert.deepEqual([by.L1.mine, by.L1.local, by.L1.cloud, by.L1.shared, by.L1.private], [true, true, true, false, true], 'private row: in Supabase, not shared');
+  assert.deepEqual([by.L2.mine, by.L2.local, by.L2.cloud, by.L2.shared], [true, true, false, false]);
   assert.deepEqual([by.P1.mine, by.P1.local, by.P1.shared, by.P1.author], [false, false, true, 'Priya']);
   assert.deepEqual([by.M2.mine, by.M2.local, by.M2.author], [true, false, 'Sriad']);
   assert.equal(by.r4.author, 'Former member');
@@ -60,7 +60,7 @@ test('buildContextView works with the team store off, on, or failing', () => {
   const on = buildContextView({ local, team: { me: ME, teamName: 'Talia', members, memories: team, runs: [], calls: [] } });
   assert.equal(on.teamStore, 'on');
   assert.equal(on.teamName, 'Talia');
-  assert.deepEqual(on.totals, { members: 2, mine: 3, localOnly: 1, shared: 4, fromTeammates: 2, combined: 5 });
+  assert.deepEqual(on.totals, { members: 2, mine: 3, localOnly: 1, private: 1, shared: 3, fromTeammates: 2, combined: 5 });
 
   const failed = buildContextView({ local, error: 'Supabase sign-in failed (400)' });
   assert.equal(failed.teamStore, 'error');

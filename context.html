@@ -20,7 +20,7 @@
     .note { border-left: 3px solid var(--status-amber); padding: 8px 12px; margin-bottom: 16px; font-size: 0.85rem; background: var(--status-amber-glow); border-radius: 6px; }
     .note[hidden] { display: none; }
 
-    .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
     @media (max-width: 860px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .tile { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px 16px; }
     .tile .n { font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -55,6 +55,7 @@
     .b-local { color: var(--status-amber); border-color: rgba(255,179,0,.4); }
     .b-synced { color: var(--status-green); border-color: rgba(0,230,118,.4); }
     .b-team { color: var(--status-blue); border-color: rgba(0,176,255,.4); }
+    .b-private { color: #c4a7ff; border-color: rgba(179,136,255,.45); }
     .empty { color: var(--color-text-muted); font-size: 0.85rem; padding: 10px 0; }
     .more { display: block; margin: 8px auto 0; }
     .btn-sm { background: transparent; color: var(--status-blue); border: 1px solid rgba(0,176,255,.35); border-radius: 6px; padding: 5px 12px; font: inherit; font-size: 0.8rem; cursor: pointer; }
@@ -75,6 +76,7 @@
     <section class="tiles" aria-label="Totals">
       <div class="tile"><div class="n" id="t-members">-</div><div class="l">Team members</div></div>
       <div class="tile"><div class="n" id="t-mine">-</div><div class="l">My memories</div></div>
+      <div class="tile"><div class="n" id="t-private">-</div><div class="l">🔒 Private to me</div></div>
       <div class="tile"><div class="n" id="t-shared">-</div><div class="l">Shared with team</div></div>
       <div class="tile"><div class="n" id="t-team">-</div><div class="l">From teammates</div></div>
       <div class="tile"><div class="n" id="t-combined">-</div><div class="l">Combined (unique)</div></div>
