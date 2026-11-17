@@ -15,7 +15,7 @@
 
   const VIEWS = {
     mine: { test: (e) => e.mine, help: 'Memories you wrote: on this Mac, plus any you shared from another machine.' },
-    shared: { test: (e) => e.shared, help: 'Everything in the team\'s Supabase memory, from every teammate. This is what agents on any machine can draw on.' },
+    shared: { test: (e) => e.shared, help: 'Memory every teammate can read. Yours is private (only you can read it), so it is not listed here.' },
     combined: { test: () => true, help: 'This Mac\'s memory and the team\'s together, each counted once.' },
   };
   const PAGE = 30;
@@ -46,9 +46,10 @@
   }
 
   function badgeFor(e) {
-    if (e.local && e.shared) return el('span', { className: 'badge b-synced', textContent: 'this Mac + shared' });
+    if (e.private) return el('span', { className: 'badge b-private', textContent: e.local ? '🔒 private · this Mac + Supabase' : '🔒 private · Supabase' });
+    if (e.local && e.shared) return el('span', { className: 'badge b-synced', textContent: 'this Mac + shared with team' });
     if (e.local) return el('span', { className: 'badge b-local', textContent: 'this Mac only' });
-    return el('span', { className: 'badge b-team', textContent: e.mine ? 'shared (other machine)' : 'shared by teammate' });
+    return el('span', { className: 'badge b-team', textContent: e.mine ? 'shared with team (other machine)' : 'shared by teammate' });
   }
 
   function filtered() {
@@ -94,6 +95,7 @@
     $('t-members').textContent = data.teamStore === 'on' ? fmtNum(t.members) : '-';
     $('t-mine').textContent = fmtNum(t.mine);
     $('t-shared').textContent = data.teamStore === 'on' ? fmtNum(t.shared) : '-';
+    $('t-private').textContent = data.teamStore === 'on' ? fmtNum(t.private) : '-';
     $('t-team').textContent = data.teamStore === 'on' ? fmtNum(t.fromTeammates) : '-';
     $('t-combined').textContent = fmtNum(t.combined);
     $('c-mine').textContent = t.mine;

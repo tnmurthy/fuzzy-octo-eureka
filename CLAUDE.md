@@ -150,6 +150,12 @@ team - never put a service_role key in `.env`. Tables live in the shared
 **Talia** Supabase project (`onsmkbwqucvbzggugmmn`, other apps share it), so
 every object is prefixed `arunachala_`.
 
+- Privacy (2026-11-17, migration `20261117000000_arunachala_owner_private`):
+  `arunachala_memory` and `arunachala_agent_runs` carry `visibility`
+  (`private` | `team`). Team owners' rows default to private (only the author
+  can read them); members' rows default to team. RLS select = own rows, or
+  `team` rows in your team. Tasks and the AI ledger stay team-wide. Verified
+  with a rolled-back test as a member: 0 of the owner's memories or runs.
 - Runs: `runs.jsonl` stays the source of truth and acts as an outbox; every
   30 s new or changed runs upsert into `arunachala_agent_runs` (repo name only, no local
   paths). State in `logs/run-sync-state.json`; offline = retried next tick.

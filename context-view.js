@@ -40,7 +40,9 @@ function buildMembers({ members = [], memories = [], runs = [], calls = [], me =
  * lives:
  *   mine:      true when this person wrote it (here or on another machine)
  *   local:     present on this machine
- *   shared:    present in the team table
+ *   cloud:     present in Supabase
+ *   shared:    in Supabase and visible to the whole team (visibility team)
+ *   private:   in Supabase but readable only by its author (RLS)
  * A local entry and its synced team row (client_id = local id) become one.
  */
 function combineMemory({ local = [], team = [], members = [], me = null }) {
@@ -61,13 +63,21 @@ function combineMemory({ local = [], team = [], members = [], me = null }) {
       author: myName,
       mine: true,
       local: true,
+      cloud: false,
       shared: false,
+      private: false,
     });
   }
   for (const r of team) {
     const key = r.client_id || r.id;
+    const isPrivate = r.visibility === 'private';
     const existing = byId.get(key);
-    if (existing) { existing.shared = true; continue; }
+    if (existing) {
+      existing.cloud = true;
+      existing.shared = !isPrivate;
+      existing.private = isPrivate;
+      continue;
+    }
     byId.set(key, {
       id: key,
       title: clip(r.title || 'Untitled', 200),
@@ -79,7 +89,9 @@ function combineMemory({ local = [], team = [], members = [], me = null }) {
       author: names[r.owner] || 'Former member',
       mine: r.owner === me,
       local: false,
-      shared: true,
+      cloud: true,
+      shared: !isPrivate,
+      private: isPrivate,
     });
   }
   return [...byId.values()].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
@@ -90,7 +102,8 @@ function summarize(entries, members) {
   return {
     members: members.length,
     mine: entries.filter((e) => e.mine).length,
-    localOnly: entries.filter((e) => e.local && !e.shared).length,
+    localOnly: entries.filter((e) => e.local && !e.cloud).length,
+    private: entries.filter((e) => e.private).length,
     shared: entries.filter((e) => e.shared).length,
     fromTeammates: entries.filter((e) => !e.mine).length,
     combined: entries.length,
