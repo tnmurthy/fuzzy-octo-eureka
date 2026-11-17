@@ -205,17 +205,21 @@ run_mantis() {
   fi
 }
 
-# claude prints JSON (--output-format json) so its usage and cost can be
-# recorded; claude-usage.mjs logs them and prints the readable result. The
-# exit code is claude's, not node's.
+# claude streams its steps (--output-format stream-json); stream-log.js
+# writes one readable line per step into the run log as they happen, so
+# `tail -f <run-id>.log` shows the agent working, and saves the final result
+# event to <run-id>.claude.json. claude-usage.mjs then records tokens and cost
+# from that file and prints the readable result. The exit code is claude's.
 run_claude() {
   local limit="$1" json="$RUNS_DIR/$run_id.claude.json" rc
   local lean=()
   [ "$CLAUDE_LEAN" = true ] && lean=(--strict-mcp-config --disable-slash-commands --setting-sources project,local)
   (cd "$worktree" && run_timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
      --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS" \
-     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format json "${lean[@]}") > "$json"
-  rc=$?
+     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format stream-json --verbose "${lean[@]}") \
+    | node "$(native "$HERE/stream-log.js")" "$(native "$json")"
+  rc=${PIPESTATUS[0]}
+  echo "== result"
   node "$(native "$HERE/claude-usage.mjs")" "$(native "$json")" "$(native "$AI_CALLS_FILE")" "$run_id"
   return "$rc"
 }

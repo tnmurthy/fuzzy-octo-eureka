@@ -23,7 +23,9 @@ esac
 const CLAUDE_STUB = `#!/usr/bin/env bash
 echo claude > fixed; git add -A; git -c user.email=t@t -c user.name=t commit -qm claude
 touch "$CLAUDE_MARK"
-echo '{"result":"done","is_error":false,"total_cost_usd":0.05,"duration_ms":1000,"num_turns":2,"usage":{"input_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":0,"output_tokens":20},"modelUsage":{"claude-sonnet-test":{}}}'
+echo '{"type":"system","subtype":"init","model":"claude-sonnet-test"}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"fixed","new_string":"SECRET-CONTENT"}}]}}'
+echo '{"type":"result","subtype":"success","result":"done","is_error":false,"total_cost_usd":0.05,"duration_ms":1000,"num_turns":2,"usage":{"input_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":0,"output_tokens":20},"modelUsage":{"claude-sonnet-test":{}}}'
 `;
 
 function setup({ withTests }) {
@@ -90,6 +92,20 @@ test('auto: local attempt fails the tests - reset, then claude', () => {
   assert.equal(r.calls[0].input_tokens, 110);
   assert.equal(r.calls[0].run_id, 'run-1');
   assert.match(r.log, /^done$/m);
+  // claude's steps stream into the log as they happen, inputs summarised
+  assert.match(r.log, /== claude started \(model claude-sonnet-test\)/);
+  assert.match(r.log, /🔧 Edit fixed/);
+  assert.match(r.log, /== claude finished: success · 2 turns · \$0\.0500/);
+  assert.ok(!r.log.includes('SECRET-CONTENT'), 'a tool input body leaked into the log');
+});
+
+test('claude: the run exits with claude\'s code, not the log formatter\'s', () => {
+  const t = setup({ withTests: false });
+  fs.writeFileSync(path.join(t.bin, 'claude'), '#!/usr/bin/env bash\necho \'{"type":"result","subtype":"error_max_turns","is_error":true}\'\nexit 7\n', { mode: 0o755 });
+  const r = dispatch(t, 'fix');
+  assert.equal(r.res.status, 7, r.log);
+  assert.equal(r.end.status, 'failed');
+  assert.equal(r.end.exit_code, 7);
 });
 
 test('auto: local agent errors - claude takes over', () => {
