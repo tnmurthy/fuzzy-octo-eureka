@@ -29,6 +29,10 @@ module.exports = {
       name: 'ArunachalaDashboard',
       script: path.join(ROOT, 'server.js'),
       env: { PORT: '8787' },
+      // Agent runs are detached children of this server. PM2's default
+      // treekill stopped them on every restart (issue #34's hermes run died
+      // with exit 130 mid-task on 2026-11-17). Runs have their own timeouts.
+      treekill: false,
     },
     {
       ...base,
