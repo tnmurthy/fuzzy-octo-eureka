@@ -660,8 +660,50 @@ function listAvailableRepos() {
   return Array.from(repos.entries()).map(([name, repoPath]) => ({ name, path: repoPath }));
 }
 
+// Validate a dispatch request and start it. Shared by /api/dispatch/run (the
+// issue poller, scripts) and the Agents page's "Run now"; resolves to
+// { status, body } for the caller to send.
+async function startDispatch(payload) {
+  const { repo, branch, task } = payload || {};
+  // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
+  // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
+  const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
+  const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto', 'mantis', 'openhands']);
+  if (!allowedAgents.has(agent)) return { status: 400, body: { ok: false, error: `unknown agent: ${agent}` } };
+  if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
+    return { status: 400, body: { ok: false, error: 'repo must be a plain directory name' } };
+  }
+  const repoPath = resolveRepoPath(repo);
+  if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) {
+    return { status: 400, body: { ok: false, error: `not a known repo: ${repo}` } };
+  }
+  if (typeof task !== 'string' || !task.trim()) return { status: 400, body: { ok: false, error: 'task text is required' } };
+  // readOnly: a review. Only agents whose tools this server can lock down
+  // may run it; with edits and commits denied, the safety filter's
+  // destructive-command check has nothing to guard.
+  const readOnly = payload.readOnly === true;
+  if (readOnly && !READ_ONLY_AGENTS.has(agent)) {
+    return { status: 400, body: { ok: false, error: `readOnly runs support only: ${[...READ_ONLY_AGENTS].join(', ')}` } };
+  }
+  const safetyCheck = readOnly ? { ok: true } : validateDispatchSafety(task, payload);
+  if (!safetyCheck.ok) return { status: 400, body: safetyCheck };
+  const specialist = payload.specialist == null || payload.specialist === '' ? null : payload.specialist;
+  if (specialist !== null && !specialists.get(specialist)) {
+    return { status: 400, body: { ok: false, error: 'unknown specialist (see /api/agents/specialists)' } };
+  }
+  try {
+    const result = await spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly, specialist });
+    return { status: 202, body: { ok: true, ...result, note: 'started; poll /api/runs for completion' } };
+  } catch (err) {
+    return { status: err.status || 500, body: { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` } };
+  }
+}
+
 function resolveRepoPath(repo) {
   if (repo === path.basename(DASHBOARD_DIR) || repo === '.') return DASHBOARD_DIR;
+  // Repos added on the Agents page (local folders, clones) come first.
+  const registered = repoRegistry.resolve(repo);
+  if (registered) return registered;
   const repos = listAvailableRepos();
   const match = repos.find(r => r.name === repo);
   if (match) return match.path;
@@ -729,6 +771,13 @@ const specialistRecommender = require('./specialist-recommend').createRecommende
   readRuns: () => readRuns(RUNS_FILE, 2000).runs || [],
   readMemories: () => memory.episodicMemory || [],
 });
+// Repos agents may work on: built-ins (listAvailableRepos) plus local folders
+// and clones an admin added on the Agents page (logs/repos.json).
+const repoRegistry = require('./repo-registry').createRepoRegistry({
+  file: path.join(DASHBOARD_DIR, 'logs', 'repos.json'),
+  cloneDir: process.env.AGENT_REPOS_DIR || path.join(require('os').homedir(), 'agent-repos'),
+  builtins: () => listAvailableRepos(),
+});
 const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
@@ -739,6 +788,8 @@ const agentsApi = require('./agents-api').createAgentsApi({
   specialists,
   suggester: specialistSuggester,
   recommender: specialistRecommender,
+  repoRegistry,
+  dispatchRun: startDispatch,
   isAdmin,
   actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
@@ -1465,48 +1516,14 @@ function handleRequest(req, res) {
       } catch (e) {
         return sendJson(res, 400, { ok: false, error: `bad JSON: ${e.message}` });
       }
-      const { repo, branch, task } = payload;
       // ReBAC authorization check
       const actor = (req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')) ? 'user:drisyon' : 'user:sriad';
       const dispatchAuth = rebac.canAccess(actor, 'dispatch:run', 'resource:agent_runner');
       if (!dispatchAuth.authorized) {
         return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: lacking perm:dispatch', path: dispatchAuth.path });
       }
-      // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
-      // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
-      const agent = payload.agent === 'claude' && process.env.DISPATCH_LOCAL_FIRST === 'true' ? 'auto' : payload.agent;
-      const allowedAgents = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto', 'mantis', 'openhands']);
-      if (!allowedAgents.has(agent)) {
-        return sendJson(res, 400, { ok: false, error: `unknown agent: ${agent}` });
-      }
-      if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
-        return sendJson(res, 400, { ok: false, error: 'repo must be a plain directory name' });
-      }
-      const repoPath = resolveRepoPath(repo);
-      if (!fs.existsSync(path.join(repoPath, '.git'))) {
-        return sendJson(res, 400, { ok: false, error: `not a known repo: ${repo}` });
-      }
-      if (typeof task !== 'string' || !task.trim()) {
-        return sendJson(res, 400, { ok: false, error: 'task text is required' });
-      }
-      // readOnly: a review. Only agents whose tools this server can lock down
-      // may run it; with edits and commits denied, the safety filter's
-      // destructive-command check has nothing to guard.
-      const readOnly = payload.readOnly === true;
-      if (readOnly && !READ_ONLY_AGENTS.has(agent)) {
-        return sendJson(res, 400, { ok: false, error: `readOnly runs support only: ${[...READ_ONLY_AGENTS].join(', ')}` });
-      }
-      const safetyCheck = readOnly ? { ok: true } : validateDispatchSafety(task, payload);
-      if (!safetyCheck.ok) {
-        return sendJson(res, 400, safetyCheck);
-      }
-      const specialist = payload.specialist == null || payload.specialist === '' ? null : payload.specialist;
-      if (specialist !== null && !specialists.get(specialist)) {
-        return sendJson(res, 400, { ok: false, error: 'unknown specialist (see /api/agents/specialists)' });
-      }
-      spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly, specialist })
-        .then((result) => sendJson(res, 202, { ok: true, ...result, note: 'started; poll /api/runs for completion' }))
-        .catch((err) => sendJson(res, err.status || 500, { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` }));
+      const r = await startDispatch(payload);
+      return sendJson(res, r.status, r.body);
     });
     return;
   }

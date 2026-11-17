@@ -9,6 +9,10 @@
 //   GET  /api/agents/specialists catalog of agency-agents personas (no bodies)
 //   GET  /api/agents/specialists/suggest?q=  top 3 for a task description
 //   GET  /api/agents/specialists/recommended  all, ranked by your usage + memory
+//   GET  /api/agents/repos      registered repos + ones found on this machine
+//   POST /api/agents/repos      { type: 'local', path } | { type: 'git', url } (admin)
+//   POST /api/agents/repos/remove { name } (admin; unregisters, files stay)
+//   POST /api/agents/run        { repo, agent, specialist?, title, body? } -> run now
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -40,6 +44,17 @@ function validateTask(input, repos, specialists = null) {
   if (specialist && !(specialists && specialists.get(specialist))) return { ok: false, error: 'unknown specialist' };
   return { ok: true, value: { repo, title, body, agent, specialist: specialist || null } };
 }
+
+const HOMES = [...new Set([require('os').homedir(), (() => { try { return fs.realpathSync.native(require('os').homedir()); } catch (_) { return null; } })()].filter(Boolean))];
+const tilde = (p) => {
+  const h = p && HOMES.find((x) => p.toLowerCase().startsWith(`${x.toLowerCase()}${path.sep}`));
+  return h ? `~${p.slice(h.length)}` : p;
+};
+// owner/name from a GitHub remote, to tell which repos the issue poller watches.
+const ownerRepo = (remote) => {
+  const m = String(remote || '').match(/github\.com[:/]([^/]+\/[^/]+?)(\.git)?\/?$/);
+  return m ? m[1] : null;
+};
 
 /** True for a JSON request that is not from another site. */
 function isSameSiteJson(req) {
@@ -91,7 +106,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -185,6 +200,58 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/agents/overview' && req.method === 'GET') {
       overview(req).then((b) => sendJson(res, 200, b)).catch(() => sendJson(res, 500, { ok: false, error: 'could not read agent runs' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/repos' && req.method === 'GET') {
+      if (!repoRegistry) { sendJson(res, 200, { ok: true, repos: [], suggestions: [], canAdd: false }); return true; }
+      const list = repoRegistry.list().map((r) => {
+        const gh = ownerRepo(r.remote);
+        return { name: r.name, path: tilde(r.path), source: r.source, remote: r.remote || null, exists: r.exists, github: gh, watched: Boolean(gh && repos.includes(gh)) };
+      });
+      sendJson(res, 200, { ok: true, repos: list, suggestions: repoRegistry.discover().map((d) => ({ name: d.name, path: d.display })), canAdd: Boolean(isAdmin(req)) });
+      return true;
+    }
+    if ((url.pathname === '/api/agents/repos' || url.pathname === '/api/agents/repos/remove') && req.method === 'POST') {
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!repoRegistry || !isAdmin(req)) { sendJson(res, 403, { ok: false, error: 'only an admin can add or remove repositories' }); return true; }
+      readJsonBody(req, 4096)
+        .then(async (b) => {
+          if (url.pathname.endsWith('/remove')) {
+            const r = repoRegistry.remove(String(b.name || ''));
+            return sendJson(res, r.ok ? 200 : 400, r);
+          }
+          const r = b.type === 'git' ? await repoRegistry.addGit(b.url, actorOf(req))
+            : b.type === 'local' ? await repoRegistry.addLocal(b.path, actorOf(req))
+              : { ok: false, error: "type must be 'local' or 'git'" };
+          if (!r.ok) return sendJson(res, 400, { ok: false, error: r.error });
+          if (recommender) recommender.invalidate();
+          return sendJson(res, r.already ? 200 : 201, { ok: true, already: Boolean(r.already), repo: { name: r.value.name, path: tilde(r.value.path), remote: r.value.remote || null } });
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/run' && req.method === 'POST') {
+      // Run now on any registered repo: no GitHub issue; the work lands on a
+      // new branch in its own worktree. Same checks and paid cap as dispatch.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'run now is not available' }); return true; }
+      readJsonBody(req, 16 * 1024)
+        .then(async (b) => {
+          const title = String(b.title || '').trim();
+          const details = String(b.body || '').trim();
+          if (!title) return sendJson(res, 400, { ok: false, error: 'title is required' });
+          if (title.length > MAX_TITLE || details.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'task is too long' });
+          const agent = String(b.agent || 'claude');
+          if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
+          const task = details ? `${title}\n\n${details}` : title;
+          const r = await dispatchRun({
+            agent, repo: String(b.repo || ''), task, specialist: b.specialist || null,
+            branch: `agent/run-${now().toString(36)}`,
+          });
+          if (r.status < 300 && recommender) recommender.invalidate();
+          return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
     if (url.pathname === '/api/agents/specialists/recommended' && req.method === 'GET') {
