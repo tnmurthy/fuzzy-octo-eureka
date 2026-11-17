@@ -591,7 +591,7 @@ function computeCosts(days, wantTeam) {
     const paidCallsToday = paidCallsSince(calls, midnight);
     // The hard cap on paid agent runs (dispatch-cap.js), as the next paid
     // dispatch would see it.
-    const capNow = checkDispatchCap({ agent: 'claude', runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: PAID_RUN_CAP });
+    const capNow = checkDispatchCap({ agent: 'claude', runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: dispatchSettings.cap() });
     const paidRunsToday = { used: capNow.used, cap: capNow.cap, blocked: !capNow.ok };
     return {
       ok: true, source, days, summary, auto, limits, paidCallsToday, paidRunsToday,
@@ -673,8 +673,23 @@ const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 
 // Paid runs this server started, kept until their start line is surely in
 // RUNS_FILE (dispatch-cap.js counts both, de-duplicated by run id).
-const PAID_RUN_CAP = parseCap(process.env.DISPATCH_DAILY_PAID_RUNS);
+// The cap: an admin's choice on the Agents page (logs/dispatch-settings.json)
+// else DISPATCH_DAILY_PAID_RUNS.
+const dispatchSettings = require('./dispatch-settings').createDispatchSettings({
+  file: path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'),
+  envCap: parseCap(process.env.DISPATCH_DAILY_PAID_RUNS),
+});
 let pendingPaidRuns = [];
+
+// Admin = someone at this Mac (local request, no tunnel) or a signed-in user
+// named in ADMIN_USERS (default: the dashboard login, AUTH_USERNAME).
+const ADMIN_USERS = (process.env.ADMIN_USERS || process.env.AUTH_USERNAME || 'sriad')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+function isAdmin(req) {
+  if (!accessGate.requiresAccess(req)) return true;
+  return Boolean(req.sessionUser) && ADMIN_USERS.includes(String(req.sessionUser).toLowerCase());
+}
+const actorOf = (req) => req.sessionUser || 'local operator';
 
 // Agents page (/agents): runs, issue queue, live logs, "give an agent a task".
 // Repos are the issue poller's: POLLER_REPOS (owner/name=path,...) or origin.
@@ -692,8 +707,11 @@ const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
   readRuns,
-  capNow: (runs) => checkDispatchCap({ agent: 'claude', runs, pending: pendingPaidRuns, cap: PAID_RUN_CAP }),
+  capNow: (runs) => checkDispatchCap({ agent: 'claude', runs, pending: pendingPaidRuns, cap: dispatchSettings.cap() }),
   repos: pollerRepos(),
+  settings: dispatchSettings,
+  isAdmin,
+  actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
 });
 
@@ -703,7 +721,7 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
 
   const now = Date.now();
   pendingPaidRuns = pendingPaidRuns.filter((p) => now - p.at < 24 * 60 * 60 * 1000);
-  const cap = checkDispatchCap({ agent, runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: PAID_RUN_CAP, now });
+  const cap = checkDispatchCap({ agent, runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: dispatchSettings.cap(), now });
   if (!cap.ok) {
     return Promise.reject(Object.assign(new Error(cap.error), { status: 429, cap }));
   }
