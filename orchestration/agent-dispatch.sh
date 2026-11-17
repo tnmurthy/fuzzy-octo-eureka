@@ -160,9 +160,12 @@ runs="$RUNS_DIR/runs.jsonl"
 base="$(git -C "$(native "$worktree")" rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main)"
 started=$(date +%s)
 
+# AGENT_TASK_TITLE (set by the dashboard) is the task alone, without the
+# specialist guidance and memories appended to the prompt file.
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$repo" \
   branch="$branch" worktree="$worktree" log="$log" status=running \
-  task="$(head -c 160 "$prompt_file" | tr '\r\n' '  ')" started_at="$(iso_date)"
+  task="$(if [ -n "${AGENT_TASK_TITLE:-}" ]; then printf '%s' "$AGENT_TASK_TITLE" | head -c 160; else head -c 160 "$prompt_file"; fi | tr '\r\n' '  ')" \
+  ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} started_at="$(iso_date)"
 
 export AGENT_NAME="$agent"
 

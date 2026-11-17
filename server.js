@@ -72,6 +72,9 @@ if (teamStore) teamStore.start();
 const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require('./tasks-md');
 const { validateDispatchSafety } = require('./safety-filter');
 const { checkDispatchCap, parseCap } = require('./dispatch-cap');
+const { buildContextView } = require('./context-view');
+// agency-agents personas (specialists/), optional role guidance per dispatch.
+const specialists = require('./specialists').createSpecialists();
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
 const {
   recordTranscript,
@@ -269,6 +272,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/costing') urlPath = '/costing.html';
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
   if (urlPath === '/agents') urlPath = '/agents.html';
+  if (urlPath === '/context') urlPath = '/context.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
@@ -591,7 +595,7 @@ function computeCosts(days, wantTeam) {
     const paidCallsToday = paidCallsSince(calls, midnight);
     // The hard cap on paid agent runs (dispatch-cap.js), as the next paid
     // dispatch would see it.
-    const capNow = checkDispatchCap({ agent: 'claude', runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: PAID_RUN_CAP });
+    const capNow = checkDispatchCap({ agent: 'claude', runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: dispatchSettings.cap() });
     const paidRunsToday = { used: capNow.used, cap: capNow.cap, blocked: !capNow.ok };
     return {
       ok: true, source, days, summary, auto, limits, paidCallsToday, paidRunsToday,
@@ -673,8 +677,23 @@ const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 
 // Paid runs this server started, kept until their start line is surely in
 // RUNS_FILE (dispatch-cap.js counts both, de-duplicated by run id).
-const PAID_RUN_CAP = parseCap(process.env.DISPATCH_DAILY_PAID_RUNS);
+// The cap: an admin's choice on the Agents page (logs/dispatch-settings.json)
+// else DISPATCH_DAILY_PAID_RUNS.
+const dispatchSettings = require('./dispatch-settings').createDispatchSettings({
+  file: path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'),
+  envCap: parseCap(process.env.DISPATCH_DAILY_PAID_RUNS),
+});
 let pendingPaidRuns = [];
+
+// Admin = someone at this Mac (local request, no tunnel) or a signed-in user
+// named in ADMIN_USERS (default: the dashboard login, AUTH_USERNAME).
+const ADMIN_USERS = (process.env.ADMIN_USERS || process.env.AUTH_USERNAME || 'sriad')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+function isAdmin(req) {
+  if (!accessGate.requiresAccess(req)) return true;
+  return Boolean(req.sessionUser) && ADMIN_USERS.includes(String(req.sessionUser).toLowerCase());
+}
+const actorOf = (req) => req.sessionUser || 'local operator';
 
 // Agents page (/agents): runs, issue queue, live logs, "give an agent a task".
 // Repos are the issue poller's: POLLER_REPOS (owner/name=path,...) or origin.
@@ -688,22 +707,42 @@ function pollerRepos() {
     return m ? [m[1]] : [];
   } catch (_) { return []; }
 }
+// Suggests specialists for a task as you type (local embeddings, free).
+// A small local model re-ranks the shortlist (SPECIALIST_SUGGEST_MODEL, 'off'
+// to skip); local Ollama calls are exempt from the paid caps.
+const { createSuggester, ollamaReranker } = require('./specialist-suggest');
+const SUGGEST_MODEL = process.env.SPECIALIST_SUGGEST_MODEL || 'gemma3:4b';
+const specialistSuggester = createSuggester({
+  specialists,
+  embedder,
+  cosine: require('./embeddings').cosine,
+  rerank: SUGGEST_MODEL === 'off' ? null : ollamaReranker({
+    host: OLLAMA_HOST, port: OLLAMA_PORT, model: SUGGEST_MODEL,
+    record: (call) => recordAiCall(AI_CALLS_FILE, call),
+  }),
+});
+setTimeout(() => specialistSuggester.warm(), 5000).unref();
 const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
   readRuns,
-  capNow: (runs) => checkDispatchCap({ agent: 'claude', runs, pending: pendingPaidRuns, cap: PAID_RUN_CAP }),
+  capNow: (runs) => checkDispatchCap({ agent: 'claude', runs, pending: pendingPaidRuns, cap: dispatchSettings.cap() }),
   repos: pollerRepos(),
+  settings: dispatchSettings,
+  specialists,
+  suggester: specialistSuggester,
+  isAdmin,
+  actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
 });
 
-function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false }) {
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
   const now = Date.now();
   pendingPaidRuns = pendingPaidRuns.filter((p) => now - p.at < 24 * 60 * 60 * 1000);
-  const cap = checkDispatchCap({ agent, runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: PAID_RUN_CAP, now });
+  const cap = checkDispatchCap({ agent, runs: readRuns(RUNS_FILE, 5000).runs || [], pending: pendingPaidRuns, cap: dispatchSettings.cap(), now });
   if (!cap.ok) {
     return Promise.reject(Object.assign(new Error(cap.error), { status: 429, cap }));
   }
@@ -715,7 +754,8 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
     const tmpDir = path.join(DASHBOARD_DIR, 'logs', 'dispatch-prompts');
     fs.mkdirSync(tmpDir, { recursive: true });
     const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
-    fs.writeFileSync(promptFile, buildDispatchPrompt(task, memories), 'utf8');
+    // Order: task (its first 160 chars name the run), specialist role, memories.
+    fs.writeFileSync(promptFile, buildDispatchPrompt(task + specialists.roleBlock(specialist), memories), 'utf8');
 
     const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
     const bashBin = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash');
@@ -741,6 +781,10 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
       USERPROFILE: OPENCLAW_HOME,
       HOME: OPENCLAW_HOME,
     });
+    // The run log records the task alone and the specialist's slug.
+    dispatchEnv.AGENT_TASK_TITLE = String(task).slice(0, 160);
+    if (specialist && specialists.get(specialist)) dispatchEnv.AGENT_SPECIALIST = specialist;
+    else delete dispatchEnv.AGENT_SPECIALIST;
     if (readOnly) {
       dispatchEnv.CLAUDE_ALLOWED_TOOLS = READ_ONLY_ALLOWED_TOOLS;
       dispatchEnv.CLAUDE_DENIED_TOOLS = READ_ONLY_DENIED_TOOLS;
@@ -953,6 +997,18 @@ function handleRequest(req, res) {
   }
   if (req.url.startsWith('/api/history')) {
     return serveJsonFile(res, HISTORY_FILE, []);
+  }
+  if (req.url.split('?')[0] === '/api/context/overview' && req.method === 'GET') {
+    // Context page: team members + memory (mine / shared / combined).
+    if (PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true') return sendJson(res, 404, { ok: false, error: 'not found' });
+    const local = memory.episodicMemory || [];
+    const team = teamStore
+      ? teamStore.teamContext().then((t) => ({ team: t })).catch((err) => ({ error: String(err.message || 'unreachable').slice(0, 120) }))
+      : Promise.resolve({});
+    team
+      .then(({ team: t = null, error = null }) => sendJson(res, 200, buildContextView({ local, team: t, error })))
+      .catch(() => sendJson(res, 500, { ok: false, error: 'could not build the context view' }));
+    return;
   }
   if (req.url.startsWith('/api/agents/')) {
     const isDrisyonPortal = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
@@ -1436,7 +1492,11 @@ function handleRequest(req, res) {
       if (!safetyCheck.ok) {
         return sendJson(res, 400, safetyCheck);
       }
-      spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly })
+      const specialist = payload.specialist == null || payload.specialist === '' ? null : payload.specialist;
+      if (specialist !== null && !specialists.get(specialist)) {
+        return sendJson(res, 400, { ok: false, error: 'unknown specialist (see /api/agents/specialists)' });
+      }
+      spawnAgentDispatch({ agent, repo, repoPath, branch, task, readOnly, specialist })
         .then((result) => sendJson(res, 202, { ok: true, ...result, note: 'started; poll /api/runs for completion' }))
         .catch((err) => sendJson(res, err.status || 500, { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` }));
     });

@@ -27,6 +27,10 @@
     .cap-fill { height: 100%; background: var(--status-green); transition: width .3s; }
     .cap.warn .cap-fill { background: var(--status-amber); }
     .cap.full .cap-fill { background: var(--status-red); }
+    .cap-form { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .cap-form[hidden] { display: none; }
+    .cap-form input { width: 80px; background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.85rem; }
+    .cap-note { width: 100%; text-align: right; }
 
     /* form */
     form label { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin: 10px 0 4px; }
@@ -78,6 +82,19 @@
     td.task { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .st-done { color: var(--status-green); } .st-failed { color: var(--status-red); } .st-other { color: var(--status-amber); }
     a.lnk { color: var(--status-blue); text-decoration: none; }
+
+    .suggest { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+    .suggest[hidden] { display: none; }
+    .chip { background: rgba(83,25,231,.15); border: 1px solid rgba(179,136,255,.45); color: #d7c6ff; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.76rem; cursor: pointer; }
+    .chip.on { background: rgba(179,136,255,.35); color: #fff; }
+
+    /* specialists catalog */
+    .cat-input { background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; }
+    .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    .spec { background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--div-color, var(--status-blue)); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .spec .n { font-weight: 500; font-size: 0.9rem; }
+    .spec .d { font-size: 0.78rem; color: #c3cedb; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .spec .f { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
   </style>
 </head>
 <body>
@@ -92,8 +109,17 @@
           <span class="muted">Paid runs today</span>
           <div class="cap-bar"><div class="cap-fill" id="cap-fill" style="width:0"></div></div>
           <span class="mono" id="cap-text">-</span>
+          <button class="btn-sm" id="cap-edit" type="button" hidden>Change</button>
         </div>
+        <form class="cap-form" id="cap-form" hidden>
+          <label for="cap-input" class="muted">Daily paid runs</label>
+          <input id="cap-input" type="number" min="0" max="1000" step="1" required>
+          <button class="btn-sm" type="submit">Save</button>
+          <button class="btn-sm" type="button" id="cap-cancel">Cancel</button>
+        </form>
+        <a href="/context">🧠 Context</a>
         <a href="/">← Dashboard</a>
+        <div class="muted cap-note" id="cap-note"></div>
       </div>
     </div>
 
@@ -117,8 +143,12 @@
               </select>
             </div>
           </div>
+          <label for="specialist">Specialist (optional, from The Agency)</label>
+          <select id="specialist" name="specialist"><option value="">None: plain agent</option></select>
+          <div class="muted" id="specialist-desc" style="margin-top:4px; min-height:1em"></div>
           <label for="title">What should it do?</label>
           <input id="title" name="title" maxlength="200" required placeholder="e.g. Remove the placeholder tiles from the dashboard">
+          <div class="suggest" id="suggest" hidden><span class="muted">Suggested specialists:</span></div>
           <label for="body">Details (optional)</label>
           <textarea id="body" name="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, what not to change."></textarea>
           <button class="btn" id="submit" type="submit">Queue task</button>
@@ -146,6 +176,19 @@
 
     <section class="board" id="board"></section>
     <div class="muted" id="queue-note" style="margin:-6px 0 16px"></div>
+
+    <section class="card" id="catalog-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px">
+        <h2 style="margin:0">Specialists <span class="muted" id="catalog-count"></span></h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <input type="search" id="catalog-q" placeholder="Search specialists…" aria-label="Search specialists" class="cat-input">
+          <select id="catalog-division" aria-label="Division" class="cat-input"><option value="">All divisions</option></select>
+        </div>
+      </div>
+      <div class="muted" id="catalog-source" style="margin-bottom:10px"></div>
+      <div class="cat-grid" id="catalog"></div>
+      <button class="btn-sm" id="catalog-more" type="button" hidden style="display:block; margin:10px auto 0">Show more</button>
+    </section>
 
     <section class="card">
       <h2>Recent runs</h2>

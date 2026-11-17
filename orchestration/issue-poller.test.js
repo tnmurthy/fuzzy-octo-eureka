@@ -25,7 +25,7 @@ function fakeGitHub(issues = []) {
   };
 }
 
-function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', readLog } = {}) {
+function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, suggestSpecialist = null, readLog } = {}) {
   const github = fakeGitHub(issues);
   const gitCalls = [];
   const dispatched = [];
@@ -38,7 +38,7 @@ function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, g
     loadState: () => JSON.parse(JSON.stringify(state)),
     saveState: (s) => { saved = JSON.parse(JSON.stringify(s)); },
     repos: [{ repo: REPO, path: '/work/demo', name: 'demo' }],
-    authors, maxConcurrent, now, log: () => {}, reviewAgent, readLog,
+    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, suggestSpecialist, readLog,
   });
   return { poller, github, gitCalls, dispatched, saved: () => saved };
 }
@@ -47,9 +47,11 @@ const issue = (number, extra = {}) => ({ number, title: `Issue ${number}`, body:
 const commentsOf = (github) => github.calls.filter((c) => c[0] === 'comment').map((c) => c[3]);
 
 test('agent comes from an agent:<name> label, else the default; agent:confirmed is passed on', () => {
-  assert.deepEqual(pickAgent([{ name: 'agent:hermes' }], 'claude'), { agent: 'hermes', confirmed: false });
-  assert.deepEqual(pickAgent(['bug', 'agent:confirmed'], 'claude'), { agent: 'claude', confirmed: true });
-  assert.deepEqual(pickAgent(['agent:rm'], 'claude'), { agent: 'claude', confirmed: false });
+  assert.deepEqual(pickAgent([{ name: 'agent:hermes' }], 'claude'), { agent: 'hermes', confirmed: false, specialist: null });
+  assert.deepEqual(pickAgent(['bug', 'agent:confirmed'], 'claude'), { agent: 'claude', confirmed: true, specialist: null });
+  assert.deepEqual(pickAgent(['agent:rm'], 'claude'), { agent: 'claude', confirmed: false, specialist: null });
+  assert.deepEqual(pickAgent(['specialist:engineering-frontend-developer'], 'claude').specialist, 'engineering-frontend-developer');
+  assert.equal(pickAgent(['specialist:../x'], 'claude').specialist, null, 'malformed slugs are ignored');
 });
 
 test('the task names the issue, carries its body, and tells the agent not to push', () => {
@@ -253,4 +255,50 @@ test('listing issues drops pull requests', async () => {
   const fetchImpl = async () => ({ ok: true, status: 200, text: async () => JSON.stringify([{ number: 1 }, { number: 2, pull_request: {} }]) });
   const gh = createGitHubClient({ token: 't', fetchImpl });
   assert.deepEqual((await gh.listIssuesWithLabel('a/b', 'agent:ready')).map((i) => i.number), [1]);
+});
+
+test('a specialist label travels with the dispatch and is kept on the job', async () => {
+  const { poller, dispatched, saved } = setup({ issues: [issue(8, { labels: [{ name: LABELS.ready }, { name: 'specialist:engineering-frontend-developer' }] })] });
+  await poller.tick();
+  assert.equal(dispatched[0].specialist, 'engineering-frontend-developer');
+  assert.equal(saved().active['run-1'].specialist, 'engineering-frontend-developer');
+});
+
+test('without a specialist label the dispatch payload has no specialist key', async () => {
+  const { poller, dispatched } = setup({ issues: [issue(9, { labels: [{ name: LABELS.ready }] })] });
+  await poller.tick();
+  assert.equal('specialist' in dispatched[0], false);
+});
+
+test('reviews use the configured review specialist', async () => {
+  const { poller, dispatched } = setup({ state: { active: { r1: jobWithMeta } }, runs: [prRun], reviewAgent: 'claude', reviewSpecialist: 'engineering-code-reviewer' });
+  await poller.tick();
+  assert.equal(dispatched[0].readOnly, true);
+  assert.equal(dispatched[0].specialist, 'engineering-code-reviewer');
+});
+
+test('an issue without a specialist label gets the suggested one, labelled on the issue', async () => {
+  const seen = [];
+  const { poller, github, dispatched } = setup({
+    issues: [issue(11, { title: 'Set up CI', labels: [{ name: LABELS.ready }] })],
+    suggestSpecialist: async (text) => { seen.push(text); return 'engineering-devops-automator'; },
+  });
+  await poller.tick();
+  assert.match(seen[0], /^Set up CI/);
+  assert.equal(dispatched[0].specialist, 'engineering-devops-automator');
+  assert.ok(github.calls.some((c) => c[0] === 'ensure'));
+  assert.ok(github.calls.some((c) => c[0] === 'add' && c[3][0] === 'specialist:engineering-devops-automator'));
+});
+
+test('an explicit specialist label wins, and a failed suggestion never blocks the run', async () => {
+  let asked = 0;
+  const a = setup({ issues: [issue(12, { labels: [{ name: LABELS.ready }, { name: 'specialist:engineering-code-reviewer' }] })], suggestSpecialist: async () => { asked += 1; return 'x-y'; } });
+  await a.poller.tick();
+  assert.equal(asked, 0);
+  assert.equal(a.dispatched[0].specialist, 'engineering-code-reviewer');
+
+  const b = setup({ issues: [issue(13, { labels: [{ name: LABELS.ready }] })], suggestSpecialist: async () => { throw new Error('dashboard down'); } });
+  await b.poller.tick();
+  assert.equal(b.dispatched.length, 1);
+  assert.equal('specialist' in b.dispatched[0], false);
 });

@@ -75,6 +75,46 @@ viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):
 runs folder, last 64 KB), `POST /api/agents/task` (repo must be one the poller
 watches; JSON-only and same-origin, so another website cannot start a paid
 agent through a local browser). Off on the Drisyon portal (8788).
+Admins see **Change** next to the paid-runs meter: `POST /api/agents/settings`
+{dailyPaidRuns 0-1000} saves `logs/dispatch-settings.json` (who + when), which
+wins over `.env` from the next dispatch on, no restart (both dashboards re-read
+it on change). Delete the file to fall back to `.env`. Admin = a local request
+at this Mac, or a signed-in user in `ADMIN_USERS` (default `AUTH_USERNAME`).
+
+**Context page:** `http://127.0.0.1:8787/context` (🧠 Context on the
+dashboard header). Team members table (role, shared memories, agent runs, last
+run, AI calls and tokens over 7 days) and memory in three tabs: Mine (written
+by you, here or on another machine), Shared (the team's `arunachala_memory`)
+and Combined (both, a local entry and its synced row counted once). Badges say
+where each entry lives. `GET /api/context/overview`; shaping in
+`context-view.js` (pure, `context-view.test.js`), data from
+`teamStore.teamContext()`. Without team-store it shows this Mac only. Off on
+the Drisyon portal (8788).
+
+**Specialists (The Agency):** 268 personas from
+[agency-agents](https://github.com/msitarzewski/agency-agents) (MIT), pinned
+in `specialists/catalog.json` (commit, sha256 per file) with bodies in
+`specialists/agents/<slug>.md`. A dispatch may name one (`specialist` in
+`/api/dispatch/run`, a `specialist:<slug>` issue label, or the picker on
+/agents); `specialists.js` appends its guidance after the task, framed as role
+guidance that cannot override the task, repo rules or tool limits, trimmed to
+6000 chars, and refused if the file no longer matches its sha256. Reviews use
+`POLLER_REVIEW_SPECIALIST` (default `engineering-code-reviewer`, `off` for
+none). Update: clone the repo, `node scripts/sync-specialists.js <clone>`
+(imports only division folders, runs nothing, skips files that try to
+override instructions, pipe downloads into a shell, or carry
+credential-looking strings), review the diff, commit.
+Suggestions: as you type a task on /agents, `GET
+/api/agents/specialists/suggest?q=` shows the top 3
+(`specialist-suggest.js`): a shortlist of 30 by local embeddings plus a stemmed
+keyword boost, re-ranked by a local model (`SPECIALIST_SUGGEST_MODEL`, default
+`gemma3:4b`, `off` to skip; 4 s timeout, falls back to the shortlist). ~0.4 s
+warm; Ollama calls are logged with purpose `suggest` and exempt from caps.
+The issue poller auto-picks the top suggestion for issues without a
+`specialist:` label and adds that label to the issue (visible, editable;
+`POLLER_AUTO_SPECIALIST=false` turns it off; a failed lookup never blocks the
+run). Runs record `specialist` in runs.jsonl; the org chart's Tier 3b shows
+each division with its runs this week.
 
 **Watching agents:** `npm run agents` (add `-- --watch` to refresh every 5 s)
 lists running runs with the issue or PR each serves, recent runs, and paid
@@ -135,6 +175,14 @@ team - never put a service_role key in `.env`. Tables live in the shared
 **Talia** Supabase project (`onsmkbwqucvbzggugmmn`, other apps share it), so
 every object is prefixed `arunachala_`.
 
+- Privacy (2026-11-17, migration `20261117000000_arunachala_owner_private`):
+  `arunachala_memory` and `arunachala_agent_runs` carry `visibility`
+  (`private` | `team`). Team owners' rows default to private (only the author
+  can read them); members' rows default to team. RLS select = own rows, or
+  `team` rows in your team. `arunachala_ai_calls` follows the same rule
+  (`20261117000100`); the cap trigger is security definer, so team caps
+  still count every row. Tasks stay team-wide. Verified with rolled-back
+  tests as a member: 0 of the owner's memories, runs or AI calls.
 - Runs: `runs.jsonl` stays the source of truth and acts as an outbox; every
   30 s new or changed runs upsert into `arunachala_agent_runs` (repo name only, no local
   paths). State in `logs/run-sync-state.json`; offline = retried next tick.

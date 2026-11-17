@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="dashboard.css">
   <style>
     /* Org chart. Every status shown here comes from /api/telemetry,
+       /api/runs?scope=team (Supabase, else local), /api/context/overview
+       (people from Supabase),
        /api/runs, or /api/tasks; nothing is hard-coded as online. */
     .team-page { max-width: 1200px; margin: 0 auto; padding: 32px 20px 60px; }
     .team-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
@@ -356,7 +358,8 @@
 
     <!-- ==================== VIEW 2: 5-TIER HIERARCHY ==================== -->
     <div id="view-hierarchy" style="display: none;">
-      <div class="tier"><div class="node lead" data-id="operator" tabindex="0" role="button">
+      <div class="tier-label">Tier 0: People (team members from Supabase)</div>
+      <div class="tier" id="tier-people"><div class="node lead" data-id="operator" tabindex="0" role="button">
         <div class="title">👤 You - Operator</div>
         <div class="tool">Directs the agency · GitHub issues &amp; dashboard</div>
         <div class="state"><span class="dot green"></span><span>authenticated</span></div>
@@ -374,6 +377,10 @@
       <div class="connector"></div>
       <div class="tier-label">Tier 3: Specialist Personas (Domain Leads · Local Models)</div>
       <div class="tier" id="tier-roles"></div>
+
+      <div class="connector"></div>
+      <div class="tier-label">Tier 3b: Specialists (The Agency · agency-agents) <a href="/agents" style="color:var(--status-blue); text-decoration:none; font-size:0.72rem; margin-left:6px;">browse &amp; use →</a></div>
+      <div class="tier" id="tier-specialists"></div>
 
       <div class="connector"></div>
       <div class="tier-label">Tier 4: Executors &amp; Sandboxes (Agent Runs)</div>
@@ -516,7 +523,49 @@
       return [cls, 'last ' + last.status + ' · ' + ago(last.started_at)];
     }
 
-    function renderPods(tel, runs, tasks) {
+    // People from Supabase (arunachala_team_members via /api/context/overview).
+    // You keep the 'operator' id; teammates get member-<n>. Without team-store
+    // this falls back to the single local operator.
+    function peopleNodes(people) {
+      const members = (people && people.members) || [];
+      if (!members.length) {
+        return [{ id: 'operator', title: 'You - Sovereign Operator', sub: 'Local only · team sharing off', dot: 'green', state: 'authenticated', m: null }];
+      }
+      return members.map((m, i) => ({
+        id: m.you ? 'operator' : 'member-' + i,
+        title: (m.you ? 'You - ' : '') + m.name + (m.role === 'owner' ? ' (owner)' : ''),
+        sub: m.runs + ' runs · ' + m.memories + ' memories shared',
+        dot: m.lastRun && (Date.now() - new Date(m.lastRun).getTime()) < 7 * 864e5 ? 'green' : '',
+        state: m.lastRun ? 'last run ' + ago(m.lastRun) : 'no runs yet',
+        m
+      }));
+    }
+
+    function renderPeople(people) {
+      const tier = document.getElementById('tier-people');
+      tier.replaceChildren();
+      peopleNodes(people).forEach(p => {
+        tier.append(node(p.id, '👤 ' + p.title, p.sub, p.dot, p.state, p.id === 'operator' ? ' lead' : ''));
+        const m = p.m;
+        details[p.id] = m ? [
+          ['Decision Rights', m.role === 'owner' ? '🔴 Sovereign (Veto & Merge Sign-Off)' : '🟡 Member (proposes, owner merges)'],
+          ['Role', m.role],
+          ['Source', 'Supabase · arunachala_team_members'],
+          ['Shared memories', String(m.memories)],
+          ['Agent runs', String(m.runs)],
+          ['Last run', m.lastRun ? ago(m.lastRun) : 'never'],
+          ['AI calls (7 days)', String(m.aiCalls7d)],
+          ['Tokens (7 days)', Number(m.tokens7d || 0).toLocaleString()],
+          ['Joined', new Date(m.joined).toLocaleDateString()]
+        ] : [
+          ['Decision Rights', '🔴 Sovereign (Exclusive Human Veto & Merge Sign-Off)'],
+          ['Source', 'Local only: team sharing (Supabase) is off'],
+          ['Channels', 'GitHub issues (agent:ready), web dashboard dispatch']
+        ];
+      });
+    }
+
+    function renderPods(tel, runs, tasks, people) {
       const svc = tel.services || {};
       const roles = tel.agentStats || {};
       const ollama = svcState(svc.ollama);
@@ -546,7 +595,7 @@
       const mkSt = roleState(roles.marketing);
       mDeals.append(podMember('marketing', '📢', 'DevRel & Marketing', '🦙 gemma3:4b · Technical Teardowns', mkSt[0], mkSt[1], 'autonomous'));
 
-      const ppState = svcState(svc.paperclip || { online: true });
+      const ppState = svc.paperclip ? svcState(svc.paperclip) : ['', 'no telemetry'];
       mDeals.append(podMember('paperclip', '🖇️', 'Paperclip (PMO)', 'Workforce & budget policy limiter', ppState[0], ppState[1], 'autonomous'));
 
       // ── Pod 2: Delivery Engine Members ──
@@ -584,7 +633,7 @@
       const mTrust = document.getElementById('pod-trust-members');
       mTrust.replaceChildren();
 
-      mTrust.append(podMember('operator', '👤', 'You - Sovereign Operator', 'Sole owner · Veto & Merge authority', 'green', 'authenticated', 'sovereign'));
+      peopleNodes(people).forEach(p => mTrust.append(podMember(p.id, '👤', p.title, p.sub, p.dot, p.state, 'sovereign')));
 
       const mtSt = execState(sums.mantis);
       mTrust.append(podMember('mantis', '🛡️', 'Google Mantis AppSec', '19 autonomous AppSec scanning skills', mtSt[0], mtSt[1], 'autonomous'));
@@ -596,7 +645,39 @@
       mTrust.append(podMember('openclaw-gw', '🦁', 'OpenClaw Gateway', 'MCP Tool Security Router (:18789)', ocSt[0], ocSt[1], 'autonomous'));
     }
 
-    function renderHierarchy(tel, runs) {
+    // Tier 3b: one node per agency-agents division, with how many of its
+    // specialists ran in the last 7 days (local run log records the slug).
+    function renderSpecialists(catalog, localRuns) {
+      const tier = document.getElementById('tier-specialists');
+      tier.replaceChildren();
+      const list = (catalog && catalog.specialists) || [];
+      if (!list.length) { tier.append(el('div', 'muted', 'No specialists imported (scripts/sync-specialists.js).')); return; }
+      const weekAgo = Date.now() - 7 * 864e5;
+      const used = {};
+      (localRuns || []).forEach(r => {
+        if (r.specialist && Date.parse(r.started_at) >= weekAgo) used[r.specialist] = (used[r.specialist] || 0) + 1;
+      });
+      const byDiv = {};
+      list.forEach(s => { (byDiv[s.division] = byDiv[s.division] || { label: s.divisionLabel, items: [] }).items.push(s); });
+      Object.entries(byDiv).sort((a, b) => b[1].items.length - a[1].items.length).forEach(([div, d]) => {
+        const runsHere = d.items.reduce((n, s) => n + (used[s.slug] || 0), 0);
+        const id = 'spec-' + div;
+        tier.append(node(id, '🎭 ' + d.label, d.items.length + ' specialists', runsHere ? 'green' : '', runsHere ? runsHere + (runsHere === 1 ? ' run' : ' runs') + ' this week' : 'available'));
+        const top = d.items.filter(s => used[s.slug]).sort((a, b) => used[b.slug] - used[a.slug]).slice(0, 3);
+        details[id] = [
+          ['Decision Rights', '🟢 Role guidance for an executor (cannot override task, rules or tool limits)'],
+          ['Division', d.label + ' · ' + d.items.length + ' specialists'],
+          ['Used this week', top.length ? top.map(s => (s.emoji || '') + ' ' + s.name + ' (' + used[s.slug] + ')').join(', ') : 'none yet'],
+          ['Examples', d.items.slice(0, 4).map(s => s.name).join(', ')],
+          ['Source', 'agency-agents (MIT) @ ' + String(catalog.commit || '').slice(0, 7)],
+          ['How to use', 'Agents page picker or a specialist:<slug> issue label; auto-picked when absent']
+        ];
+      });
+    }
+
+    function renderHierarchy(tel, runs, people, runsSource, catalog, localRuns) {
+      renderPeople(people);
+      renderSpecialists(catalog, localRuns);
       const svc = tel.services || {};
       const roles = tel.agentStats || {};
       const ollama = svcState(svc.ollama);
@@ -604,7 +685,7 @@
       // Tier 1: Governance
       const gt = document.getElementById('tier-gov'); gt.replaceChildren();
       const pStats = (tel.engineStats || {}).paperclip || {};
-      gt.append(node('paperclip', '🖇️ Paperclip (PMO)', 'Workforce & ReBAC policy', 'green', (pStats.hiredCount || 6) + ' hired agents'));
+      gt.append(node('paperclip', '🖇️ Paperclip (PMO)', 'Workforce & ReBAC policy', pStats.hiredCount ? 'green' : '', pStats.hiredCount ? pStats.hiredCount + ' hired agents' : 'no telemetry'));
 
       const oclawState = svcState(svc.openclaw);
       gt.append(node('openclaw-gw', '🦁 OpenClaw Gateway', 'MCP router · :18789', oclawState[0], oclawState[1]));
@@ -665,7 +746,7 @@
         ['ollama', '🦙 Ollama Metal', 'Local models · :11434', svcState(svc.ollama)],
         ['openclaw', '🦁 OpenClaw MCP', 'Router & gateway · :18789', svcState(svc.openclaw)],
         ['openhands-infra', '👐 OpenHands Canvas', 'Sandbox UI · :8000', svcState(svc.openhands)],
-        ['mantis-infra', '🛡 Google Mantis', (mantis.skillsCount || 19) + ' AppSec skills', ['green', 'ready']]
+        ['mantis-infra', '🛡 Google Mantis', mantis.skillsCount ? mantis.skillsCount + ' AppSec skills' : 'AppSec scanner', mantis.skillsCount ? ['green', 'ready'] : execState(sums.mantis)]
       ];
       const it = document.getElementById('tier-infra'); it.replaceChildren();
       infra.forEach(([id, title, tool, st]) => {
@@ -679,13 +760,6 @@
         ];
       });
 
-      details.operator = [
-        ['Decision Rights', '🔴 Sovereign (Exclusive Human Veto & Merge Sign-Off)'],
-        ['Outcome Pod', 'Pod 3: Sovereign Trust, AppSec & Reliability'],
-        ['Channels', 'GitHub issues (agent:ready), web dashboard dispatch'],
-        ['Access', 'Cloudflare Access Zero Trust - owner email only'],
-        ['Role', 'Supreme Operator directing PMO, PO & Specialists']
-      ];
       details.po = [
         ['Decision Rights', '🟡 Shared (Co-Pilot Gate - scopes objectives & milestones)'],
         ['Outcome Pod', 'Pod 1: Client Solutions & Deal Flow'],
@@ -700,8 +774,8 @@
         ['Role', 'AI PMO & Governance Engine'],
         ['Enforcement', 'ReBAC access boundaries, cost budgets, human-in-the-loop gates'],
         ['Task Board', 'Live TASKS.md 6-stage autonomous pipeline sync'],
-        ['Hired Workforce', (pStats.hiredCount || 6) + ' agent personas'],
-        ['Status', 'Active local controller']
+        ['Hired Workforce', pStats.hiredCount ? pStats.hiredCount + ' agent personas' : 'unknown (no telemetry)'],
+        ['Status', pStats.hiredCount ? 'Active local controller' : 'no telemetry']
       ];
       details['openclaw-gw'] = [
         ['Decision Rights', '🟢 Autonomous Tool & MCP Router'],
@@ -713,7 +787,10 @@
         ['Protocol', 'Stdio / TCP / SSE bridge']
       ];
 
-      document.getElementById('updated').textContent = 'Telemetry ' + (tel.timestamp || 'time unknown') + ' · refreshes every 30 s';
+      document.getElementById('updated').textContent = 'Telemetry ' + (tel.timestamp || 'time unknown')
+        + ' · runs: ' + (runsSource === 'team' ? 'whole team (Supabase)' : 'this Mac only')
+        + ' · people: ' + (people && people.teamStore === 'on' ? 'Supabase' : 'local')
+        + ' · refreshes every 30 s';
     }
 
     function select(id) {
@@ -831,13 +908,20 @@
       loadUser();
       const errBox = document.getElementById('err');
       try {
-        const [tel, runs, tasks] = await Promise.all([
+        // Runs and people come from Supabase when team sharing is on; both
+        // endpoints fall back to this Mac's files on their own.
+        const [tel, runs, tasks, people, catalog, localRunsBody] = await Promise.all([
           fetch('/api/telemetry').then(r => r.json()),
-          fetch('/api/runs').then(r => r.json()).catch(() => ({ runs: [] })),
-          fetch('/api/tasks').then(r => r.json()).catch(() => ({ columns: {} }))
+          fetch('/api/runs?scope=team').then(r => r.json()).catch(() => ({ runs: [] })),
+          fetch('/api/tasks').then(r => r.json()).catch(() => ({ columns: {} })),
+          fetch('/api/context/overview').then(r => r.json()).catch(() => null),
+          fetch('/api/agents/specialists').then(r => r.json()).catch(() => null),
+          fetch('/api/runs').then(r => r.json()).catch(() => ({ runs: [] }))
         ]);
-        renderPods(tel, (runs && runs.runs) || [], tasks);
-        renderHierarchy(tel, (runs && runs.runs) || []);
+        const runList = (runs && runs.runs) || [];
+        const runsSource = runs && runs.source === 'team' ? 'team' : 'local';
+        renderPods(tel, runList, tasks, people);
+        renderHierarchy(tel, runList, people, runsSource, catalog, (localRunsBody && localRunsBody.runs) || []);
         errBox.hidden = true;
         select(currentSelectedNodeId);
       } catch (e) {
