@@ -1156,83 +1156,99 @@
         <!-- Reassuring Non-Tech Safety Badge -->
         <div class="safety-banner">
           <span class="shield-icon">🛡️</span>
-          <div>
-            <b>Safe Sandbox Guarantee:</b>
-            <span class="friendly-only">Your AI teammates work in an isolated draft workspace. Your live website and production files remain 100% untouched until you review and approve.</span>
-            <span class="pro-only">Dispatches run in dedicated isolated git worktrees on dedicated branches (<code>agent/run-...</code>).</span>
+          <div style="flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <b>Safe Sandbox Guarantee:</b>
+              <button type="button" class="collapse-btn" onclick="toggleSection(this, 'safety-banner-desc')" title="Toggle Safety Info" aria-label="Toggle Safety Info">▾</button>
+            </div>
+            <div id="safety-banner-desc" class="collapsible-target">
+              <span class="friendly-only">Your AI teammates work in an isolated draft workspace. Your live website and production files remain 100% untouched until you review and approve.</span>
+              <span class="pro-only">Dispatches run in dedicated isolated git worktrees on dedicated branches (<code>agent/run-...</code>).</span>
+            </div>
           </div>
         </div>
 
         <!-- Step 1: Target Project (Repository) -->
         <div class="card">
           <div class="card-title-row">
-            <h2 class="card-title">
+            <h2 class="card-title" style="display:flex; align-items:center;">
               <span class="step-pill">1</span>
               <span class="friendly-only">Choose Project</span>
               <span class="pro-only">Target Repository</span>
+              <button type="button" class="collapse-btn" onclick="toggleSection(this, 'step1-content')" title="Toggle Project Section" aria-label="Toggle Project Section">▾</button>
             </h2>
             <span class="muted friendly-only" style="font-size:0.75rem;">Where the work happens</span>
           </div>
 
-          <div id="repo-list" role="radiogroup" aria-label="Repository">
-            <div class="empty">Loading projects…</div>
-          </div>
-
-          <div class="reco" id="repo-reco" hidden></div>
-
-          <details class="add" id="add-repo" hidden>
-            <summary>+ Add another project or repository</summary>
-            <div class="tabs" role="tablist">
-              <button class="tab" type="button" role="tab" data-tab="local" aria-selected="true">Local folder</button>
-              <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">From Git URL</button>
+          <div id="step1-content" class="collapsible-target">
+            <div id="repo-list" role="radiogroup" aria-label="Repository">
+              <div class="empty">Loading projects…</div>
             </div>
-            <form id="add-local" autocomplete="off">
-              <div class="inline">
-                <input class="f" id="local-path" placeholder="~/projects/my-app" aria-label="Folder path" required>
-                <button class="btn-sm" type="submit">Add</button>
+
+            <div class="reco" id="repo-reco" hidden></div>
+
+            <details class="add" id="add-repo" hidden>
+              <summary>+ Add another project or repository</summary>
+              <div class="tabs" role="tablist">
+                <button class="tab" type="button" role="tab" data-tab="local" aria-selected="true">Local folder</button>
+                <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">From Git URL</button>
               </div>
-              <div class="muted" style="margin-top:6px">A folder on this Mac.</div>
-              <div class="suggest" id="found" hidden></div>
-            </form>
-            <form id="add-git" autocomplete="off" hidden>
-              <div class="inline">
-                <input class="f" id="git-url" placeholder="https://github.com/owner/repo" aria-label="Git URL" required>
-                <button class="btn-sm" type="submit">Clone</button>
-              </div>
-              <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span>.</div>
-            </form>
-            <div class="msg" id="repo-msg" role="status"></div>
-            <div class="warn-note">⚠ Agents read and run this repo's code. Add only repositories you trust.</div>
-          </details>
+              <form id="add-local" autocomplete="off">
+                <div class="inline">
+                  <input class="f" id="local-path" placeholder="~/projects/my-app" aria-label="Folder path" required>
+                  <button class="btn-sm" type="submit">Add</button>
+                </div>
+                <div class="muted" style="margin-top:6px">A folder on this Mac.</div>
+                <div class="suggest" id="found" hidden></div>
+              </form>
+              <form id="add-git" autocomplete="off" hidden>
+                <div class="inline">
+                  <input class="f" id="git-url" placeholder="https://github.com/owner/repo" aria-label="Git URL" required>
+                  <button class="btn-sm" type="submit">Clone</button>
+                </div>
+                <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span>.</div>
+              </form>
+              <div class="msg" id="repo-msg" role="status"></div>
+              <div class="warn-note">⚠ Agents read and run this repo's code. Add only repositories you trust.</div>
+            </details>
+          </div>
         </div>
 
         <!-- Step 2: Assign Teammate & Task -->
         <div class="card">
           <div class="card-title-row">
-            <h2 class="card-title">
+            <h2 class="card-title" style="display:flex; align-items:center;">
               <span class="step-pill">2</span>
               <span class="friendly-only">Assign Teammate & Task</span>
               <span class="pro-only">Task Specification</span>
+              <button type="button" class="collapse-btn" onclick="toggleSection(this, 'step2-content')" title="Toggle Task Section" aria-label="Toggle Task Section">▾</button>
             </h2>
           </div>
 
-          <!-- Role Selector -->
-          <div class="roles-container">
-            <span class="roles-label">
-              <span class="friendly-only">Select your teammate persona:</span>
-              <span class="pro-only">I'm working as:</span>
-            </span>
-            <div id="roles" class="roles-grid"></div>
-          </div>
-
-          <form id="task-form" autocomplete="off">
-            <!-- 1-Click Starters -->
-            <div class="starters-box">
-              <div class="muted" id="starters-label" style="font-size:0.76rem; margin-bottom:5px;">
-                Start from a common goal, or type your own:
+          <div id="step2-content" class="collapsible-target">
+            <!-- Role Selector -->
+            <div class="roles-container">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span class="roles-label" style="margin-bottom:0;">
+                  <span class="friendly-only">Select your teammate persona:</span>
+                  <span class="pro-only">I'm working as:</span>
+                </span>
+                <button type="button" class="collapse-btn" onclick="toggleSection(this, 'roles')" title="Toggle Personas" aria-label="Toggle Personas">▾</button>
               </div>
-              <div class="starters" id="starters"></div>
+              <div id="roles" class="roles-grid collapsible-target"></div>
             </div>
+
+            <form id="task-form" autocomplete="off">
+              <!-- 1-Click Starters -->
+              <div class="starters-box">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                  <div class="muted" id="starters-label" style="font-size:0.76rem; margin-bottom:0;">
+                    Start from a common goal, or type your own:
+                  </div>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'starters')" title="Toggle Starters" aria-label="Toggle Starters">▾</button>
+                </div>
+                <div class="starters collapsible-target" id="starters"></div>
+              </div>
 
             <!-- Task Title with Voice Input -->
             <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 5px;">
@@ -1317,6 +1333,7 @@
 
             <div class="msg" id="msg" role="status"></div>
           </form>
+          </div>
         </div>
       </section>
 
@@ -1329,11 +1346,14 @@
             <button class="cockpit-tab-btn active" id="tab-btn-live" type="button" role="tab">
               ⚡ Live Activity
             </button>
+            <button class="cockpit-tab-btn" id="tab-btn-preview" type="button" role="tab">
+              👁️ Preview &amp; Deliverables
+            </button>
             <button class="cockpit-tab-btn" id="tab-btn-board" type="button" role="tab">
               📌 Pipeline Board
             </button>
             <button class="cockpit-tab-btn" id="tab-btn-threads" type="button" role="tab">
-              💬 Chat Threads & History
+              💬 Chat Threads &amp; History
             </button>
           </div>
           <span class="muted friendly-only" style="font-size:0.76rem;">Auto-refreshes every 5s</span>
@@ -1345,13 +1365,14 @@
           <section id="view-live" class="active">
             <div class="card">
               <div class="card-title-row">
-                <h2 class="card-title">
+                <h2 class="card-title" style="display:flex; align-items:center;">
                   <span class="pulse"></span>
                   <span class="friendly-only">Tasks in Progress</span>
                   <span class="pro-only">Running Executions</span>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'running')" title="Toggle Active Tasks" aria-label="Toggle Active Tasks">▾</button>
                 </h2>
               </div>
-              <div id="running" class="running-box">
+              <div id="running" class="running-box collapsible-target">
                 <div class="empty">Checking for active tasks…</div>
               </div>
             </div>
@@ -1365,6 +1386,7 @@
                     Task Log: <span class="mono" id="log-id"></span>
                     <span class="muted" id="log-status"></span>
                   </h3>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'log')" title="Toggle Log View" aria-label="Toggle Log View">▾</button>
                 </div>
                 <div style="display:flex; gap:10px; align-items:center;">
                   <label class="muted" style="display:flex; gap:5px; align-items:center; font-size:0.75rem;">
@@ -1373,24 +1395,98 @@
                   <button class="btn-sm" id="log-close" type="button">Close</button>
                 </div>
               </div>
-              <pre class="log" id="log"></pre>
+              <pre class="log collapsible-target" id="log"></pre>
             </div>
           </section>
 
-          <!-- View 2: Pipeline Kanban Board -->
+          <!-- View 2: Visual Deliverable & Repository Code Preview -->
+          <section id="view-preview">
+            <div class="card" style="margin-bottom:16px;">
+              <div class="card-title-row">
+                <h2 class="card-title" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+                  <span>👁️</span>
+                  <span>Active Workspace Preview: <strong id="preview-active-repo" style="color:var(--status-blue); font-family:'JetBrains Mono',monospace;">fuzzy-octo-eureka</strong></span>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'preview-workspace-summary')" title="Toggle Workspace Summary" aria-label="Toggle Workspace Summary">▾</button>
+                </h2>
+                <div style="display:flex; gap:8px;">
+                  <button type="button" class="btn-sm" id="btn-refresh-preview" onclick="loadWorkspacePreview()">🔄 Refresh</button>
+                  <button type="button" class="btn-sm" onclick="window.open('/canvas', '_blank')">👐 Open Canvas</button>
+                </div>
+              </div>
+
+              <!-- Quick File & Structure Preview -->
+              <div id="preview-workspace-summary" class="collapsible-target" style="margin-top:12px; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+                  <span style="font-weight:600; color:#fff;">📁 Repository File Tree &amp; State</span>
+                  <span class="mono muted" id="preview-repo-path" style="font-size:0.75rem;">Loading path...</span>
+                </div>
+                <div id="preview-files-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;"></div>
+                <div style="font-weight:600; color:#fff; margin-bottom:6px;">📖 README / Specification Overview:</div>
+                <div id="preview-readme-text" class="mono" style="font-size:0.78rem; color:#cbd5e1; max-height:220px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:10px 14px; border-radius:6px; white-space:pre-wrap; border:1px solid rgba(255,255,255,0.06);">Loading README overview...</div>
+              </div>
+            </div>
+
+            <!-- Latest Task Deliverable Preview -->
+            <div class="card">
+              <div class="card-title-row">
+                <h2 class="card-title" style="display:flex; align-items:center;">
+                  <span>📄</span>
+                  <span>Latest Run Deliverable &amp; Code Changes</span>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'preview-latest-deliverable-body')" title="Toggle Deliverable Details" aria-label="Toggle Deliverable Details">▾</button>
+                </h2>
+                <div id="preview-latest-run-badge" class="muted" style="font-size:0.75rem;"></div>
+              </div>
+              <div id="preview-latest-deliverable-body" class="collapsible-target" style="margin-top:10px;">
+                <div class="empty">Select a completed run or dispatch a task to inspect deliverables.</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- View 3: Pipeline Kanban Board -->
           <section id="view-board">
-            <div class="board" id="board"></div>
+            <div class="card-title-row" style="margin-bottom:12px;">
+              <h2 class="card-title" style="display:flex; align-items:center;">
+                <span>📌</span>
+                <span>Pipeline Stage Board</span>
+                <button type="button" class="collapse-btn" onclick="toggleSection(this, 'board')" title="Toggle Kanban Board" aria-label="Toggle Kanban Board">▾</button>
+              </h2>
+            </div>
+            <div class="board collapsible-target" id="board"></div>
             <div class="muted" id="queue-note" style="margin:-6px 0 16px; font-size:0.76rem;"></div>
           </section>
 
-          <!-- View 3: Chat Threads & Previous Sessions -->
+          <!-- View 4: Chat Threads & Previous Sessions -->
           <section id="view-threads">
+            <!-- Direct Teammate Live Chat in Agents Page -->
             <div class="card" style="margin-bottom:16px;">
               <div class="card-title-row">
-                <h2 class="card-title">
+                <h2 class="card-title" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
                   <span>💬</span>
+                  <span>Chat with Teammate (<strong id="agents-chat-repo-label" style="color:var(--status-blue); font-family:'JetBrains Mono',monospace;">fuzzy-octo-eureka</strong>)</span>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'agents-direct-chat-wrapper')" title="Toggle Teammate Chat" aria-label="Toggle Teammate Chat">▾</button>
+                </h2>
+                <span class="muted friendly-only" style="font-size:0.74rem;">Powered by local models &amp; repo memory</span>
+              </div>
+              <div id="agents-direct-chat-wrapper" class="collapsible-target" style="margin-top:10px;">
+                <div class="agent-chat-messages" id="agents-page-chat-messages" style="max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:10px;">
+                  <div class="chat-bubble agent" style="font-size:0.8rem; padding:8px 12px; line-height:1.4;">
+                    <strong>🧭 Teammate:</strong> Ready to assist with <code id="agents-chat-repo-chip">fuzzy-octo-eureka</code>. Ask questions about the codebase, plan tasks, or type <code>/remember: &lt;rule&gt;</code>.
+                  </div>
+                </div>
+                <div class="agent-chat-input-row" style="display:flex; gap:8px;">
+                  <input type="text" class="f" id="agents-page-chat-input" placeholder="Message the team about this repo..." style="flex:1;" onkeydown="if(event.key==='Enter') sendAgentsPageChatMessage()">
+                  <button type="button" class="btn-sm" id="btn-agents-page-chat-send" onclick="sendAgentsPageChatMessage()" style="background:#0284c7; color:#fff; font-weight:600; padding:6px 14px;">Send</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin-bottom:16px;">
+              <div class="card-title-row">
+                <h2 class="card-title" style="display:flex; align-items:center;">
+                  <span>📜</span>
                   <span class="friendly-only">Conversational Task Threads</span>
                   <span class="pro-only">Previous Sessions & Lineage</span>
+                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'threads-container')" title="Toggle Session Threads" aria-label="Toggle Session Threads">▾</button>
                 </h2>
                 <div style="display:flex; gap:8px;">
                   <button type="button" class="btn-sm" id="btn-export-transcripts" title="Export markdown summary">
@@ -1401,7 +1497,7 @@
               <div class="muted friendly-only" style="font-size:0.78rem; margin-bottom:12px;">
                 Review past task deliverables, see files changed, and continue conversations in the exact same workspace.
               </div>
-              <div id="threads-container" class="threads-list">
+              <div id="threads-container" class="threads-list collapsible-target">
                 <div class="empty">Loading session history…</div>
               </div>
             </div>

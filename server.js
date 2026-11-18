@@ -1088,6 +1088,44 @@ function handleRequest(req, res) {
       .catch(() => sendJson(res, 500, { ok: false, error: 'could not build the context view' }));
     return;
   }
+  if (req.url.startsWith('/api/agents/repo/preview') && req.method === 'GET') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const repoName = parsedUrl.searchParams.get('repo') || path.basename(DASHBOARD_DIR);
+    const repoPath = resolveRepoPath(repoName);
+    if (!repoPath || !fs.existsSync(repoPath)) {
+      return sendJson(res, 404, { ok: false, error: `repository '${repoName}' not found on disk` });
+    }
+
+    let files = [];
+    try {
+      files = fs.readdirSync(repoPath)
+        .filter(f => !f.startsWith('.') && f !== 'node_modules' && f !== '.git')
+        .slice(0, 30);
+    } catch (_) {}
+
+    let readme = '';
+    try {
+      const readmePath = path.join(repoPath, 'README.md');
+      if (fs.existsSync(readmePath)) {
+        readme = fs.readFileSync(readmePath, 'utf8').slice(0, 4000);
+      }
+    } catch (_) {}
+
+    let latestRun = null;
+    try {
+      const runs = (readRuns(RUNS_FILE, 50).runs || []).filter(r => r.repo === repoName);
+      latestRun = runs[0] || null;
+    } catch (_) {}
+
+    return sendJson(res, 200, {
+      ok: true,
+      repo: repoName,
+      path: repoPath,
+      files,
+      readme,
+      latestRun
+    });
+  }
   if (req.url.startsWith('/api/agents/')) {
     if (agentsApi.handle(req, res, { sendJson, readJsonBody })) return;
     return sendJson(res, 404, { ok: false, error: 'not found' });
@@ -1319,6 +1357,39 @@ function handleRequest(req, res) {
           }
         }
 
+        let repoContext = `\n\n---\nActive Target Repository: ${targetRepo} (${targetRepoPath})`;
+        try {
+          if (targetRepoPath && fs.existsSync(targetRepoPath)) {
+            const files = fs.readdirSync(targetRepoPath)
+              .filter(f => !f.startsWith('.') && f !== 'node_modules' && f !== '.git')
+              .slice(0, 25);
+            if (files.length > 0) {
+              repoContext += `\nTop-level files & directories: ${files.join(', ')}`;
+            }
+
+            const readmePath = path.join(targetRepoPath, 'README.md');
+            if (fs.existsSync(readmePath)) {
+              const readmeContent = fs.readFileSync(readmePath, 'utf8').slice(0, 1500).replace(/\r?\n+/g, ' ');
+              repoContext += `\nREADME excerpt: ${readmeContent}`;
+            }
+
+            const pkgPath = path.join(targetRepoPath, 'package.json');
+            if (fs.existsSync(pkgPath)) {
+              try {
+                const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+                if (pkg.description) repoContext += `\nPackage description: ${pkg.description}`;
+                if (pkg.scripts) repoContext += `\nScripts: ${Object.keys(pkg.scripts).slice(0, 8).join(', ')}`;
+              } catch (_) {}
+            } else {
+              const reqTxt = path.join(targetRepoPath, 'requirements.txt');
+              if (fs.existsSync(reqTxt)) {
+                const reqs = fs.readFileSync(reqTxt, 'utf8').split('\n').filter(Boolean).slice(0, 10).join(', ');
+                repoContext += `\nPython requirements: ${reqs}`;
+              }
+            }
+          }
+        } catch (_) {}
+
         let contextBlock = '';
         try {
           const memories = await dispatchMemories(targetRepo, userMessage);
@@ -1329,7 +1400,7 @@ function handleRequest(req, res) {
         } catch (_) {}
 
         const baseSystemPrompt = agentSystemPrompts[agentKey] || agentSystemPrompts.po;
-        const systemPrompt = baseSystemPrompt + contextBlock;
+        const systemPrompt = baseSystemPrompt + repoContext + contextBlock;
         const ollamaReqData = JSON.stringify({
           model: PERSONA_MODEL,
           messages: [

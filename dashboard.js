@@ -635,6 +635,54 @@
       }
     }
 
+    function handleChatRepoChange(newRepo) {
+      if (newRepo) {
+        try { localStorage.setItem('agentChat.repo', newRepo); } catch (_) {}
+      }
+      const messagesEl = document.getElementById('id-agent-chat-messages');
+      if (messagesEl && newRepo) {
+        const notifyBubble = document.createElement('div');
+        notifyBubble.className = 'chat-bubble agent';
+        notifyBubble.style.opacity = '0.85';
+        notifyBubble.innerHTML = `<span style="font-size:0.75rem; color:var(--color-primary);">📂 Switched active context to <strong>${escapeHtml(newRepo)}</strong>. Autonomous directives &amp; queries will focus on this repository.</span>`;
+        messagesEl.appendChild(notifyBubble);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+    }
+
+    async function loadChatRepos() {
+      const repoSelect = document.getElementById('id-agent-chat-repo');
+      if (!repoSelect) return;
+      try {
+        const res = await fetch('/api/agents/repos');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.repos) && data.repos.length > 0) {
+          const prevVal = repoSelect.value || localStorage.getItem('agentChat.repo');
+          repoSelect.replaceChildren();
+          data.repos.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.name;
+            opt.textContent = `${r.name}${r.name === 'fuzzy-octo-eureka' ? ' (Current)' : ''}`;
+            repoSelect.appendChild(opt);
+          });
+          if (prevVal && Array.from(repoSelect.options).some(o => o.value === prevVal)) {
+            repoSelect.value = prevVal;
+          }
+        }
+      } catch (_) {}
+    }
+
+    function toggleSection(btn, targetId) {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      const isCollapsed = target.classList.toggle('collapsed');
+      if (btn) {
+        btn.classList.toggle('collapsed', isCollapsed);
+        btn.setAttribute('aria-expanded', String(!isCollapsed));
+        btn.title = isCollapsed ? 'Expand section' : 'Collapse section';
+      }
+    }
+
     function sendAgentMessage() {
       const inputEl = document.getElementById('id-agent-chat-input');
       const messagesEl = document.getElementById('id-agent-chat-messages');
@@ -642,6 +690,9 @@
 
       const message = inputEl.value.trim();
       if (!message) return;
+
+      const repoSelectEl = document.getElementById('id-agent-chat-repo');
+      const repo = repoSelectEl ? repoSelectEl.value : 'fuzzy-octo-eureka';
 
       // Append user bubble
       const userBubble = document.createElement('div');
@@ -662,7 +713,7 @@
       fetch('/api/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, agent: currentSelectedAgent })
+        body: JSON.stringify({ message, agent: currentSelectedAgent, repo })
       })
         .then(res => res.json())
         .then(data => {
@@ -2028,9 +2079,13 @@
     window.downloadFilteredTranscript = downloadFilteredTranscript;
     window.clearCurrentAgentChat = clearCurrentAgentChat;
     window.loadAgentChatHistory = loadAgentChatHistory;
+    window.toggleSection = toggleSection;
+    window.handleChatRepoChange = handleChatRepoChange;
+    window.loadChatRepos = loadChatRepos;
 
     // ---------------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------------
+    loadChatRepos();
     startTelemetryPolling();
     startOpenclawPolling();

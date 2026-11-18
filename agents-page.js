@@ -48,9 +48,24 @@
   try { savedMode = localStorage.getItem('agents.uiMode') || 'friendly'; } catch (_) {}
   setUiMode(savedMode);
 
+  let activeSelectedRepo = 'fuzzy-octo-eureka';
+
+  // ---- Universal Collapsible Toggle -------------------------------------
+  window.toggleSection = function(btn, targetId) {
+    const target = $(targetId) || document.getElementById(targetId);
+    if (!target) return;
+    const isCollapsed = target.classList.toggle('collapsed');
+    if (btn) {
+      btn.classList.toggle('collapsed', isCollapsed);
+      btn.setAttribute('aria-expanded', String(!isCollapsed));
+      btn.title = isCollapsed ? 'Expand section' : 'Collapse section';
+    }
+  };
+
   // ---- Cockpit Segmented Tab Navigation ---------------------------------
   const cockpitTabs = [
     { btn: 'tab-btn-live', view: 'view-live' },
+    { btn: 'tab-btn-preview', view: 'view-preview' },
     { btn: 'tab-btn-board', view: 'view-board' },
     { btn: 'tab-btn-threads', view: 'view-threads' },
   ];
@@ -63,6 +78,9 @@
       if (b) b.classList.toggle('active', isTarget);
       if (v) v.classList.toggle('active', isTarget);
     });
+    if (btnId === 'tab-btn-preview') {
+      loadWorkspacePreview(activeSelectedRepo);
+    }
   }
 
   cockpitTabs.forEach(({ btn }) => {
@@ -834,6 +852,144 @@
       }
     });
   }
+
+  // ---- Workspace Preview & Interactive Teammate Chat --------------------
+  async function loadWorkspacePreview(repoName) {
+    const repo = repoName || activeSelectedRepo || 'fuzzy-octo-eureka';
+    const pathEl = $('preview-repo-path');
+    const filesEl = $('preview-files-list');
+    const readmeEl = $('preview-readme-text');
+    const delivEl = $('preview-latest-deliverable-body');
+    const badgeEl = $('preview-latest-run-badge');
+
+    if (pathEl) pathEl.textContent = 'Fetching preview...';
+
+    try {
+      const res = await fetch(`/api/agents/repo/preview?repo=${encodeURIComponent(repo)}`);
+      const data = await res.json();
+      if (!data.ok) {
+        if (pathEl) pathEl.textContent = data.error || 'Preview unavailable';
+        return;
+      }
+
+      if (pathEl) pathEl.textContent = data.path || repo;
+
+      if (filesEl) {
+        filesEl.replaceChildren();
+        if (Array.isArray(data.files) && data.files.length > 0) {
+          data.files.forEach(f => {
+            const isDir = !f.includes('.');
+            const chip = el('span', {
+              style: 'display:inline-flex; align-items:center; gap:4px; padding:3px 8px; font-size:0.75rem; border-radius:4px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); font-family:monospace;'
+            }, `${isDir ? '📁' : '📄'} ${f}`);
+            filesEl.appendChild(chip);
+          });
+        } else {
+          filesEl.appendChild(el('span', { className: 'muted' }, 'No files found in root.'));
+        }
+      }
+
+      if (readmeEl) {
+        readmeEl.textContent = data.readme || 'No README.md found in this repository.';
+      }
+
+      if (delivEl && badgeEl) {
+        if (data.latestRun) {
+          const lr = data.latestRun;
+          badgeEl.textContent = `Run ${lr.id} · ${lr.agent || 'agent'} · Status: ${lr.status || 'finished'}`;
+          delivEl.replaceChildren();
+          const card = el('div', { style: 'font-size:0.82rem; line-height:1.5;' },
+            el('div', { style: 'font-weight:600; color:#fff; margin-bottom:4px;' }, `Task: ${lr.task || 'Autonomous Execution'}`),
+            el('div', { className: 'muted', style: 'margin-bottom:8px;' }, lr.branch ? `Branch: ${lr.branch}` : ''),
+            el('div', { style: 'display:flex; gap:8px;' },
+              el('button', {
+                className: 'btn-sm',
+                type: 'button',
+                textContent: '📜 Inspect Full Log',
+                onclick: () => openLog(lr.id)
+              }),
+              el('button', {
+                className: 'btn-sm',
+                type: 'button',
+                textContent: '💬 Open Follow-up Thread',
+                onclick: () => {
+                  switchCockpitTab('tab-btn-threads');
+                  toggleFollowUp(lr, $('threads-container'));
+                }
+              })
+            )
+          );
+          delivEl.appendChild(card);
+        } else {
+          badgeEl.textContent = 'No past runs for this repo yet';
+          delivEl.replaceChildren(el('div', { className: 'empty' }, `Ready to run your first task on ${repo}! Assign a task in Step 2.`));
+        }
+      }
+    } catch (err) {
+      if (pathEl) pathEl.textContent = 'Error loading preview: ' + err.message;
+    }
+  }
+
+  window.loadWorkspacePreview = loadWorkspacePreview;
+
+  window.onRepoSelectionChanged = function(repoName) {
+    if (!repoName) return;
+    activeSelectedRepo = repoName;
+    const previewRepoEl = $('preview-active-repo');
+    if (previewRepoEl) previewRepoEl.textContent = repoName;
+    const chatRepoLabel = $('agents-chat-repo-label');
+    if (chatRepoLabel) chatRepoLabel.textContent = repoName;
+    const chatRepoChip = $('agents-chat-repo-chip');
+    if (chatRepoChip) chatRepoChip.textContent = repoName;
+
+    // Load preview if the preview tab is visible
+    loadWorkspacePreview(repoName);
+  };
+
+  async function sendAgentsPageChatMessage() {
+    const input = $('agents-page-chat-input');
+    const box = $('agents-page-chat-messages');
+    if (!input || !box) return;
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    // Append user bubble
+    const userBubble = el('div', { className: 'chat-bubble user', style: 'font-size:0.8rem; padding:8px 12px; margin-bottom:8px; text-align:right;' },
+      el('span', { style: 'background:#0284c7; color:#fff; padding:6px 12px; border-radius:8px; display:inline-block;' }, msg)
+    );
+    box.appendChild(userBubble);
+    input.value = '';
+    box.scrollTop = box.scrollHeight;
+
+    // Typing bubble
+    const typing = el('div', { id: 'agents-page-typing', className: 'muted', style: 'font-size:0.75rem; margin-bottom:8px;' },
+      'Teammate reasoning with repo context...'
+    );
+    box.appendChild(typing);
+    box.scrollTop = box.scrollHeight;
+
+    const repo = activeSelectedRepo || 'fuzzy-octo-eureka';
+    try {
+      const res = await fetch('/api/agent/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, agent: 'po', repo })
+      });
+      const data = await res.json();
+      typing.remove();
+
+      const replyBubble = el('div', { className: 'chat-bubble agent', style: 'font-size:0.8rem; padding:8px 12px; margin-bottom:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px;' });
+      replyBubble.innerHTML = `<strong>🧭 Teammate:</strong><div style="margin-top:4px; line-height:1.5;">${(data.reply || 'Task acknowledged.').replace(/\n/g, '<br>')}</div>`;
+      box.appendChild(replyBubble);
+      box.scrollTop = box.scrollHeight;
+    } catch (err) {
+      typing.remove();
+      const errBubble = el('div', { style: 'color:var(--status-red); font-size:0.75rem;' }, 'Chat failed: ' + err.message);
+      box.appendChild(errBubble);
+    }
+  }
+
+  window.sendAgentsPageChatMessage = sendAgentsPageChatMessage;
 
   // Shared with agents-workspace.js (repos, roles, task submit).
   window.AgentsPage = { refresh, openLog, openDeliverable, setSpecialist, setRole, el, $ };

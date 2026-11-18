@@ -156,6 +156,9 @@
         store.set('agents.repo', r.name);
         renderRepos();
         renderMode();
+        if (typeof window.onRepoSelectionChanged === 'function') {
+          window.onRepoSelectionChanged(r.name);
+        }
       };
       row.addEventListener('click', pick);
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
@@ -219,6 +222,9 @@
       renderReco(b.suggestions || []);
       renderFound(b.suggestions || []);
       renderMode();
+      if (typeof window.onRepoSelectionChanged === 'function' && current) {
+        window.onRepoSelectionChanged(current);
+      }
     } catch (_) {
       const rl = $('repo-list');
       if (rl) rl.replaceChildren(el('div', { className: 'empty', textContent: 'Could not load repositories.' }));

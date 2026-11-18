@@ -111,10 +111,11 @@
               <div class="action-group">
                 <button class="btn btn-secondary" onclick="triggerStatusSweep()">🔄 Run Status Sweep</button>
                 <button class="btn btn-primary" onclick="testOllamaHandshake()">⚡ Test Handshake</button>
+                <button class="collapse-btn" onclick="toggleSection(this, 'id-metrics-row')" title="Toggle Metrics Row" aria-label="Toggle Metrics">▾</button>
               </div>
             </section>
 
-            <section class="metrics-row">
+            <section class="metrics-row collapsible-target" id="id-metrics-row">
               <div class="metric-card">
                 <div class="metric-header">Host CPU Load</div>
                 <div class="metric-value" id="id-cpu-val">12.4%</div>
@@ -167,16 +168,20 @@
 
             <!-- ==================== VISUAL AGENT SPAWNING & TOOL EXECUTION FLOW ==================== -->
             <section class="flow-diagram-wrapper">
-              <div class="card-header" style="margin-bottom:0; padding-bottom:12px; border-bottom:1px solid var(--border-color);">
+              <div class="card-header" style="margin-bottom:0; padding-bottom:12px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                 <div class="card-title">
                   <span class="card-title-icon">🕸️</span>
                   <h3>Live Subagent Spawning & Tool Execution Topology</h3>
                 </div>
-                <span class="status-badge"><span class="status-dot green"></span>Autonomous Loop Active</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="status-badge"><span class="status-dot green"></span>Autonomous Loop Active</span>
+                  <button class="collapse-btn" onclick="toggleSection(this, 'id-flow-body-wrapper')" title="Toggle Spawning Topology" aria-label="Toggle Topology">▾</button>
+                </div>
               </div>
 
-              <!-- Pipeline Flow Bar -->
-              <div class="flow-live-pipeline">
+              <div id="id-flow-body-wrapper" class="collapsible-target">
+                <!-- Pipeline Flow Bar -->
+                <div class="flow-live-pipeline">
                 <div class="pipeline-node"><span class="status-dot green"></span><strong>Operator Directive</strong></div>
                 <div class="pipeline-arrow">➔</div>
                 <div class="pipeline-node"><span class="flow-node-badge amber">🖇️ Paperclip (PMO &amp; ReBAC)</span></div>
@@ -271,6 +276,7 @@
                   </div>
                 </div>
               </div>
+              </div>
             </section>
 
             <section class="card" style="margin-top: 24px;">
@@ -279,9 +285,12 @@
                   <span class="card-title-icon">📡</span>
                   <h3>System Handshake & Health Diagnostics</h3>
                 </div>
-                <span class="status-badge"><span class="status-dot green"></span>Active Diagnostics</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="status-badge"><span class="status-dot green"></span>Active Diagnostics</span>
+                  <button class="collapse-btn" onclick="toggleSection(this, 'id-handshake-logs')" title="Toggle Handshake Logs" aria-label="Toggle Handshake">▾</button>
+                </div>
               </div>
-              <div class="log-panel" id="id-handshake-logs">
+              <div class="log-panel collapsible-target" id="id-handshake-logs">
                 <div class="log-entry success">[18:30:01] [system] Arunachala Operations Dashboard initialized.</div>
                 <div class="log-entry info">[18:30:02] [probe] Checking local Ollama endpoint at http://127.0.0.1:11434...</div>
                 <div class="log-entry success">[18:30:03] [handshake] Ollama HTTP Response 200 OK. Available models: gemma3:4b, qwen2.5-coder:3b, nomic-embed-text.</div>
@@ -659,39 +668,56 @@
                   </div>
 
                   <div>
-                    <span class="metric-header">System Instructions / Identity</span>
-                    <pre id="id-detail-prompt" style="background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; font-size:0.8rem; color:#b0bec5; font-family:'JetBrains Mono', monospace; white-space:pre-wrap; border:1px solid var(--border-color); margin-top:4px;">You are:
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                      <span class="metric-header" style="margin-bottom:0;">System Instructions / Identity</span>
+                      <button class="collapse-btn" onclick="toggleSection(this, 'id-detail-prompt')" title="Toggle Identity" aria-label="Toggle Identity">▾</button>
+                    </div>
+                    <pre id="id-detail-prompt" class="collapsible-target" style="background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; font-size:0.8rem; color:#b0bec5; font-family:'JetBrains Mono', monospace; white-space:pre-wrap; border:1px solid var(--border-color); margin-top:4px;">You are:
   Arunachala Ramana
     Vibe: Calm, strategic, practical, precise
     Role: High-level product strategy, backlog management, and orchestration of engineering and QA subagents.</pre>
                   </div>
 
                   <div>
-                    <span class="metric-header">Current Focus & Milestones</span>
-                    <p id="id-detail-task" style="font-size:0.85rem; color:var(--color-text-muted); margin-top:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                      <span class="metric-header" style="margin-bottom:0;">Current Focus & Milestones</span>
+                      <button class="collapse-btn" onclick="toggleSection(this, 'id-detail-task')" title="Toggle Focus" aria-label="Toggle Focus">▾</button>
+                    </div>
+                    <p id="id-detail-task" class="collapsible-target" style="font-size:0.85rem; color:var(--color-text-muted); margin-top:4px;">
                       Directing the overall workspace restructuring, relocation of OpenClaw and Hermes engines, and model latency benchmarks.
                     </p>
                   </div>
 
                   <!-- Direct Agent Communicator (Track 5) -->
                   <div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                      <span class="metric-header" style="margin-bottom:0;">Direct Communicator</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="metric-header" style="margin-bottom:0;">Direct Communicator</span>
+                        <div style="display:flex; align-items:center; gap:4px;">
+                          <label for="id-agent-chat-repo" style="font-size:0.72rem; color:var(--color-text-muted);">Repo:</label>
+                          <select id="id-agent-chat-repo" class="form-select" style="font-size:0.75rem; padding:2px 8px; height:26px; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); color:var(--color-text); border-radius:4px; max-width:200px;" onchange="handleChatRepoChange(this.value)">
+                            <option value="fuzzy-octo-eureka">fuzzy-octo-eureka (Current)</option>
+                          </select>
+                        </div>
+                        <button class="collapse-btn" onclick="toggleSection(this, 'id-agent-chat-wrapper-target')" title="Toggle Communicator" aria-label="Toggle Communicator">▾</button>
+                      </div>
                       <div style="display:flex; gap:6px;">
                         <button class="btn btn-secondary" onclick="openTranscriptsTimelineModal()" style="font-size:0.72rem; padding:3px 8px; display:inline-flex; align-items:center; gap:4px;" data-tooltip="View chronological timeline of past conversation transcripts">📜 Timeline</button>
                         <button class="btn btn-secondary" onclick="exportCurrentAgentTranscript()" style="font-size:0.72rem; padding:3px 8px; display:inline-flex; align-items:center; gap:4px;" data-tooltip="Download session transcript as Markdown">📥 Export .md</button>
                         <button class="btn btn-secondary" onclick="clearCurrentAgentChat()" style="font-size:0.72rem; padding:3px 8px; color:#fca5a5; display:inline-flex; align-items:center; gap:4px;" data-tooltip="Clear chat history for this agent">🧹 Clear</button>
                       </div>
                     </div>
-                    <div class="agent-chat-wrapper">
-                      <div class="agent-chat-messages" id="id-agent-chat-messages">
-                        <div class="chat-bubble agent">
-                          <strong>🧭 Arunachala Ramana:</strong> Greetings Sriad. What objective or workflow would you like to assign to the team today?
+                    <div id="id-agent-chat-wrapper-target" class="collapsible-target">
+                      <div class="agent-chat-wrapper">
+                        <div class="agent-chat-messages" id="id-agent-chat-messages">
+                          <div class="chat-bubble agent">
+                            <strong>🧭 Arunachala Ramana:</strong> Greetings Sriad. What objective or workflow would you like to assign to the team today?
+                          </div>
                         </div>
-                      </div>
-                      <div class="agent-chat-input-row">
-                        <input type="text" class="agent-chat-input" id="id-agent-chat-input" placeholder="Message the agent..." onkeydown="handleAgentChatKey(event)" data-tooltip="Type your directive or prompt to the selected agent and press Enter" data-tooltip-pos="top">
-                        <button class="agent-chat-send" onclick="sendAgentMessage()" data-tooltip="Dispatch prompt to local model via /api/agent/chat" data-tooltip-pos="top">Send</button>
+                        <div class="agent-chat-input-row">
+                          <input type="text" class="agent-chat-input" id="id-agent-chat-input" placeholder="Message the agent..." onkeydown="handleAgentChatKey(event)" data-tooltip="Type your directive or prompt to the selected agent and press Enter" data-tooltip-pos="top">
+                          <button class="agent-chat-send" onclick="sendAgentMessage()" data-tooltip="Dispatch prompt to local model via /api/agent/chat" data-tooltip-pos="top">Send</button>
+                        </div>
                       </div>
                     </div>
                   </div>

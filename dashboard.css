@@ -1316,3 +1316,39 @@ canvas {
 [data-tooltip-pos="bottom"]:hover::before {
   transform: translateX(-50%) translateY(0);
 }
+
+/* ---- Universal Collapsible Sections & Sub-sections ---- */
+.collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-left: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--color-text-muted, #94a3b8);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.15s ease, color 0.15s ease;
+  user-select: none;
+  vertical-align: middle;
+}
+.collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--color-text, #f8fafc);
+  border-color: rgba(0, 176, 255, 0.4);
+}
+.collapse-btn.collapsed {
+  transform: rotate(-90deg);
+}
+.collapsible-target {
+  transition: opacity 0.2s ease;
+}
+.collapsible-target.collapsed {
+  display: none !important;
+}
+
