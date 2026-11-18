@@ -68,3 +68,63 @@ test('memory engine stores and recalls onboarding institutional memory', () => {
   assert.ok(results.length > 0);
   assert.ok(results.some((r) => r.id === entry.id || r.title.includes('ReBAC')));
 });
+
+test('onboarding.html contains Hub and Spoke memory distribution selector', () => {
+  const filePath = path.join(__dirname, 'onboarding.html');
+  const html = fs.readFileSync(filePath, 'utf8');
+  assert.match(html, /id="scope-hub"/);
+  assert.match(html, /id="scope-spoke"/);
+  assert.match(html, /Hub &amp; Spoke Memory Distribution Scope|Hub & Spoke Memory Distribution Scope/);
+});
+
+test('memory engine supports Hub and Spoke scoping and promotion', () => {
+  const tmpPath = path.join(os.tmpdir(), `drisyon-hubspoke-${Date.now()}.json`);
+  const mem = new DrisyonMemoryEngine({ storagePath: tmpPath });
+
+  // 1. Store a Spoke memory (local to project 'client-app')
+  const spokeMem = mem.storeMemory({
+    tenantId: 'tenant:client_a',
+    projectId: 'client-app',
+    category: 'context',
+    title: 'Client Database Schema',
+    content: 'Client uses PostgreSQL with pgvector for spoke embeddings.',
+    tags: ['spoke', 'database']
+  });
+
+  // 2. Store a Hub memory (global to all projects and tenants)
+  const hubMem = mem.storeMemory({
+    tenantId: 'global',
+    projectId: 'global',
+    category: 'guidelines',
+    title: 'Global Engineering Invariant DEC-001',
+    content: 'Zero production credentials held at any tier; all releases via client IaC.',
+    tags: ['hub', 'invariant', 'security']
+  });
+
+  // 3. Search as client-app project
+  const searchResults = mem.search('credentials database', { projectId: 'client-app' });
+  assert.ok(searchResults.length >= 2, 'Should match both local spoke memory and global hub memory');
+
+  const hubFound = searchResults.find(r => r.id === hubMem.id);
+  const spokeFound = searchResults.find(r => r.id === spokeMem.id);
+  assert.ok(hubFound, 'Global Hub memory should be accessible to spoke search');
+  assert.equal(hubFound.scope, 'hub');
+  assert.ok(spokeFound, 'Local Spoke memory should be accessible to spoke search');
+  assert.equal(spokeFound.scope, 'spoke');
+
+  // 4. Promote spoke memory to Hub
+  const promotedHubMem = mem.storeMemory({
+    tenantId: 'global',
+    projectId: 'global',
+    category: spokeMem.category,
+    title: `[Hub] ${spokeMem.title}`,
+    content: spokeMem.content,
+    tags: [...spokeMem.tags, 'hub', 'promoted_to_hub']
+  });
+  assert.ok(promotedHubMem.id.startsWith('mem_'));
+  assert.equal(promotedHubMem.projectId, 'global');
+
+  // Verify other projects now see promoted memory
+  const otherProjectSearch = mem.search('pgvector', { projectId: 'other-repo' });
+  assert.ok(otherProjectSearch.some(r => r.id === promotedHubMem.id), 'Promoted memory must be visible across all projects via the Hub');
+});

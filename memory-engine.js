@@ -158,6 +158,7 @@ class DrisyonMemoryEngine {
   }
 
   toResult(mem, score) {
+    const isHub = mem.projectId === 'global' || mem.projectId === 'all' || mem.tenantId === 'global' || (Array.isArray(mem.tags) && mem.tags.includes('hub')) || mem.metadata?.scope === 'hub';
     return {
       id: mem.id,
       score: Math.round(score * 100) / 100,
@@ -166,6 +167,8 @@ class DrisyonMemoryEngine {
       category: mem.category,
       title: mem.title,
       content: mem.content,
+      tags: mem.tags || [],
+      scope: isHub ? 'hub' : 'spoke',
       metadata: mem.metadata,
       createdAt: mem.createdAt
     };

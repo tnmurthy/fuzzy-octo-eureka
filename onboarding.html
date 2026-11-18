@@ -1023,6 +1023,31 @@
 
         <!-- Tab Content Box -->
         <div id="knowledge-editor-wrap">
+          <!-- Hub & Spoke Topology Scope Selector -->
+          <div class="field-group" style="margin-bottom: 18px;">
+            <label class="field-label">Hub &amp; Spoke Memory Distribution Scope</label>
+            <div class="mode-cards" style="margin-bottom: 0;">
+              <div class="mode-card selected" id="scope-hub" data-scope="hub">
+                <div class="mode-title">
+                  <span>🌐 Main Central Hub Memory</span>
+                  <span class="repo-tag ready">Universal</span>
+                </div>
+                <div class="mode-desc">
+                  Promoted to the main central brain. Indexed for all autonomous agents across all repositories and spoke portals (team &amp; drisyon).
+                </div>
+              </div>
+              <div class="mode-card" id="scope-spoke" data-scope="spoke">
+                <div class="mode-title">
+                  <span>📁 Local Project Spoke</span>
+                  <span class="repo-tag" style="color:var(--status-amber); border-color:rgba(255,179,0,0.4); background:rgba(255,179,0,0.1);">Isolated</span>
+                </div>
+                <div class="mode-desc">
+                  Scoped strictly to the current workspace repository (<span id="spoke-repo-label">fuzzy-octo-eureka</span>).
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="template-bar">
             <span class="field-label" id="editor-field-title" style="margin-bottom: 0;">Knowledge Entry</span>
             <button type="button" class="btn-template" id="btn-load-template">⚡ Load Recommended Template</button>

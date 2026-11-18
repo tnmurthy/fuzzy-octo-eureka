@@ -1479,8 +1479,59 @@ function handleRequest(req, res) {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
+        // Hub & Spoke topology scoping
+        if (payload.scope === 'hub') {
+          payload.projectId = 'global';
+          payload.tenantId = 'global';
+          payload.tags = Array.from(new Set([...(payload.tags || []), 'hub', 'topology:hub']));
+          payload.metadata = { ...(payload.metadata || {}), scope: 'hub', topology: 'hub' };
+        } else {
+          payload.tags = Array.from(new Set([...(payload.tags || []), 'spoke', 'topology:spoke']));
+          payload.metadata = { ...(payload.metadata || {}), scope: 'spoke', topology: 'spoke' };
+        }
         const stored = memory.storeMemory(payload);
         sendJson(res, 200, { ok: true, memory: stored });
+      } catch (e) {
+        sendJson(res, 400, { ok: false, error: e.message });
+      }
+    });
+    return;
+  }
+  if (req.url.startsWith('/api/memory/promote') && req.method === 'POST') {
+    const actor = getReqUserNode(req);
+    const authVerdict = rebac.canAccess(actor, 'memory:store', 'resource:memory_engine');
+    if (!authVerdict.authorized) {
+      return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied: memory:store required', path: authVerdict.path });
+    }
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const memoryId = payload.id;
+        const entry = memory.episodicMemory.find(m => m.id === memoryId);
+        if (!entry) {
+          return sendJson(res, 404, { ok: false, error: 'Memory entry not found' });
+        }
+        // Promote spoke memory to global main hub
+        const cleanTitle = (entry.title || 'Knowledge').replace(/^\[Hub\]\s*/i, '');
+        const promoted = memory.storeMemory({
+          tenantId: 'global',
+          projectId: 'global',
+          category: entry.category || 'context',
+          title: `[Hub] ${cleanTitle}`,
+          content: entry.content,
+          tags: Array.from(new Set([...(entry.tags || []).filter(t => t !== 'spoke' && t !== 'topology:spoke'), 'hub', 'topology:hub', 'promoted_to_hub'])),
+          metadata: {
+            ...(entry.metadata || {}),
+            promotedFromId: entry.id,
+            promotedBy: actor,
+            promotedAt: new Date().toISOString(),
+            scope: 'hub',
+            topology: 'hub'
+          }
+        });
+        sendJson(res, 200, { ok: true, message: 'Spoke memory promoted to Main Central Hub', memory: promoted });
       } catch (e) {
         sendJson(res, 400, { ok: false, error: e.message });
       }

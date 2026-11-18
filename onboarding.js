@@ -138,6 +138,7 @@ To run agents: Choose your role, select the target repository, and enter your ta
   let selectedRoleId = store.get('agents.role') || 'developer';
   let selectedMode = store.get('agents.uiMode') || 'friendly';
   let selectedRepoName = store.get('agents.repo') || 'fuzzy-octo-eureka';
+  let selectedScope = 'hub'; // 'hub' | 'spoke'
   let activeKnowledgeCat = 'product';
   let availableRepos = [];
   let sessionMemories = [];
@@ -394,6 +395,29 @@ To run agents: Choose your role, select the target repository, and enter your ta
       });
     });
 
+    // Hub & Spoke Scope Selector
+    const btnScopeHub = $('scope-hub');
+    const btnScopeSpoke = $('scope-spoke');
+    function updateScopeCards() {
+      if (btnScopeHub) btnScopeHub.classList.toggle('selected', selectedScope === 'hub');
+      if (btnScopeSpoke) btnScopeSpoke.classList.toggle('selected', selectedScope === 'spoke');
+      const spokeLabel = $('spoke-repo-label');
+      if (spokeLabel) spokeLabel.textContent = selectedRepoName || 'fuzzy-octo-eureka';
+    }
+    if (btnScopeHub) {
+      btnScopeHub.addEventListener('click', () => {
+        selectedScope = 'hub';
+        updateScopeCards();
+      });
+    }
+    if (btnScopeSpoke) {
+      btnScopeSpoke.addEventListener('click', () => {
+        selectedScope = 'spoke';
+        updateScopeCards();
+      });
+    }
+    updateScopeCards();
+
     const btnTemplate = $('btn-load-template');
     if (btnTemplate) {
       btnTemplate.addEventListener('click', () => loadActiveTemplateIntoEditor(true));
@@ -457,14 +481,16 @@ To run agents: Choose your role, select the target repository, and enter your ta
     feedback.innerHTML = '<span class="muted">⏳ Indexing into semantic memory...</span>';
 
     const tpl = KNOWLEDGE_TEMPLATES[activeKnowledgeCat] || {};
+    const isHub = selectedScope === 'hub';
     const payload = {
-      tenantId: 'tenant:drisyon_core',
-      projectId: selectedRepoName || 'global',
+      scope: selectedScope,
+      tenantId: isHub ? 'global' : 'tenant:drisyon_core',
+      projectId: isHub ? 'global' : (selectedRepoName || 'fuzzy-octo-eureka'),
       category: tpl.category || 'context',
       title: title || 'Untitled Knowledge',
       content: content,
-      tags: [...(tpl.tags || []), selectedRoleId, 'onboarding'],
-      metadata: { source: 'onboarding_wizard', role: selectedRoleId }
+      tags: [...(tpl.tags || []), selectedRoleId, selectedScope, 'onboarding'],
+      metadata: { source: 'onboarding_wizard', role: selectedRoleId, scope: selectedScope }
     };
 
     try {
@@ -481,8 +507,8 @@ To run agents: Choose your role, select the target repository, and enter your ta
       if (data.ok && data.memory) {
         sessionMemories.unshift(data.memory);
         renderMemoriesTray();
-        showToast(`Indexed into memory: "${payload.title}"`);
-        feedback.innerHTML = '<span class="repo-tag ready">✓ Saved</span> <span class="muted">Live in Drisyon Memory</span>';
+        showToast(`Indexed into ${isHub ? 'Main Central Hub' : 'Project Spoke'}: "${payload.title}"`);
+        feedback.innerHTML = `<span class="repo-tag ready">✓ Saved</span> <span class="muted">Live in ${isHub ? '🌐 Main Hub Brain' : '📁 Project Spoke'}</span>`;
 
         // Clear or reset fields for next entry
         $('memory-title').value = '';
@@ -509,16 +535,18 @@ To run agents: Choose your role, select the target repository, and enter your ta
       KNOWLEDGE_TEMPLATES.rules
     ];
 
+    const isHub = selectedScope === 'hub';
     let count = 0;
     for (const tpl of items) {
       const payload = {
-        tenantId: 'tenant:drisyon_core',
-        projectId: selectedRepoName || 'global',
+        scope: selectedScope,
+        tenantId: isHub ? 'global' : 'tenant:drisyon_core',
+        projectId: isHub ? 'global' : (selectedRepoName || 'fuzzy-octo-eureka'),
         category: tpl.category,
         title: tpl.title,
         content: tpl.content,
-        tags: [...tpl.tags, selectedRoleId, 'onboarding_batch'],
-        metadata: { source: 'onboarding_batch_seed', role: selectedRoleId }
+        tags: [...tpl.tags, selectedRoleId, selectedScope, 'onboarding_batch'],
+        metadata: { source: 'onboarding_batch_seed', role: selectedRoleId, scope: selectedScope }
       };
 
       try {
@@ -541,8 +569,32 @@ To run agents: Choose your role, select the target repository, and enter your ta
     renderMemoriesTray();
     btnBatch.disabled = false;
     btnBatch.textContent = '✨ Fast-Track: Ingest All 3 Defaults';
-    showToast(`Successfully ingested ${count} foundational memories!`);
-    $('ingest-feedback').innerHTML = '<span class="repo-tag ready">✓ Batch Complete</span> <span class="muted">All core institutional memories indexed!</span>';
+    showToast(`Successfully ingested ${count} foundational memories into ${isHub ? 'Main Hub' : 'Project Spoke'}!`);
+    $('ingest-feedback').innerHTML = `<span class="repo-tag ready">✓ Batch Complete</span> <span class="muted">Indexed into ${isHub ? '🌐 Main Hub' : '📁 Project Spoke'}!</span>`;
+  }
+
+  async function promoteMemoryToHub(id) {
+    try {
+      showToast('Promoting spoke memory to Main Central Hub... ⏳');
+      const res = await fetch('/api/memory/promote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-rebac-actor': 'user:sriad'
+        },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (data.ok && data.memory) {
+        showToast('Successfully promoted spoke memory to Main Hub Brain! 🌐');
+        sessionMemories.unshift(data.memory);
+        renderMemoriesTray();
+      } else {
+        throw new Error(data.error || 'Failed to promote memory');
+      }
+    } catch (err) {
+      showToast(`Promotion failed: ${err.message}`, 'error');
+    }
   }
 
   async function fetchExistingMemories() {
@@ -574,19 +626,36 @@ To run agents: Choose your role, select the target repository, and enter your ta
 
     tray.replaceChildren();
     sessionMemories.slice(0, 10).forEach((mem) => {
+      const isHub = mem.scope === 'hub' || mem.projectId === 'global' || mem.projectId === 'all' || mem.tenantId === 'global' || (Array.isArray(mem.tags) && mem.tags.includes('hub')) || mem.metadata?.scope === 'hub';
       const item = document.createElement('div');
       item.className = 'mem-item';
       item.innerHTML = `
-        <div style="overflow: hidden;">
+        <div style="overflow: hidden; flex: 1;">
           <div class="mem-item-title">${escapeHtml(mem.title || 'Knowledge Entry')}</div>
           <div class="mem-item-snippet">${escapeHtml(mem.content || '')}</div>
           <div class="mem-item-meta">
+            <span class="badge-cat" style="${isHub ? 'background:rgba(0,176,255,0.15); color:var(--status-blue); border-color:rgba(0,176,255,0.3);' : 'background:rgba(255,179,0,0.15); color:var(--status-amber); border-color:rgba(255,179,0,0.3);'}">
+              ${isHub ? '🌐 Main Hub' : '📁 Spoke: ' + escapeHtml(mem.projectId || 'local')}
+            </span>
             <span class="badge-cat">${escapeHtml(mem.category || 'context')}</span>
-            <span class="muted" style="font-size: 0.72rem;">${escapeHtml(mem.projectId || 'global')}</span>
             <span class="muted" style="font-size: 0.72rem;">${mem.createdAt ? new Date(mem.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'recently'}</span>
           </div>
         </div>
+        ${!isHub ? `
+          <button type="button" class="btn-sm btn-promote-action" style="padding: 4px 10px; font-size: 0.72rem; border-color: rgba(0, 176, 255, 0.4); color: var(--status-blue); background: rgba(0, 176, 255, 0.08); border-radius: 6px; cursor: pointer; flex-shrink: 0; align-self: center;" data-id="${escapeHtml(mem.id)}" title="Promote this local project memory to the Main Central Hub Brain">
+            Promote to Hub 🌐
+          </button>
+        ` : ''}
       `;
+
+      const btnPromote = item.querySelector('.btn-promote-action');
+      if (btnPromote) {
+        btnPromote.addEventListener('click', (e) => {
+          e.stopPropagation();
+          promoteMemoryToHub(mem.id);
+        });
+      }
+
       tray.appendChild(item);
     });
   }
@@ -605,7 +674,7 @@ To run agents: Choose your role, select the target repository, and enter your ta
     resultsBox.innerHTML = '<div class="muted" style="font-size:0.8rem;">Querying Drisyon Memory Engine...</div>';
 
     try {
-      const res = await fetch(`/api/memory/search?q=${encodeURIComponent(query)}&limit=3`, {
+      const res = await fetch(`/api/memory/search?q=${encodeURIComponent(query)}&limit=4`, {
         headers: { 'x-rebac-actor': 'user:sriad' }
       });
       const data = await res.json();
@@ -613,12 +682,16 @@ To run agents: Choose your role, select the target repository, and enter your ta
       if (data.ok && Array.isArray(data.memories) && data.memories.length > 0) {
         resultsBox.replaceChildren();
         data.memories.forEach((m) => {
+          const isHub = m.scope === 'hub' || m.projectId === 'global' || m.projectId === 'all' || m.tenantId === 'global' || (Array.isArray(m.tags) && m.tags.includes('hub')) || m.metadata?.scope === 'hub';
           const item = document.createElement('div');
           item.className = 'test-result-item';
           const score = m.score ? Math.round(m.score * 100) : 95;
           item.innerHTML = `
             <div>
               <span class="test-score">${score}% Match</span>
+              <span style="font-size:0.7rem; font-weight:600; padding:1px 6px; border-radius:4px; margin-right:6px; ${isHub ? 'background:rgba(0,176,255,0.15); color:var(--status-blue); border:1px solid rgba(0,176,255,0.3);' : 'background:rgba(255,179,0,0.15); color:var(--status-amber); border:1px solid rgba(255,179,0,0.3);'}">
+                ${isHub ? '🌐 Hub' : '📁 Spoke: ' + escapeHtml(m.projectId || 'local')}
+              </span>
               <strong>${escapeHtml(m.title)}</strong>
             </div>
             <div class="muted" style="margin-top: 4px; font-size: 0.78rem;">${escapeHtml(m.content.slice(0, 160))}...</div>
