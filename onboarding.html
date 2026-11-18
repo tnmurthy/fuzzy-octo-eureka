@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Onboarding & Knowledge Setup - Arunachala</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    :root {
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --surface-card: rgba(18, 24, 38, 0.75);
+      --surface-elevated: rgba(24, 32, 48, 0.85);
+      --surface-subtle: rgba(255, 255, 255, 0.03);
+      --accent-glow: 0 0 24px rgba(0, 176, 255, 0.18);
+      --transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--color-text-main);
+      font-family: 'Outfit', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 24px 20px 80px;
+    }
+
+    /* Top Navigation Header */
+    .onboarding-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(0, 176, 255, 0.25), rgba(0, 230, 118, 0.25));
+      border: 1px solid rgba(0, 176, 255, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      box-shadow: var(--accent-glow);
+    }
+    .brand-title {
+      font-size: 1.45rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-tag {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.12);
+      border: 1px solid rgba(0, 176, 255, 0.3);
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .brand-sub {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin-top: 3px;
+    }
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .nav-btn {
+      color: var(--color-text-muted);
+      text-decoration: none;
+      font-size: 0.83rem;
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      background: var(--surface-subtle);
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-btn:hover {
+      color: var(--color-text-main);
+      border-color: var(--border-color-glow);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Stepper Navigation Bar */
+    .stepper-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      backdrop-filter: blur(12px);
+    }
+    .progress-bar-wrap {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-secondary);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 25%;
+      background: linear-gradient(90deg, var(--status-blue), var(--status-green));
+      border-radius: 999px;
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .stepper-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 720px) {
+      .stepper-steps {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      color: var(--color-text-muted);
+      transition: var(--transition);
+    }
+    .step-item.active {
+      background: rgba(0, 176, 255, 0.08);
+      border-color: rgba(0, 176, 255, 0.3);
+      color: var(--color-text-main);
+    }
+    .step-item.completed {
+      color: var(--status-green);
+    }
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    .step-item.active .step-badge {
+      background: var(--status-blue);
+      color: #000;
+      border-color: var(--status-blue);
+    }
+    .step-item.completed .step-badge {
+      background: rgba(0, 230, 118, 0.15);
+      color: var(--status-green);
+      border-color: rgba(0, 230, 118, 0.4);
+    }
+    .step-label-wrap {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.25;
+    }
+    .step-num {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.7;
+    }
+    .step-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    /* Step Panels */
+    .step-panel {
+      display: none;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .step-panel.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Section Cards */
+    .card-panel {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin-bottom: 24px;
+      backdrop-filter: blur(12px);
+    }
+    .card-panel h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-panel .section-desc {
+      font-size: 0.92rem;
+      color: var(--color-text-muted);
+      line-height: 1.5;
+      margin-bottom: 24px;
+      max-width: 800px;
+    }
+
+    /* Form Inputs */
+    .field-group {
+      margin-bottom: 22px;
+    }
+    .field-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--color-text-main);
+    }
+    .field-help {
+      font-size: 0.78rem;
+      color: var(--color-text-muted);
+      margin-top: 5px;
+    }
+    .text-input, .text-area, .select-input {
+      width: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      color: var(--color-text-main);
+      font: inherit;
+      font-size: 0.9rem;
+      transition: var(--transition);
+      box-sizing: border-box;
+    }
+    .text-input:focus, .text-area:focus, .select-input:focus {
+      outline: none;
+      border-color: var(--status-blue);
+      box-shadow: 0 0 0 3px rgba(0, 176, 255, 0.15);
+    }
+    .text-area {
+      min-height: 110px;
+      line-height: 1.5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      resize: vertical;
+    }
+
+    /* Role Selection Grid */
+    .roles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 840px) {
+      .roles-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 560px) {
+      .roles-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .role-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+      text-align: left;
+      font: inherit;
+      color: var(--color-text-main);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .role-card:hover {
+      border-color: var(--border-color-glow);
+      transform: translateY(-2px);
+      background: var(--bg-card-hover);
+    }
+    .role-card.selected {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.08);
+      box-shadow: var(--accent-glow);
+    }
+    .role-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .role-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 0.98rem;
+    }
+    .role-icon {
+      font-size: 1.3rem;
+    }
+    .role-check {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      color: transparent;
+      transition: var(--transition);
+    }
+    .role-card.selected .role-check {
+      background: var(--status-blue);
+      border-color: var(--status-blue);
+      color: #000;
+      font-weight: bold;
+    }
+    .role-desc {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+    }
+    .role-badge {
+      font-size: 0.7rem;
+      color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.1);
+      border-radius: 4px;
+      padding: 2px 6px;
+      align-self: flex-start;
+      margin-top: 4px;
+    }
+
+    /* Mode Selection Switcher */
+    .mode-cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 600px) {
+      .mode-cards {
+        grid-template-columns: 1fr;
+      }
+    }
+    .mode-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      text-align: left;
+      font: inherit;
+      color: var(--color-text-main);
+    }
+    .mode-card:hover {
+      border-color: var(--border-color-glow);
+    }
+    .mode-card.selected {
+      border-color: var(--status-green);
+      background: rgba(0, 230, 118, 0.08);
+    }
+    .mode-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mode-desc {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+    }
+
+    /* Reassurance Box */
+    .reassurance-banner {
+      background: linear-gradient(135deg, rgba(0, 230, 118, 0.07), rgba(0, 176, 255, 0.07));
+      border: 1px solid rgba(0, 230, 118, 0.25);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .reassurance-icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .reassurance-text h4 {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--status-green);
+      margin-bottom: 4px;
+    }
+    .reassurance-text p {
+      font-size: 0.83rem;
+      color: var(--color-text-muted);
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    /* Repo Grid */
+    .repos-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 680px) {
+      .repos-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .repo-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      text-align: left;
+      font: inherit;
+      color: var(--color-text-main);
+    }
+    .repo-box:hover {
+      border-color: var(--border-color-glow);
+    }
+    .repo-box.selected {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.08);
+      box-shadow: 0 0 15px rgba(0, 176, 255, 0.12);
+    }
+    .repo-info {
+      overflow: hidden;
+    }
+    .repo-name {
+      font-weight: 600;
+      font-size: 0.92rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .repo-path {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: 4px;
+    }
+    .repo-tag {
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      color: var(--color-text-muted);
+    }
+    .repo-tag.ready {
+      color: var(--status-green);
+      border-color: rgba(0, 230, 118, 0.4);
+      background: rgba(0, 230, 118, 0.1);
+    }
+
+    /* Knowledge Tabs */
+    .knowledge-tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      margin-bottom: 20px;
+      overflow-x: auto;
+    }
+    .k-tab {
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .k-tab:hover {
+      color: var(--color-text-main);
+    }
+    .k-tab.active {
+      background: var(--bg-card-hover);
+      color: var(--color-text-main);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .template-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .btn-template {
+      background: rgba(0, 176, 255, 0.1);
+      border: 1px solid rgba(0, 176, 255, 0.3);
+      color: var(--status-blue);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-template:hover {
+      background: rgba(0, 176, 255, 0.2);
+      border-color: var(--status-blue);
+    }
+
+    /* Knowledge Ingest Action Box */
+    .ingest-action-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      margin-top: 20px;
+      margin-bottom: 24px;
+    }
+    .ingest-status-msg {
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--status-blue), #0088cc);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 9px 20px;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 10px rgba(0, 176, 255, 0.3);
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0, 176, 255, 0.45);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: var(--surface-subtle);
+      color: var(--color-text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 9px 18px;
+      font: inherit;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-secondary:hover {
+      border-color: var(--border-color-glow);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Ingested Memories Tray */
+    .memory-tray-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .memories-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 240px;
+      overflow-y: auto;
+      margin-bottom: 24px;
+    }
+    .mem-item {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .mem-item-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .mem-item-snippet {
+      font-size: 0.78rem;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .mem-item-meta {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+      align-items: center;
+    }
+    .badge-cat {
+      font-size: 0.68rem;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(0, 176, 255, 0.12);
+      color: var(--status-blue);
+      border: 1px solid rgba(0, 176, 255, 0.3);
+    }
+
+    /* Live Semantic Memory Search Tester */
+    .search-tester-box {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px dashed var(--border-color-glow);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      margin-top: 14px;
+    }
+    .tester-head {
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--status-blue);
+    }
+    .tester-input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .tester-results {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .test-result-item {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 0.82rem;
+    }
+    .test-score {
+      float: right;
+      color: var(--status-green);
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    /* Step 4: Launchpad Grid */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 720px) {
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .summary-tile {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+    .summary-label {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .summary-val {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--color-text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Starter Tasks Grid */
+    .starters-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 680px) {
+      .starters-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .starter-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      cursor: pointer;
+      transition: var(--transition);
+      text-align: left;
+      font: inherit;
+      color: var(--color-text-main);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .starter-card:hover {
+      border-color: var(--border-color-glow);
+      transform: translateY(-2px);
+    }
+    .starter-card.selected {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.08);
+    }
+    .starter-title {
+      font-weight: 600;
+      font-size: 0.92rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .starter-desc {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+    }
+
+    /* Bottom Stepper Actions */
+    .step-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-color);
+    }
+    .action-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Toast Notifications */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--status-green);
+      color: var(--color-text-main);
+      padding: 14px 20px;
+      border-radius: var(--radius-md);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.88rem;
+      z-index: 1000;
+      animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Top Brand & Header -->
+    <header class="onboarding-header">
+      <div class="brand-wrap">
+        <div class="brand-icon">🚀</div>
+        <div>
+          <h1 class="brand-title">Arunachala Operations Center <span class="brand-tag">Welcome Setup</span></h1>
+          <div class="brand-sub">Tailor your operator persona, connect your project, and seed institutional memory.</div>
+        </div>
+      </div>
+      <div class="header-links">
+        <a class="nav-btn" href="/agents">🤖 Agents Studio</a>
+        <a class="nav-btn" href="/context">🧠 Context</a>
+        <a class="nav-btn" href="/">← Dashboard</a>
+      </div>
+    </header>
+
+    <!-- Stepper Navigation -->
+    <nav class="stepper-card" aria-label="Onboarding Progress">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-bar" style="width: 25%;"></div>
+      </div>
+      <div class="stepper-steps">
+        <button type="button" class="step-item active" id="tab-step-1" data-step="1">
+          <div class="step-badge" id="badge-step-1">1</div>
+          <div class="step-label-wrap">
+            <span class="step-num">Step 1</span>
+            <span class="step-name">Persona & Mode</span>
+          </div>
+        </button>
+        <button type="button" class="step-item" id="tab-step-2" data-step="2">
+          <div class="step-badge" id="badge-step-2">2</div>
+          <div class="step-label-wrap">
+            <span class="step-num">Step 2</span>
+            <span class="step-name">Target Project</span>
+          </div>
+        </button>
+        <button type="button" class="step-item" id="tab-step-3" data-step="3">
+          <div class="step-badge" id="badge-step-3">3</div>
+          <div class="step-label-wrap">
+            <span class="step-num">Step 3</span>
+            <span class="step-name">Local Memory</span>
+          </div>
+        </button>
+        <button type="button" class="step-item" id="tab-step-4" data-step="4">
+          <div class="step-badge" id="badge-step-4">4</div>
+          <div class="step-label-wrap">
+            <span class="step-num">Step 4</span>
+            <span class="step-name">Launchpad</span>
+          </div>
+        </button>
+      </div>
+    </nav>
+
+    <!-- STEP 1: Persona, Identity & Mode -->
+    <section class="step-panel active" id="panel-step-1">
+      <div class="card-panel">
+        <h2>👤 Step 1: Who You Are & How You Work</h2>
+        <p class="section-desc">
+          Choose your primary discipline so autonomous agents frame recommendations and code changes to match your workflow. You can switch roles at any time.
+        </p>
+
+        <div class="field-group">
+          <label class="field-label" for="operator-name">Your Name or Operator Handle</label>
+          <input type="text" id="operator-name" class="text-input" placeholder="e.g. Sriad or Alex" value="Operator">
+          <div class="field-help">Agents address you by this name in chat threads, commits, and PR reviews.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Preferred Experience Mode</label>
+          <div class="mode-cards">
+            <div class="mode-card selected" id="mode-friendly" data-mode="friendly">
+              <div class="mode-title">
+                <span>✨ Friendly Mode (Recommended)</span>
+                <span class="repo-tag ready">Default</span>
+              </div>
+              <div class="mode-desc">
+                Plain-English cards, guided starter tasks, non-intimidating summaries, and simple buttons. Perfect for founders, product leads, and newcomers.
+              </div>
+            </div>
+            <div class="mode-card" id="mode-pro" data-mode="pro">
+              <div class="mode-title">
+                <span>⚡ Developer Mode</span>
+              </div>
+              <div class="mode-desc">
+                Direct branch controls, specialist agent slugs, terminal output inspection, token budgets, and advanced prompt engineering toggles.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Select Your Role</label>
+          <div class="roles-grid" id="roles-grid">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2: Target Project & Safe Sandbox -->
+    <section class="step-panel" id="panel-step-2">
+      <div class="card-panel">
+        <h2>📁 Step 2: Connect Your Target Workspace</h2>
+        <p class="section-desc">
+          Select the repository or folder where agents will inspect code, write tests, and propose improvements.
+        </p>
+
+        <!-- Reassurance Sandbox Banner -->
+        <div class="reassurance-banner">
+          <div class="reassurance-icon">🛡️</div>
+          <div class="reassurance-text">
+            <h4>Safe Draft Sandbox Guarantee</h4>
+            <p>
+              Agents execute in isolated git worktrees and temporary draft branches (e.g. <code>agent/feat-...</code>). 
+              They <strong>never commit directly to main</strong> or overwrite your files without your explicit review and approval.
+            </p>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Discovered Repositories on this Machine</label>
+          <div class="repos-grid" id="repos-container">
+            <div class="empty">Scanning available workspaces...</div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="custom-repo-path">Or Use a Custom Project Path</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="custom-repo-path" class="text-input" placeholder="/Users/username/my-project">
+            <button type="button" class="btn-secondary" id="btn-set-custom-repo">Set Active</button>
+          </div>
+          <div class="field-help" id="selected-repo-indicator">Currently selected: <strong>fuzzy-octo-eureka</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3: Local Context & Institutional Memory -->
+    <section class="step-panel" id="panel-step-3">
+      <div class="card-panel">
+        <h2>🧠 Step 3: Teach Your Agents (Local Context & Memory)</h2>
+        <p class="section-desc">
+          Autonomous agents consult your Institutional Memory before every single planning and coding run. 
+          Feeding your product vision, tech stack, and quality guardrails here eliminates hallucinations and guarantees alignment.
+        </p>
+
+        <!-- Knowledge Tabs -->
+        <div class="knowledge-tabs" role="tablist">
+          <button type="button" class="k-tab active" data-cat="product">🚀 Product Overview</button>
+          <button type="button" class="k-tab" data-cat="stack">⚡ Tech Stack & Architecture</button>
+          <button type="button" class="k-tab" data-cat="rules">🛡️ Engineering Guardrails</button>
+          <button type="button" class="k-tab" data-cat="doc">📄 Paste Specs / Markdown</button>
+        </div>
+
+        <!-- Tab Content Box -->
+        <div id="knowledge-editor-wrap">
+          <div class="template-bar">
+            <span class="field-label" id="editor-field-title" style="margin-bottom: 0;">Knowledge Entry</span>
+            <button type="button" class="btn-template" id="btn-load-template">⚡ Load Recommended Template</button>
+          </div>
+
+          <div class="field-group">
+            <input type="text" id="memory-title" class="text-input" placeholder="Title (e.g. Arunachala Platform Architecture)">
+          </div>
+
+          <div class="field-group">
+            <textarea id="memory-content" class="text-area" rows="7" placeholder="Paste or type knowledge here..."></textarea>
+          </div>
+
+          <div class="ingest-action-box">
+            <div class="ingest-status-msg" id="ingest-feedback">
+              <span class="repo-tag ready">Ready</span>
+              <span class="muted">Click to index this into Drisyon Semantic Memory</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button type="button" class="btn-secondary" id="btn-batch-seed">✨ Fast-Track: Ingest All 3 Defaults</button>
+              <button type="button" class="btn-primary" id="btn-save-memory">💾 Save to Memory</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ingested Memories Tray -->
+        <div class="memory-tray-title">
+          <span>Active Institutional Memories</span>
+          <span class="badge-cat" id="mem-count-badge">0 indexed</span>
+        </div>
+        <div class="memories-list" id="memories-tray">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Semantic Memory Search Tester -->
+        <div class="search-tester-box">
+          <div class="tester-head">
+            <span>🔍 Test Memory Recall (Live Agent Verification)</span>
+          </div>
+          <div class="tester-input-row">
+            <input type="search" id="test-search-input" class="text-input" placeholder="Type a query (e.g. 'architecture', 'rules', 'tech stack')...">
+            <button type="button" class="btn-secondary" id="btn-test-search">Test Recall</button>
+          </div>
+          <div class="tester-results" id="tester-results" style="display: none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 4: Launchpad -->
+    <section class="step-panel" id="panel-step-4">
+      <div class="card-panel">
+        <h2>🚀 Step 4: Ready for Your First Autonomous Task</h2>
+        <p class="section-desc">
+          Your command center is configured and primed with institutional memory! Select a starter task or craft your own directive to launch your agent team.
+        </p>
+
+        <!-- Summary Grid -->
+        <div class="summary-grid">
+          <div class="summary-tile">
+            <div class="summary-label">Operator</div>
+            <div class="summary-val" id="summary-operator">👩‍💻 Developer</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-label">Active Workspace</div>
+            <div class="summary-val" id="summary-repo" style="font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;">fuzzy-octo-eureka</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-label">Institutional Memory</div>
+            <div class="summary-val" id="summary-memory" style="color: var(--status-green);">● Active</div>
+          </div>
+        </div>
+
+        <!-- Starter Tasks Tailored to Role -->
+        <div class="field-group">
+          <label class="field-label">Recommended Starter Tasks for Your Role</label>
+          <div class="starters-grid" id="starters-container">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Selected Task Preview & Launch -->
+        <div class="field-group">
+          <label class="field-label" for="task-title-input">Task Directive</label>
+          <input type="text" id="task-title-input" class="text-input" style="font-weight: 500;" placeholder="What should the agent do?">
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="task-body-input">Additional Context & Guidelines (Optional)</label>
+          <textarea id="task-body-input" class="text-area" rows="3" placeholder="Provide extra requirements or leave blank..."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-top: 24px;">
+          <button type="button" class="btn-primary" id="btn-launch-studio" style="font-size: 1rem; padding: 12px 28px;">
+            🚀 Open in Agents Studio
+          </button>
+          <a href="/context" class="btn-secondary" style="text-decoration: none; padding: 12px 20px;">
+            🧠 Explore Memory Graph
+          </a>
+          <a href="/" class="btn-secondary" style="text-decoration: none; padding: 12px 20px;">
+            📊 Operations Dashboard
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Stepper Actions -->
+    <div class="step-actions">
+      <button type="button" class="btn-secondary" id="btn-prev" disabled>← Previous Step</button>
+      <div class="action-right">
+        <a href="/agents" class="btn-secondary" style="text-decoration: none; font-size: 0.8rem;">Skip to Studio</a>
+        <button type="button" class="btn-primary" id="btn-next">Next Step →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="onboarding.js"></script>
+</body>
+</html>

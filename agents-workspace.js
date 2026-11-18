@@ -336,4 +336,30 @@
   renderStarters();
   setRole(role);
   loadRepos();
+
+  // Pick up prefilled task directives from Onboarding or URL params
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const prefillTitle = params.get('task') || store.get('agents.pendingTitle');
+    const prefillBody = params.get('body') || store.get('agents.pendingBody');
+    const prefillAgent = params.get('agent') || store.get('agents.pendingAgent');
+    const prefillSpecialist = params.get('specialist') || store.get('agents.pendingSpecialist');
+
+    if (prefillTitle && $('title')) {
+      $('title').value = prefillTitle;
+      if (prefillBody && $('body')) $('body').value = prefillBody;
+      if (prefillAgent && $('agent')) $('agent').value = prefillAgent;
+      if (prefillSpecialist && typeof setSpecialist === 'function') setSpecialist(prefillSpecialist);
+
+      store.set('agents.pendingTitle', '');
+      store.set('agents.pendingBody', '');
+      store.set('agents.pendingAgent', '');
+      store.set('agents.pendingSpecialist', '');
+
+      setTimeout(() => {
+        $('title').dispatchEvent(new Event('input'));
+        $('title').focus();
+      }, 100);
+    }
+  } catch (_) {}
 })();

@@ -274,6 +274,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
   if (urlPath === '/agents') urlPath = '/agents.html';
   if (urlPath === '/context') urlPath = '/context.html';
+  if (urlPath === '/onboarding' || urlPath === '/welcome') urlPath = '/onboarding.html';
 
   const filePath = path.join(DASHBOARD_DIR, urlPath);
 
