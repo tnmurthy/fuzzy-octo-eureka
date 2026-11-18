@@ -1190,23 +1190,23 @@
             <details class="add" id="add-repo" hidden>
               <summary>+ Add another project or repository</summary>
               <div class="tabs" role="tablist">
-                <button class="tab" type="button" role="tab" data-tab="local" aria-selected="true">Local folder</button>
-                <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">From Git URL</button>
+                <button class="tab" type="button" role="tab" data-tab="git" aria-selected="true">From Git URL (Recommended)</button>
+                <button class="tab" type="button" role="tab" data-tab="local" aria-selected="false">Server Local Folder (Host only)</button>
               </div>
-              <form id="add-local" autocomplete="off">
+              <form id="add-git" autocomplete="off">
+                <div class="inline">
+                  <input class="f" id="git-url" placeholder="https://github.com/owner/repo" aria-label="Git URL" required>
+                  <button class="btn-sm" type="submit">Clone &amp; Register</button>
+                </div>
+                <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span> on the AI host. Works from any laptop (Windows, Mac, Linux).</div>
+              </form>
+              <form id="add-local" autocomplete="off" hidden>
                 <div class="inline">
                   <input class="f" id="local-path" placeholder="~/projects/my-app" aria-label="Folder path" required>
                   <button class="btn-sm" type="submit">Add</button>
                 </div>
-                <div class="muted" style="margin-top:6px">A folder on this Mac.</div>
+                <div class="muted" style="margin-top:6px">A folder already on the server host (not on your remote laptop).</div>
                 <div class="suggest" id="found" hidden></div>
-              </form>
-              <form id="add-git" autocomplete="off" hidden>
-                <div class="inline">
-                  <input class="f" id="git-url" placeholder="https://github.com/owner/repo" aria-label="Git URL" required>
-                  <button class="btn-sm" type="submit">Clone</button>
-                </div>
-                <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span>.</div>
               </form>
               <div class="msg" id="repo-msg" role="status"></div>
               <div class="warn-note">⚠ Agents read and run this repo's code. Add only repositories you trust.</div>

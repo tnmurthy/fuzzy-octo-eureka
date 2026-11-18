@@ -38,6 +38,7 @@ test('local folders: must be a git repo inside home, not hidden, system or a wor
   assert.match(validateLocalPath(path.join(home, 'app--agent-issue-1'), home).error, /worktree/);
   assert.match(validateLocalPath('/etc', home).error, /inside your home/);
   assert.match(validateLocalPath('relative/path', home).error, /full path/);
+  assert.match(validateLocalPath('C:\\projects\\app', home).error, /Windows PC/);
   assert.match(validateLocalPath(path.join(home, 'nope'), home).error, /does not exist/);
 });
 

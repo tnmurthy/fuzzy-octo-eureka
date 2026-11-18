@@ -41,6 +41,12 @@ function repoNameFromUrl(url) {
 /** A folder an admin may register: an existing git repo inside home, not hidden or system. */
 function validateLocalPath(input, home) {
   const raw = String(input || '').trim().replace(/^~(?=$|\/)/, home);
+  if (/^[a-zA-Z]:[\\/]/.test(raw) || /\\/.test(raw)) {
+    return {
+      ok: false,
+      error: 'That is a path on your local Windows PC (e.g. C:\\...). The AI models run on the host server and cannot read files directly from your personal laptop. Please click the "From Git URL" tab and enter the repository URL (e.g. https://github.com/owner/repo) to clone and register it.'
+    };
+  }
   if (!raw || !path.isAbsolute(raw)) return { ok: false, error: 'give the full path to the folder, e.g. ~/projects/my-app' };
   let real;
   // .native: the case-correct path (macOS folders are case-insensitive).

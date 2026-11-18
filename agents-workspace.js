@@ -266,7 +266,19 @@
     $('add-local').hidden = t.dataset.tab !== 'local';
     $('add-git').hidden = t.dataset.tab !== 'git';
   }));
-  $('add-local').addEventListener('submit', (e) => { e.preventDefault(); addRepo({ type: 'local', path: $('local-path').value }); });
+  $('add-local').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const val = $('local-path').value.trim();
+    if (/^[a-zA-Z]:[\\/]/.test(val) || /\\/.test(val)) {
+      const msg = $('repo-msg');
+      msg.className = 'msg err';
+      msg.innerHTML = '⚠️ <strong>Windows Path Detected:</strong> The AI execution engine runs on the server host and cannot read files directly from your personal laptop\'s C:\\ drive.<br>👉 Please switch to the <strong>"From Git URL"</strong> tab and paste your Git repository URL.';
+      const gitTab = document.querySelector('#add-repo .tab[data-tab="git"]');
+      if (gitTab) gitTab.click();
+      return;
+    }
+    addRepo({ type: 'local', path: val });
+  });
   $('add-git').addEventListener('submit', (e) => { e.preventDefault(); addRepo({ type: 'git', url: $('git-url').value }); });
 
   // ---- how to run ----------------------------------------------------------
