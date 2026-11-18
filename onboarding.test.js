@@ -69,12 +69,13 @@ test('memory engine stores and recalls onboarding institutional memory', () => {
   assert.ok(results.some((r) => r.id === entry.id || r.title.includes('ReBAC')));
 });
 
-test('onboarding.html contains Hub and Spoke memory distribution selector', () => {
+test('onboarding.html contains memory distribution scope selector', () => {
   const filePath = path.join(__dirname, 'onboarding.html');
   const html = fs.readFileSync(filePath, 'utf8');
+  assert.match(html, /id="scope-global-checkbox"/);
+  assert.match(html, /Share across all projects &amp; teams/);
   assert.match(html, /id="scope-hub"/);
   assert.match(html, /id="scope-spoke"/);
-  assert.match(html, /Hub &amp; Spoke Memory Distribution Scope|Hub & Spoke Memory Distribution Scope/);
 });
 
 test('memory engine supports Hub and Spoke scoping and promotion', () => {

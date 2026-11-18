@@ -110,3 +110,31 @@ test('validateDispatchSafety: catches destructive commands in agent chat', () =>
   assert.equal(destructive.risky, true);
   assert.match(destructive.error, /High-risk operation/);
 });
+
+test('remember chat commands: extracts scope modifier and memory content', () => {
+  const rememberPrefixRegex = /^(?:\/remember|remember|\/memory):?\s*(?:(all|global|company|team|repo|local):\s*)?(.+)$/is;
+
+  const matchGlobal = '/remember global: Always run unit tests before opening a PR'.match(rememberPrefixRegex);
+  assert.ok(matchGlobal);
+  assert.equal(matchGlobal[1].toLowerCase(), 'global');
+  assert.equal(matchGlobal[2].trim(), 'Always run unit tests before opening a PR');
+
+  const matchCompany = 'remember: company: All databases must use PostgreSQL 16'.match(rememberPrefixRegex);
+  assert.ok(matchCompany);
+  assert.equal(matchCompany[1].toLowerCase(), 'company');
+  assert.equal(matchCompany[2].trim(), 'All databases must use PostgreSQL 16');
+
+  const matchLocal = '/remember repo: drisyon port is 8788'.match(rememberPrefixRegex);
+  assert.ok(matchLocal);
+  assert.equal(matchLocal[1].toLowerCase(), 'repo');
+  assert.equal(matchLocal[2].trim(), 'drisyon port is 8788');
+
+  const matchColonPrefix = '/remember: The drisyon port is 8788'.match(rememberPrefixRegex);
+  assert.ok(matchColonPrefix);
+  assert.equal(matchColonPrefix[2].trim(), 'The drisyon port is 8788');
+
+  const matchSimple = '/remember Always use pnpm for package installs'.match(rememberPrefixRegex);
+  assert.ok(matchSimple);
+  assert.equal(matchSimple[1], undefined);
+  assert.equal(matchSimple[2].trim(), 'Always use pnpm for package installs');
+});

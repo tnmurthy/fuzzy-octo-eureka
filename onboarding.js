@@ -395,23 +395,51 @@ To run agents: Choose your role, select the target repository, and enter your ta
       });
     });
 
-    // Hub & Spoke Scope Selector
+    // Scope Distribution Selector (Simplified 1-Checkbox + Compatibility)
+    const scopeCheckbox = $('scope-global-checkbox');
+    const scopeTag = $('scope-indicator-tag');
+    const scopeHint = $('scope-hint-text');
+    const spokeLabel = $('spoke-repo-label');
     const btnScopeHub = $('scope-hub');
     const btnScopeSpoke = $('scope-spoke');
+
     function updateScopeCards() {
+      if (scopeCheckbox) {
+        selectedScope = scopeCheckbox.checked ? 'hub' : 'spoke';
+      }
+      if (scopeTag) {
+        scopeTag.textContent = selectedScope === 'hub' ? 'Global' : 'Project Only';
+        scopeTag.className = selectedScope === 'hub' ? 'repo-tag ready' : 'repo-tag';
+        if (selectedScope === 'spoke') {
+          scopeTag.style = 'color:var(--status-amber); border-color:rgba(255,179,0,0.4); background:rgba(255,179,0,0.1); font-size:11px; padding:2px 6px;';
+        } else {
+          scopeTag.style = 'font-size:11px; padding:2px 6px;';
+        }
+      }
+      if (scopeHint) {
+        const repo = selectedRepoName || 'fuzzy-octo-eureka';
+        scopeHint.innerHTML = selectedScope === 'hub'
+          ? `Synchronized across all agents, repos, and portals. Uncheck to isolate only to <strong>${escapeHtml(repo)}</strong>.`
+          : `Isolated strictly to <strong>${escapeHtml(repo)}</strong>. Check to share company-wide.`;
+      }
       if (btnScopeHub) btnScopeHub.classList.toggle('selected', selectedScope === 'hub');
       if (btnScopeSpoke) btnScopeSpoke.classList.toggle('selected', selectedScope === 'spoke');
-      const spokeLabel = $('spoke-repo-label');
       if (spokeLabel) spokeLabel.textContent = selectedRepoName || 'fuzzy-octo-eureka';
+    }
+
+    if (scopeCheckbox) {
+      scopeCheckbox.addEventListener('change', updateScopeCards);
     }
     if (btnScopeHub) {
       btnScopeHub.addEventListener('click', () => {
+        if (scopeCheckbox) scopeCheckbox.checked = true;
         selectedScope = 'hub';
         updateScopeCards();
       });
     }
     if (btnScopeSpoke) {
       btnScopeSpoke.addEventListener('click', () => {
+        if (scopeCheckbox) scopeCheckbox.checked = false;
         selectedScope = 'spoke';
         updateScopeCards();
       });
@@ -635,15 +663,15 @@ To run agents: Choose your role, select the target repository, and enter your ta
           <div class="mem-item-snippet">${escapeHtml(mem.content || '')}</div>
           <div class="mem-item-meta">
             <span class="badge-cat" style="${isHub ? 'background:rgba(0,176,255,0.15); color:var(--status-blue); border-color:rgba(0,176,255,0.3);' : 'background:rgba(255,179,0,0.15); color:var(--status-amber); border-color:rgba(255,179,0,0.3);'}">
-              ${isHub ? '🌐 Main Hub' : '📁 Spoke: ' + escapeHtml(mem.projectId || 'local')}
+              ${isHub ? '🌐 Company-wide' : '📁 ' + escapeHtml(mem.projectId || 'this repo')}
             </span>
             <span class="badge-cat">${escapeHtml(mem.category || 'context')}</span>
             <span class="muted" style="font-size: 0.72rem;">${mem.createdAt ? new Date(mem.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'recently'}</span>
           </div>
         </div>
         ${!isHub ? `
-          <button type="button" class="btn-sm btn-promote-action" style="padding: 4px 10px; font-size: 0.72rem; border-color: rgba(0, 176, 255, 0.4); color: var(--status-blue); background: rgba(0, 176, 255, 0.08); border-radius: 6px; cursor: pointer; flex-shrink: 0; align-self: center;" data-id="${escapeHtml(mem.id)}" title="Promote this local project memory to the Main Central Hub Brain">
-            Promote to Hub 🌐
+          <button type="button" class="btn-sm btn-promote-action" style="padding: 4px 10px; font-size: 0.72rem; border-color: rgba(0, 176, 255, 0.4); color: var(--status-blue); background: rgba(0, 176, 255, 0.08); border-radius: 6px; cursor: pointer; flex-shrink: 0; align-self: center;" data-id="${escapeHtml(mem.id)}" title="Share this rule across all projects and agents">
+            Make Company-wide 🌐
           </button>
         ` : ''}
       `;
@@ -690,7 +718,7 @@ To run agents: Choose your role, select the target repository, and enter your ta
             <div>
               <span class="test-score">${score}% Match</span>
               <span style="font-size:0.7rem; font-weight:600; padding:1px 6px; border-radius:4px; margin-right:6px; ${isHub ? 'background:rgba(0,176,255,0.15); color:var(--status-blue); border:1px solid rgba(0,176,255,0.3);' : 'background:rgba(255,179,0,0.15); color:var(--status-amber); border:1px solid rgba(255,179,0,0.3);'}">
-                ${isHub ? '🌐 Hub' : '📁 Spoke: ' + escapeHtml(m.projectId || 'local')}
+                ${isHub ? '🌐 Company-wide' : '📁 ' + escapeHtml(m.projectId || 'this repo')}
               </span>
               <strong>${escapeHtml(m.title)}</strong>
             </div>

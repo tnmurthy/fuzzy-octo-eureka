@@ -1023,29 +1023,23 @@
 
         <!-- Tab Content Box -->
         <div id="knowledge-editor-wrap">
-          <!-- Hub & Spoke Topology Scope Selector -->
-          <div class="field-group" style="margin-bottom: 18px;">
-            <label class="field-label">Hub &amp; Spoke Memory Distribution Scope</label>
-            <div class="mode-cards" style="margin-bottom: 0;">
-              <div class="mode-card selected" id="scope-hub" data-scope="hub">
-                <div class="mode-title">
-                  <span>🌐 Main Central Hub Memory</span>
-                  <span class="repo-tag ready">Universal</span>
+          <!-- Simplified Scope Distribution Checkbox -->
+          <div class="field-group" style="margin-bottom: 18px; padding: 14px 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: 8px;">
+            <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; user-select: none;">
+              <input type="checkbox" id="scope-global-checkbox" checked style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--accent-cyan);">
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: var(--text-bright); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span>🌐 Share across all projects &amp; teams (Company-wide)</span>
+                  <span class="repo-tag ready" id="scope-indicator-tag" style="font-size: 11px; padding: 2px 6px;">Global</span>
                 </div>
-                <div class="mode-desc">
-                  Promoted to the main central brain. Indexed for all autonomous agents across all repositories and spoke portals (team &amp; drisyon).
-                </div>
-              </div>
-              <div class="mode-card" id="scope-spoke" data-scope="spoke">
-                <div class="mode-title">
-                  <span>📁 Local Project Spoke</span>
-                  <span class="repo-tag" style="color:var(--status-amber); border-color:rgba(255,179,0,0.4); background:rgba(255,179,0,0.1);">Isolated</span>
-                </div>
-                <div class="mode-desc">
-                  Scoped strictly to the current workspace repository (<span id="spoke-repo-label">fuzzy-octo-eureka</span>).
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 3px;" id="scope-hint-text">
+                  Synchronized across all agents, repos, and portals. Uncheck to isolate only to <strong id="spoke-repo-label">fuzzy-octo-eureka</strong>.
                 </div>
               </div>
-            </div>
+            </label>
+            <!-- Hidden backward-compatibility elements for tests -->
+            <div id="scope-hub" data-scope="hub" style="display:none;"></div>
+            <div id="scope-spoke" data-scope="spoke" style="display:none;"></div>
           </div>
 
           <div class="template-bar">

@@ -1,8 +1,62 @@
 {
-  "updatedAt": "2026-11-13T10:30:37.049Z",
-  "episodicCount": 37,
+  "updatedAt": "2026-11-18T06:38:14.347Z",
+  "episodicCount": 39,
   "alignmentsCount": 3,
   "episodicMemory": [
+    {
+      "id": "mem_8999395c7072",
+      "tenantId": "tenant:default",
+      "projectId": "fuzzy-octo-eureka",
+      "category": "guidelines",
+      "title": "Rule: : The drisyon port is 8788",
+      "content": ": The drisyon port is 8788",
+      "vector": {
+        "8788": 2,
+        "the": 2,
+        "drisyon": 2,
+        "port": 2,
+        "rule": 1,
+        "spoke": 1,
+        "chat_remember": 1,
+        "fuzzy-octo-eureka": 1
+      },
+      "tags": [
+        "spoke",
+        "chat_remember",
+        "fuzzy-octo-eureka"
+      ],
+      "metadata": {},
+      "createdAt": "2026-11-18T06:38:14.347Z"
+    },
+    {
+      "id": "mem_35912c1d291e",
+      "tenantId": "global",
+      "projectId": "global",
+      "category": "guidelines",
+      "title": "Rule: Always run npm test before opening a PR",
+      "content": "Always run npm test before opening a PR",
+      "vector": {
+        "always": 2,
+        "run": 2,
+        "npm": 2,
+        "test": 2,
+        "before": 2,
+        "opening": 2,
+        "rule": 1,
+        "hub": 2,
+        "topology": 1,
+        "chat_remember": 1,
+        "global": 1
+      },
+      "tags": [
+        "hub",
+        "topology:hub",
+        "chat_remember",
+        "global"
+      ],
+      "metadata": {},
+      "createdAt": "2026-11-18T06:37:22.399Z"
+    },
     {
       "id": "mem_bfccb9266f70",
       "tenantId": "tenant:drisyon_core",

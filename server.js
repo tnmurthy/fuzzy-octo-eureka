@@ -1188,6 +1188,51 @@ function handleRequest(req, res) {
         const targetRepo = payload.repo || path.basename(DASHBOARD_DIR);
         const targetRepoPath = resolveRepoPath(targetRepo);
 
+        // Conversational /remember shortcut: /remember [global|repo] <rule> or "remember: ..."
+        const rememberPrefixRegex = /^(?:\/remember|remember|\/memory):?\s*(?:(all|global|company|team|repo|local):\s*)?(.+)$/is;
+        const rememberMatch = userMessage.trim().match(rememberPrefixRegex);
+        if (rememberMatch) {
+          const scopeModifier = (rememberMatch[1] || '').toLowerCase();
+          const memoryContent = rememberMatch[2].trim();
+          const isGlobal = scopeModifier === 'all' || scopeModifier === 'global' || scopeModifier === 'company' || scopeModifier === 'team' || /\b(for all (projects|repos)|across all|company-wide|organization-wide)\b/i.test(memoryContent);
+
+          let stored = null;
+          try {
+            stored = memory.storeMemory({
+              title: `Rule: ${memoryContent.slice(0, 50)}`,
+              content: memoryContent,
+              category: 'guidelines',
+              tenantId: isGlobal ? 'global' : (actor.includes('drisyon') ? 'tenant:drisyon_core' : 'tenant:default'),
+              projectId: isGlobal ? 'global' : targetRepo,
+              tags: isGlobal ? ['hub', 'topology:hub', 'chat_remember', 'global'] : ['spoke', 'chat_remember', targetRepo]
+            });
+          } catch (memErr) {
+            console.error('Failed to store chat memory:', memErr.message);
+          }
+
+          const reply = isGlobal
+            ? `🌐 **Stored in Company-Wide Global Brain**\n\n> "${memoryContent}"\n\nAll autonomous agents across all repositories and portals will now recall this rule during planning and execution.`
+            : `📁 **Stored in Project Memory (\`${targetRepo}\`)**\n\n> "${memoryContent}"\n\nAgents working on \`${targetRepo}\` will recall this rule.\n\n*(💡 **Tip**: To share across all projects, use \`/remember global: <rule>\`)*`;
+
+          recordTranscript({
+            agent: agentKey,
+            agentTitle: agentTitles[agentKey] || agentKey,
+            user: actor.replace('user:', ''),
+            message: userMessage,
+            reply,
+            isAdvisory: false,
+            spawned: null
+          });
+
+          sendJson(res, 200, {
+            ok: true,
+            reply,
+            agent: agentKey,
+            memoryStored: stored ? { id: stored.id, scope: isGlobal ? 'hub' : 'spoke' } : null
+          });
+          return;
+        }
+
         // Detect if the directive is actionable
         const taskInfo = (payload.dispatch === true)
           ? { actionable: true, task: userMessage, targetAgent: payload.targetAgent || 'auto' }
