@@ -3,125 +3,889 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agents - Arunachala Operations Center</title>
+  <title>Autonomous Agents Studio - Arunachala Operations Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css">
   <style>
-    body { background: var(--bg-primary); color: var(--color-text-main); font-family: 'Outfit', sans-serif; margin: 0; }
-    .page { max-width: 1240px; margin: 0 auto; padding: 28px 16px 60px; overflow-x: clip; }
-    .card { min-width: 0; }
-    .cat-input { min-width: 0; max-width: 100%; }
-    .head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
-    .head h1 { font-size: 1.6rem; font-weight: 600; margin: 0; }
-    .head a { color: var(--status-blue); text-decoration: none; font-size: 0.85rem; }
-    .muted { color: var(--color-text-muted); font-size: 0.8rem; }
-    .mono { font-family: 'JetBrains Mono', monospace; }
-    .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; }
-    .card h2 { font-size: 0.95rem; font-weight: 600; margin: 0 0 12px; letter-spacing: 0.02em; }
-    .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,176,255,.18); color: var(--status-blue); font-size: 0.75rem; margin-right: 8px; }
-    .grid-top { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; margin-bottom: 16px; }
-    @media (max-width: 900px) { .grid-top { grid-template-columns: minmax(0, 1fr); } }
-    .stack { margin-bottom: 16px; }
+    :root {
+      --studio-width: 440px;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --surface-elevated: rgba(24, 32, 48, 0.85);
+      --surface-card: rgba(18, 24, 38, 0.75);
+      --surface-subtle: rgba(255, 255, 255, 0.03);
+      --accent-glow: 0 0 20px rgba(0, 176, 255, 0.15);
+      --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
 
-    /* cap meter */
-    .cap { display: flex; align-items: center; gap: 10px; }
-    .cap-bar { width: 140px; max-width: 30vw; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
-    .cap-fill { height: 100%; background: var(--status-green); transition: width .3s; }
+    body {
+      background: var(--bg-primary);
+      color: var(--color-text-main);
+      font-family: 'Outfit', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 20px 24px 60px;
+    }
+
+    /* Top App Bar */
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-bottom: 18px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(0,176,255,0.2), rgba(0,230,118,0.2));
+      border: 1px solid rgba(0,176,255,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+    }
+    .header-left h1 {
+      font-size: 1.45rem;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-left .tag-live {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--status-green);
+      background: rgba(0, 230, 118, 0.12);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .header-subtitle {
+      font-size: 0.82rem;
+      color: var(--color-text-muted);
+      margin-top: 3px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    /* Mode Toggle Switch (Friendly vs Pro) */
+    .mode-switch {
+      display: inline-flex;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 5px 13px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mode-btn.active {
+      background: rgba(0, 176, 255, 0.18);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* Cap meter */
+    .cap-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+    }
+    .cap-bar {
+      width: 70px;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .cap-fill {
+      height: 100%;
+      background: var(--status-green);
+      transition: width .3s;
+    }
     .cap.warn .cap-fill { background: var(--status-amber); }
     .cap.full .cap-fill { background: var(--status-red); }
-    .cap-form { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .cap-form[hidden] { display: none; }
-    .cap-form input { width: 80px; background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.85rem; }
-    .cap-note { width: 100%; text-align: right; }
-
-    /* roles */
-    .roles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-    .role { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--color-text-main); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 0.85rem; cursor: pointer; }
-    .role[aria-pressed="true"] { border-color: var(--status-blue); background: rgba(0,176,255,.14); }
-
-    /* repos */
-    .repo { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; cursor: pointer; background: var(--bg-secondary); }
-    .repo[aria-checked="true"] { border-color: var(--status-blue); box-shadow: 0 0 0 1px var(--status-blue) inset; }
-    .repo .main { flex: 1; min-width: 0; }
-    .repo .nm { font-weight: 500; font-size: 0.9rem; }
-    .repo .pth { font-size: 0.74rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tag { font-size: 0.66rem; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border-color); color: var(--color-text-muted); margin-left: 6px; white-space: nowrap; }
-    .tag.gh { color: var(--status-green); border-color: rgba(0,230,118,.4); }
-    .tag.git { color: var(--status-blue); border-color: rgba(0,176,255,.4); }
-    .tag.missing { color: #fca5a5; border-color: rgba(239,68,68,.4); }
-    details.add { margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px; }
-    details.add summary { cursor: pointer; color: var(--status-blue); font-size: 0.88rem; }
-    .tabs { display: inline-flex; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 3px; gap: 3px; margin: 10px 0; }
-    .tab { background: transparent; border: 0; color: var(--color-text-muted); font: inherit; font-size: 0.82rem; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
-    .tab[aria-selected="true"] { background: var(--bg-card-hover); color: var(--color-text-main); }
-    .inline { display: flex; gap: 8px; }
-    .inline input { flex: 1; }
-    .warn-note { font-size: 0.74rem; color: #e8c66a; margin-top: 8px; }
-    .reco { margin-top: 10px; padding: 10px 12px; border: 1px dashed rgba(0,176,255,.35); border-radius: 10px; font-size: 0.82rem; }
-    .reco[hidden] { display: none; }
-
-    /* form */
-    input.f, select.f, textarea.f {
-      width: 100%; box-sizing: border-box; background: var(--bg-secondary); color: var(--color-text-main);
-      border: 1px solid var(--border-color); border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 0.9rem;
+    .cap-form { display: flex; align-items: center; gap: 6px; }
+    .cap-form input {
+      width: 60px;
+      background: var(--bg-secondary);
+      color: var(--color-text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 3px 6px;
+      font: inherit;
+      font-size: 0.8rem;
     }
-    textarea.f { min-height: 90px; resize: vertical; }
-    .f:focus { outline: none; border-color: var(--status-blue); }
-    label.l { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin: 10px 0 4px; }
-    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    @media (max-width: 520px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
-    .btn { background: var(--status-blue); color: #001018; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
-    .btn:disabled { opacity: .5; cursor: default; }
-    .btn-sm { background: transparent; color: var(--status-blue); border: 1px solid rgba(0,176,255,.35); border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 0.75rem; cursor: pointer; }
-    .btn-sm.danger { color: #fca5a5; border-color: rgba(239,68,68,.35); }
-    .msg { margin-top: 10px; font-size: 0.85rem; min-height: 1.2em; }
-    .msg.ok { color: var(--status-green); } .msg.err { color: #fca5a5; }
-    .msg a, .msg button { color: var(--status-blue); }
-    .starters { display: flex; flex-wrap: wrap; gap: 6px; }
-    .starter { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--color-text-main); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 0.78rem; cursor: pointer; text-align: left; }
-    .starter:hover { border-color: var(--border-color-glow); }
-    .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    @media (max-width: 520px) { .modes { grid-template-columns: minmax(0, 1fr); } }
-    .mode { border: 1px solid var(--border-color); border-radius: 10px; padding: 9px 11px; cursor: pointer; background: var(--bg-secondary); font-size: 0.8rem; }
-    .mode input { margin-right: 6px; }
-    .mode b { font-size: 0.86rem; }
-    .mode.disabled { opacity: .5; cursor: not-allowed; }
-    .mode:has(input:checked) { border-color: var(--status-blue); }
-    .submit-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 
-    .suggest { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+    .nav-btn {
+      color: var(--status-blue);
+      text-decoration: none;
+      font-size: 0.82rem;
+      background: rgba(0, 176, 255, 0.08);
+      border: 1px solid rgba(0, 176, 255, 0.25);
+      padding: 6px 12px;
+      border-radius: 8px;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-btn:hover {
+      background: rgba(0, 176, 255, 0.18);
+      border-color: var(--status-blue);
+    }
+
+    /* 2-Column Main Workspace Layout */
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 1040px) {
+      .workspace-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Studio Left Pane */
+    .studio-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .safety-banner {
+      background: linear-gradient(135deg, rgba(0, 230, 118, 0.08), rgba(0, 176, 255, 0.04));
+      border: 1px solid rgba(0, 230, 118, 0.25);
+      border-radius: var(--radius-md);
+      padding: 11px 14px;
+      font-size: 0.78rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      color: #d1fae5;
+    }
+    .safety-banner .shield-icon {
+      font-size: 1.1rem;
+      line-height: 1;
+      margin-top: 1px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: 0.01em;
+    }
+    .step-pill {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(0,176,255,0.18);
+      color: var(--status-blue);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    /* Roles Persona Row */
+    .roles-container {
+      margin-bottom: 14px;
+    }
+    .roles-label {
+      font-size: 0.76rem;
+      color: var(--color-text-muted);
+      margin-bottom: 8px;
+      display: block;
+    }
+    .roles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    @media (max-width: 480px) {
+      .roles-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .role-btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 9px 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: var(--transition);
+      color: var(--color-text-main);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .role-btn:hover {
+      border-color: rgba(0, 176, 255, 0.4);
+      background: rgba(255,255,255,0.03);
+    }
+    .role-btn[aria-pressed="true"] {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.12);
+      box-shadow: 0 0 12px rgba(0, 176, 255, 0.15);
+    }
+    .role-btn-top {
+      font-size: 0.84rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .role-btn-desc {
+      font-size: 0.7rem;
+      color: var(--color-text-muted);
+      line-height: 1.25;
+    }
+
+    /* Repositories */
+    #repo-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .repo {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      cursor: pointer;
+      background: var(--bg-secondary);
+      transition: var(--transition);
+    }
+    .repo:hover {
+      border-color: rgba(0, 176, 255, 0.3);
+    }
+    .repo[aria-checked="true"] {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.08);
+      box-shadow: 0 0 0 1px var(--status-blue) inset;
+    }
+    .repo .main {
+      flex: 1;
+      min-width: 0;
+    }
+    .repo .nm {
+      font-weight: 600;
+      font-size: 0.88rem;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .repo .pth {
+      font-size: 0.72rem;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .tag {
+      font-size: 0.65rem;
+      font-weight: 500;
+      padding: 1px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .tag.gh {
+      color: var(--status-green);
+      border-color: rgba(0,230,118,0.3);
+      background: rgba(0,230,118,0.06);
+    }
+    .tag.git {
+      color: var(--status-blue);
+      border-color: rgba(0,176,255,0.3);
+      background: rgba(0,176,255,0.06);
+    }
+    .tag.missing {
+      color: #fca5a5;
+      border-color: rgba(239,68,68,0.3);
+    }
+
+    details.add {
+      margin-top: 10px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 10px;
+    }
+    details.add summary {
+      cursor: pointer;
+      color: var(--status-blue);
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+    .tabs {
+      display: inline-flex;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 3px;
+      margin: 10px 0;
+    }
+    .tab {
+      background: transparent;
+      border: 0;
+      color: var(--color-text-muted);
+      font: inherit;
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tab[aria-selected="true"] {
+      background: var(--bg-card-hover);
+      color: var(--color-text-main);
+      font-weight: 500;
+    }
+    .inline {
+      display: flex;
+      gap: 8px;
+    }
+    .inline input {
+      flex: 1;
+    }
+
+    /* Form Inputs */
+    input.f, select.f, textarea.f {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg-secondary);
+      color: var(--color-text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font: inherit;
+      font-size: 0.88rem;
+      transition: var(--transition);
+    }
+    textarea.f {
+      min-height: 80px;
+      resize: vertical;
+    }
+    .f:focus {
+      outline: none;
+      border-color: var(--status-blue);
+      box-shadow: 0 0 0 2px rgba(0, 176, 255, 0.15);
+    }
+    label.l {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      margin: 12px 0 5px;
+    }
+
+    /* Starters */
+    .starters-box {
+      margin-bottom: 12px;
+    }
+    .starters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .starter {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--color-text-main);
+      border-radius: 8px;
+      padding: 6px 11px;
+      font: inherit;
+      font-size: 0.76rem;
+      cursor: pointer;
+      text-align: left;
+      transition: var(--transition);
+    }
+    .starter:hover {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.05);
+    }
+
+    .suggest {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 8px;
+    }
     .suggest[hidden] { display: none; }
-    .chip { background: rgba(83,25,231,.15); border: 1px solid rgba(179,136,255,.45); color: #d7c6ff; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.76rem; cursor: pointer; }
-    .chip.on { background: rgba(179,136,255,.35); color: #fff; }
+    .chip {
+      background: rgba(83,25,231,.15);
+      border: 1px solid rgba(179,136,255,.45);
+      color: #d7c6ff;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .chip.on {
+      background: rgba(179,136,255,.35);
+      color: #fff;
+      font-weight: 500;
+    }
 
-    /* running */
-    .run { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-color); }
-    .run:first-of-type { border-top: 0; }
-    .run .what { min-width: 0; }
-    .run .task { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--status-green); margin-right: 6px; box-shadow: 0 0 0 0 var(--status-green-glow); animation: pulse 1.6s infinite; }
+    .row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 520px) {
+      .row2 { grid-template-columns: 1fr; }
+    }
+
+    .specialist-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-browse {
+      background: rgba(0, 176, 255, 0.1);
+      border: 1px solid rgba(0, 176, 255, 0.3);
+      color: var(--status-blue);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: var(--transition);
+    }
+    .btn-browse:hover {
+      background: rgba(0, 176, 255, 0.2);
+    }
+
+    .modes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    @media (max-width: 520px) {
+      .modes { grid-template-columns: 1fr; }
+    }
+    .mode {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      background: var(--bg-secondary);
+      font-size: 0.78rem;
+      transition: var(--transition);
+    }
+    .mode:hover {
+      border-color: rgba(255,255,255,0.2);
+    }
+    .mode input { margin-right: 6px; }
+    .mode b { font-size: 0.84rem; display: block; margin-bottom: 2px; }
+    .mode.disabled { opacity: .5; cursor: not-allowed; }
+    .mode:has(input:checked) {
+      border-color: var(--status-blue);
+      background: rgba(0, 176, 255, 0.08);
+    }
+
+    .btn-submit {
+      background: linear-gradient(135deg, var(--status-blue), #00e5ff);
+      color: #001018;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 22px;
+      font: inherit;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 16px;
+      transition: var(--transition);
+      box-shadow: 0 4px 14px rgba(0, 176, 255, 0.25);
+    }
+    .btn-submit:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 176, 255, 0.35);
+    }
+    .btn-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-sm {
+      background: transparent;
+      color: var(--status-blue);
+      border: 1px solid rgba(0,176,255,.35);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .btn-sm:hover {
+      background: rgba(0,176,255,0.1);
+    }
+    .btn-sm.danger {
+      color: #fca5a5;
+      border-color: rgba(239,68,68,.35);
+    }
+    .msg {
+      margin-top: 10px;
+      font-size: 0.84rem;
+      min-height: 1.2em;
+    }
+    .msg.ok { color: var(--status-green); }
+    .msg.err { color: #fca5a5; }
+
+    /* Right Cockpit Pane */
+    .cockpit-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Cockpit Segmented Tabs */
+    .cockpit-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 6px 8px;
+    }
+    .cockpit-tabs {
+      display: inline-flex;
+      gap: 4px;
+    }
+    .cockpit-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 500;
+      padding: 7px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .cockpit-tab-btn:hover {
+      color: var(--color-text-main);
+    }
+    .cockpit-tab-btn.active {
+      background: var(--bg-secondary);
+      color: var(--status-blue);
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .cockpit-views > section {
+      display: none;
+    }
+    .cockpit-views > section.active {
+      display: block;
+    }
+
+    /* Running Tasks (Friendly & Pro) */
+    .running-box {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .run-card-friendly {
+      background: linear-gradient(135deg, rgba(20, 28, 45, 0.9), rgba(12, 18, 30, 0.9));
+      border: 1px solid rgba(0, 176, 255, 0.35);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      position: relative;
+      overflow: hidden;
+    }
+    .run-card-friendly::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--status-blue), var(--status-green));
+      animation: sweep 2s infinite linear;
+    }
+    @keyframes sweep {
+      0% { opacity: 0.5; }
+      50% { opacity: 1; }
+      100% { opacity: 0.5; }
+    }
+    .run-header-friendly {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .run-agent-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .pulse {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-green);
+      box-shadow: 0 0 0 0 var(--status-green-glow);
+      animation: pulse 1.6s infinite;
+    }
     @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(0,0,0,0); } }
+    .run-task-title {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 14px;
+      line-height: 1.4;
+      color: #fff;
+    }
+    .steps-checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.78rem;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #cbd5e1;
+    }
+    .step-item.done { color: var(--status-green); }
+    .step-item.active { color: var(--status-blue); font-weight: 500; }
+    .step-item.pending { color: var(--color-text-muted); opacity: 0.7; }
 
-    /* board */
-    .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-    @media (max-width: 960px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 520px) { .board { grid-template-columns: 1fr; } }
-    .col h3 { font-size: 0.8rem; font-weight: 600; margin: 0 0 10px; display: flex; justify-content: space-between; }
-    .col .count { color: var(--color-text-muted); }
-    .issue { display: block; text-decoration: none; color: inherit; background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent, var(--status-blue)); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; font-size: 0.83rem; }
-    .issue:hover { border-color: var(--border-color-glow); }
-    .issue .meta { font-size: 0.72rem; color: var(--color-text-muted); margin-top: 3px; }
-    .empty { font-size: 0.78rem; color: var(--color-text-muted); padding: 6px 0; }
+    .run-actions-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
 
-    /* log */
-    .log-card { margin-bottom: 16px; display: none; }
+    /* Live Terminal / Log Drawer */
+    .log-card {
+      margin-top: 16px;
+      display: none;
+      background: #06090e;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
     .log-card.open { display: block; }
-    .log-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-    pre.log { margin: 0; max-height: 420px; overflow: auto; background: #05070a; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: #cfd8e3; }
+    .log-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+    }
+    pre.log {
+      margin: 0;
+      max-height: 380px;
+      overflow: auto;
+      padding: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #cfd8e3;
+    }
 
-    /* recent */
+    /* Kanban Board */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 960px) {
+      .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) {
+      .board { grid-template-columns: 1fr; }
+    }
+    .col {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+    }
+    .col h3 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin: 0 0 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .col .count { color: var(--color-text-muted); }
+    .issue {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent, var(--status-blue));
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 0.82rem;
+      transition: var(--transition);
+    }
+    .issue:hover {
+      border-color: rgba(0, 176, 255, 0.4);
+      transform: translateY(-1px);
+    }
+    .issue .meta {
+      font-size: 0.72rem;
+      color: var(--color-text-muted);
+      margin-top: 4px;
+    }
+
+    /* Threads & History List */
+    .threads-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .thread-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .thread-card:hover {
+      border-color: rgba(0, 176, 255, 0.35);
+      background: rgba(255,255,255,0.02);
+    }
+    .thread-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .thread-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .thread-meta {
+      font-size: 0.74rem;
+      color: var(--color-text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Interactive Follow-Up Row / Drawer */
+    .fu-wrapper {
+      background: rgba(0, 176, 255, 0.05);
+      border: 1px solid rgba(0, 176, 255, 0.25);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 10px;
+    }
+    .fu-header {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--status-blue);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Table styling for Pro Mode */
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     th { text-align: left; font-weight: 500; color: var(--color-text-muted); font-size: 0.74rem; padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
@@ -131,169 +895,601 @@
     a.lnk { color: var(--status-blue); text-decoration: none; }
     td.actions { white-space: nowrap; }
     td.actions .btn-sm + .btn-sm { margin-left: 6px; }
-    tr.fu-row td { background: rgba(0,176,255,.05); }
-    .fu { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 
-    /* specialists catalog */
-    .cat-input { background: var(--bg-secondary); color: var(--color-text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.85rem; }
-    .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-    .spec { background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--div-color, var(--status-blue)); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-    .spec .n { font-weight: 500; font-size: 0.9rem; }
-    .spec .d { font-size: 0.78rem; color: #c3cedb; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-    .spec .why { font-size: 0.72rem; color: #e8c66a; }
-    .spec .f2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
+    /* Specialist Catalog Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      display: none;
+      place-items: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: grid; }
+    .modal-dialog {
+      background: #0e131d;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      max-width: 980px;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .modal-header h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+    .modal-filters {
+      padding: 12px 24px;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .modal-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .cat-input {
+      background: var(--bg-secondary);
+      color: var(--color-text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 7px 11px;
+      font: inherit;
+      font-size: 0.82rem;
+    }
+    .cat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .spec {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--div-color, var(--status-blue));
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: var(--transition);
+    }
+    .spec:hover {
+      border-color: rgba(0, 176, 255, 0.4);
+      transform: translateY(-1px);
+    }
+    .spec .n { font-weight: 600; font-size: 0.92rem; }
+    .spec .d {
+      font-size: 0.78rem;
+      color: #c3cedb;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.4;
+    }
+    .spec .why { font-size: 0.72rem; color: #e8c66a; font-weight: 500; }
+    .spec .f {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: auto;
+      padding-top: 6px;
+    }
+
+    /* Mode Dependent Toggles */
+    body.mode-friendly .pro-only { display: none !important; }
+    body.mode-pro .friendly-only { display: none !important; }
+
+    .empty {
+      font-size: 0.82rem;
+      color: var(--color-text-muted);
+      padding: 12px 0;
+      text-align: center;
+    }
+    .reco {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px dashed rgba(0,176,255,.35);
+      border-radius: 10px;
+      font-size: 0.8rem;
+    }
+    .reco[hidden] { display: none; }
+    .warn-note { font-size: 0.74rem; color: #e8c66a; margin-top: 8px; }
+
+    /* Voice Input Microphone Button */
+    .btn-mic {
+      background: rgba(0, 176, 255, 0.08);
+      border: 1px solid rgba(0, 176, 255, 0.28);
+      color: var(--status-blue);
+      border-radius: 999px;
+      padding: 3px 11px;
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: var(--transition);
+    }
+    .btn-mic:hover {
+      background: rgba(0, 176, 255, 0.18);
+      border-color: var(--status-blue);
+    }
+    .btn-mic.listening {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: var(--status-red);
+      color: #fca5a5;
+      animation: pulse-mic 1.2s infinite;
+    }
+    @keyframes pulse-mic {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    /* Deliverable & Visual Preview Modal */
+    .deliverable-dialog {
+      max-width: 860px;
+    }
+    .deliverable-card {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .deliverable-card h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--status-blue);
+      margin: 0 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .deliverable-text {
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+    }
+    .deliverable-files-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+    }
+    .file-item .file-name {
+      font-family: 'JetBrains Mono', monospace;
+      color: #93c5fd;
+    }
+    .file-item .file-badge {
+      font-size: 0.72rem;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(0, 230, 118, 0.1);
+      color: var(--status-green);
+      border: 1px solid rgba(0, 230, 118, 0.25);
+    }
   </style>
 </head>
-<body>
+<body class="mode-friendly">
   <main class="page">
-    <div class="head">
-      <div>
-        <h1>Agents</h1>
-        <div class="muted">Pick a repo, describe the task, and an AI agent works on it in its own branch. Refreshes every 5 s.</div>
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="header-left">
+        <div class="brand-icon">🤖</div>
+        <div>
+          <h1>
+            Autonomous Agents Studio
+            <span class="tag-live">● Live Pod</span>
+          </h1>
+          <div class="header-subtitle friendly-only">
+            Pick a project, assign a specialist teammate, and collaborate safely in an isolated draft space.
+          </div>
+          <div class="header-subtitle pro-only">
+            Autonomous multi-agent dispatch on git worktrees with Claude session resumption and poller queue.
+          </div>
+        </div>
       </div>
-      <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
-        <div class="cap" id="cap" title="Paid agent runs today (DISPATCH_DAILY_PAID_RUNS)">
-          <span class="muted">Paid runs today</span>
+
+      <div class="header-right">
+        <!-- Friendly vs Pro Switcher -->
+        <div class="mode-switch" id="ui-mode-switch" role="group" aria-label="Experience Mode">
+          <button type="button" class="mode-btn active" id="btn-mode-friendly">✨ Friendly</button>
+          <button type="button" class="mode-btn" id="btn-mode-pro">⚡ Developer</button>
+        </div>
+
+        <!-- Paid Run Cap Meter -->
+        <div class="cap-box" id="cap" title="Paid agent runs today (DISPATCH_DAILY_PAID_RUNS)">
+          <span class="muted friendly-only">Tasks today:</span>
+          <span class="muted pro-only">Paid runs:</span>
           <div class="cap-bar"><div class="cap-fill" id="cap-fill" style="width:0"></div></div>
           <span class="mono" id="cap-text" style="white-space:nowrap">-</span>
           <button class="btn-sm" id="cap-edit" type="button" hidden>Change</button>
         </div>
+
         <form class="cap-form" id="cap-form" hidden>
-          <label for="cap-input" class="muted">Daily paid runs</label>
           <input id="cap-input" type="number" min="0" max="1000" step="1" required>
           <button class="btn-sm" type="submit">Save</button>
           <button class="btn-sm" type="button" id="cap-cancel">Cancel</button>
         </form>
-        <a href="/context">🧠 Context</a>
-        <a href="/">← Dashboard</a>
-        <div class="muted cap-note" id="cap-note"></div>
+
+        <a class="nav-btn" href="/context">🧠 Context</a>
+        <a class="nav-btn" href="/">← Dashboard</a>
+        <div class="muted cap-note" id="cap-note" style="display:none"></div>
       </div>
-    </div>
+    </header>
 
-    <section class="roles" aria-label="Your role">
-      <span class="muted">I'm working as</span>
-      <div id="roles" style="display:contents"></div>
-    </section>
+    <!-- 2-Column Command Center -->
+    <div class="workspace-grid">
 
-    <div class="grid-top">
-      <section class="card">
-        <h2><span class="step">1</span>Repository</h2>
-        <div id="repo-list" role="radiogroup" aria-label="Repository"><div class="empty">Loading…</div></div>
-        <div class="reco" id="repo-reco" hidden></div>
-        <details class="add" id="add-repo" hidden>
-          <summary>+ Add a repository</summary>
-          <div class="tabs" role="tablist">
-            <button class="tab" type="button" role="tab" data-tab="local" aria-selected="true">Local folder</button>
-            <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">From Git</button>
+      <!-- LEFT: Dispatch Studio -->
+      <section class="studio-panel">
+        <!-- Reassuring Non-Tech Safety Badge -->
+        <div class="safety-banner">
+          <span class="shield-icon">🛡️</span>
+          <div>
+            <b>Safe Sandbox Guarantee:</b>
+            <span class="friendly-only">Your AI teammates work in an isolated draft workspace. Your live website and production files remain 100% untouched until you review and approve.</span>
+            <span class="pro-only">Dispatches run in dedicated isolated git worktrees on dedicated branches (<code>agent/run-...</code>).</span>
           </div>
-          <form id="add-local" autocomplete="off">
-            <div class="inline">
-              <input class="f" id="local-path" placeholder="~/projects/my-app" aria-label="Folder path" required>
-              <button class="btn" type="submit">Add</button>
-            </div>
-            <div class="muted" style="margin-top:6px">A git repository inside your home folder.</div>
-            <div class="suggest" id="found" hidden></div>
-          </form>
-          <form id="add-git" autocomplete="off" hidden>
-            <div class="inline">
-              <input class="f" id="git-url" placeholder="https://github.com/owner/repo or git@github.com:owner/repo.git" aria-label="Git URL" required>
-              <button class="btn" type="submit">Clone</button>
-            </div>
-            <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span>. Private repos: use the ssh URL (this Mac's ssh key).</div>
-          </form>
-          <div class="msg" id="repo-msg" role="status"></div>
-          <div class="warn-note">⚠ Agents read and run this repo's code (tests, scripts) on this Mac. Add only repositories you trust.</div>
-        </details>
-      </section>
-
-      <section class="card">
-        <h2><span class="step">2</span>Task</h2>
-        <form id="task-form" autocomplete="off">
-          <div class="muted" id="starters-label">Start from a common task, or write your own:</div>
-          <div class="starters" id="starters" style="margin-top:6px"></div>
-          <label class="l" for="title">What should it do?</label>
-          <input class="f" id="title" maxlength="200" required placeholder="e.g. Add input validation to the signup API, with tests">
-          <div class="suggest" id="suggest" hidden></div>
-          <label class="l" for="body">Details (optional)</label>
-          <textarea class="f" id="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, what not to change."></textarea>
-          <div class="row2">
-            <div>
-              <label class="l" for="agent">Agent</label>
-              <select class="f" id="agent">
-                <option value="claude">Claude: code (paid)</option>
-                <option value="hermes">Hermes: docs and drafts (free, local)</option>
-                <option value="auto">Auto: Hermes first, Claude if tests fail</option>
-                <option value="codex">Codex (paid)</option>
-                <option value="noop">Noop: dry run (free)</option>
-              </select>
-            </div>
-            <div>
-              <label class="l" for="specialist">Specialist</label>
-              <select class="f" id="specialist"><option value="">None: plain agent</option></select>
-            </div>
-          </div>
-          <div class="muted" id="specialist-desc" style="margin-top:4px; min-height:1em"></div>
-          <div class="modes" role="radiogroup" aria-label="How to run">
-            <label class="mode" id="mode-run"><input type="radio" name="mode" value="run" checked><b>Run now</b><div class="muted">Starts at once on a new branch in its own worktree. Any repo.</div></label>
-            <label class="mode" id="mode-issue"><input type="radio" name="mode" value="issue"><b>GitHub issue → PR</b><div class="muted" id="mode-issue-note">Opens an issue; the agent opens a PR and a reviewer checks it.</div></label>
-          </div>
-          <div class="submit-row">
-            <button class="btn" id="submit" type="submit">Run now</button>
-            <span class="muted" id="submit-note"></span>
-          </div>
-          <div class="msg" id="msg" role="status"></div>
-        </form>
-      </section>
-    </div>
-
-    <section class="card stack">
-      <h2>Running now</h2>
-      <div id="running"><div class="empty">Loading…</div></div>
-    </section>
-
-    <section class="card log-card" id="log-card">
-      <div class="log-head">
-        <h2 style="margin:0">Log: <span class="mono" id="log-id"></span> <span class="muted" id="log-status"></span></h2>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <label class="muted" style="display:flex; gap:5px; align-items:center;"><input type="checkbox" id="log-follow" checked> follow</label>
-          <button class="btn-sm" id="log-close" type="button">Close</button>
         </div>
-      </div>
-      <pre class="log" id="log"></pre>
-    </section>
 
-    <section class="board" id="board"></section>
-    <div class="muted" id="queue-note" style="margin:-6px 0 16px"></div>
+        <!-- Step 1: Target Project (Repository) -->
+        <div class="card">
+          <div class="card-title-row">
+            <h2 class="card-title">
+              <span class="step-pill">1</span>
+              <span class="friendly-only">Choose Project</span>
+              <span class="pro-only">Target Repository</span>
+            </h2>
+            <span class="muted friendly-only" style="font-size:0.75rem;">Where the work happens</span>
+          </div>
 
-    <section class="card stack" id="catalog-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px">
-        <h2 style="margin:0">Specialists <span class="muted" id="catalog-count"></span></h2>
-        <div style="display:flex; gap:8px; flex-wrap:wrap">
-          <input type="search" id="catalog-q" placeholder="Search specialists…" aria-label="Search specialists" class="cat-input">
+          <div id="repo-list" role="radiogroup" aria-label="Repository">
+            <div class="empty">Loading projects…</div>
+          </div>
+
+          <div class="reco" id="repo-reco" hidden></div>
+
+          <details class="add" id="add-repo" hidden>
+            <summary>+ Add another project or repository</summary>
+            <div class="tabs" role="tablist">
+              <button class="tab" type="button" role="tab" data-tab="local" aria-selected="true">Local folder</button>
+              <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">From Git URL</button>
+            </div>
+            <form id="add-local" autocomplete="off">
+              <div class="inline">
+                <input class="f" id="local-path" placeholder="~/projects/my-app" aria-label="Folder path" required>
+                <button class="btn-sm" type="submit">Add</button>
+              </div>
+              <div class="muted" style="margin-top:6px">A folder on this Mac.</div>
+              <div class="suggest" id="found" hidden></div>
+            </form>
+            <form id="add-git" autocomplete="off" hidden>
+              <div class="inline">
+                <input class="f" id="git-url" placeholder="https://github.com/owner/repo" aria-label="Git URL" required>
+                <button class="btn-sm" type="submit">Clone</button>
+              </div>
+              <div class="muted" style="margin-top:6px">Cloned into <span class="mono">~/agent-repos</span>.</div>
+            </form>
+            <div class="msg" id="repo-msg" role="status"></div>
+            <div class="warn-note">⚠ Agents read and run this repo's code. Add only repositories you trust.</div>
+          </details>
+        </div>
+
+        <!-- Step 2: Assign Teammate & Task -->
+        <div class="card">
+          <div class="card-title-row">
+            <h2 class="card-title">
+              <span class="step-pill">2</span>
+              <span class="friendly-only">Assign Teammate & Task</span>
+              <span class="pro-only">Task Specification</span>
+            </h2>
+          </div>
+
+          <!-- Role Selector -->
+          <div class="roles-container">
+            <span class="roles-label">
+              <span class="friendly-only">Select your teammate persona:</span>
+              <span class="pro-only">I'm working as:</span>
+            </span>
+            <div id="roles" class="roles-grid"></div>
+          </div>
+
+          <form id="task-form" autocomplete="off">
+            <!-- 1-Click Starters -->
+            <div class="starters-box">
+              <div class="muted" id="starters-label" style="font-size:0.76rem; margin-bottom:5px;">
+                Start from a common goal, or type your own:
+              </div>
+              <div class="starters" id="starters"></div>
+            </div>
+
+            <!-- Task Title with Voice Input -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 5px;">
+              <label class="l" for="title" style="margin:0;">
+                <span class="friendly-only">What do you want them to do?</span>
+                <span class="pro-only">Goal / Title</span>
+              </label>
+              <button type="button" class="btn-mic" id="btn-voice-input" title="Speak your task (Speech-to-Text)">
+                <span class="mic-icon">🎙️</span>
+                <span class="mic-text">Speak</span>
+              </button>
+            </div>
+            <input class="f" id="title" maxlength="200" required placeholder="e.g. Add input validation to signup API, or Explain how auth works">
+            <div class="suggest" id="suggest" hidden></div>
+
+            <!-- Task Details -->
+            <label class="l" for="body">
+              <span class="friendly-only">Extra instructions or details (Optional)</span>
+              <span class="pro-only">Details / Guardrails (Optional)</span>
+            </label>
+            <textarea class="f" id="body" maxlength="8000" placeholder="Files to touch, acceptance criteria, or what not to change."></textarea>
+
+            <!-- Specialist & Engine Pickers -->
+            <div class="row2">
+              <div>
+                <label class="l" for="agent">
+                  <span class="friendly-only">AI Engine & Power</span>
+                  <span class="pro-only">Agent Engine</span>
+                </label>
+                <select class="f" id="agent">
+                  <option value="claude">Claude 3.7: Deep Code (Smart, Paid)</option>
+                  <option value="hermes">Hermes 3: Docs & Drafts (Free, Local)</option>
+                  <option value="auto">Auto: Hermes first, Claude fallback</option>
+                  <option value="codex">Codex (Paid)</option>
+                  <option value="noop">Noop: Dry Run / Preview (Free)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="l" for="specialist">
+                  <span class="friendly-only">Specialist Persona</span>
+                  <span class="pro-only">Specialist Skill</span>
+                </label>
+                <div class="specialist-picker-row">
+                  <select class="f" id="specialist" style="flex:1">
+                    <option value="">None: Plain Assistant</option>
+                  </select>
+                  <button type="button" class="btn-browse" id="btn-open-catalog" title="Browse full catalog">
+                    👥 80+
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="muted" id="specialist-desc" style="margin-top:6px; min-height:1.2em; font-size:0.75rem;"></div>
+
+            <!-- Execution Mode -->
+            <div class="modes" role="radiogroup" aria-label="How to run">
+              <label class="mode" id="mode-run">
+                <input type="radio" name="mode" value="run" checked>
+                <b>
+                  <span class="friendly-only">🚀 Run in Safe Sandbox</span>
+                  <span class="pro-only">Run Now (Worktree)</span>
+                </b>
+                <div class="muted">Runs immediately on a private draft branch. Zero live risk.</div>
+              </label>
+              <label class="mode" id="mode-issue">
+                <input type="radio" name="mode" value="issue">
+                <b>
+                  <span class="friendly-only">📋 Open GitHub Issue → PR</span>
+                  <span class="pro-only">GitHub Issue → PR</span>
+                </b>
+                <div class="muted" id="mode-issue-note">Opens an issue; the agent opens a PR for peer review.</div>
+              </label>
+            </div>
+
+            <button class="btn-submit" id="submit" type="submit">
+              <span class="friendly-only">🚀 Start Working on This</span>
+              <span class="pro-only">Run now</span>
+            </button>
+            <div class="muted" id="submit-note" style="text-align:center; margin-top:8px; font-size:0.75rem;"></div>
+
+            <div class="msg" id="msg" role="status"></div>
+          </form>
+        </div>
+      </section>
+
+      <!-- RIGHT: Execution Cockpit & Activity Hub -->
+      <section class="cockpit-panel">
+
+        <!-- Cockpit Segmented Tab Navigation -->
+        <nav class="cockpit-nav">
+          <div class="cockpit-tabs" role="tablist">
+            <button class="cockpit-tab-btn active" id="tab-btn-live" type="button" role="tab">
+              ⚡ Live Activity
+            </button>
+            <button class="cockpit-tab-btn" id="tab-btn-board" type="button" role="tab">
+              📌 Pipeline Board
+            </button>
+            <button class="cockpit-tab-btn" id="tab-btn-threads" type="button" role="tab">
+              💬 Chat Threads & History
+            </button>
+          </div>
+          <span class="muted friendly-only" style="font-size:0.76rem;">Auto-refreshes every 5s</span>
+        </nav>
+
+        <div class="cockpit-views">
+
+          <!-- View 1: Live Activity & Terminal -->
+          <section id="view-live" class="active">
+            <div class="card">
+              <div class="card-title-row">
+                <h2 class="card-title">
+                  <span class="pulse"></span>
+                  <span class="friendly-only">Tasks in Progress</span>
+                  <span class="pro-only">Running Executions</span>
+                </h2>
+              </div>
+              <div id="running" class="running-box">
+                <div class="empty">Checking for active tasks…</div>
+              </div>
+            </div>
+
+            <!-- Docked Terminal & Progress Drawer -->
+            <div class="log-card" id="log-card">
+              <div class="log-head">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:0.9rem;">💻</span>
+                  <h3 style="margin:0; font-size:0.85rem; font-weight:600;">
+                    Task Log: <span class="mono" id="log-id"></span>
+                    <span class="muted" id="log-status"></span>
+                  </h3>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                  <label class="muted" style="display:flex; gap:5px; align-items:center; font-size:0.75rem;">
+                    <input type="checkbox" id="log-follow" checked> Auto-scroll
+                  </label>
+                  <button class="btn-sm" id="log-close" type="button">Close</button>
+                </div>
+              </div>
+              <pre class="log" id="log"></pre>
+            </div>
+          </section>
+
+          <!-- View 2: Pipeline Kanban Board -->
+          <section id="view-board">
+            <div class="board" id="board"></div>
+            <div class="muted" id="queue-note" style="margin:-6px 0 16px; font-size:0.76rem;"></div>
+          </section>
+
+          <!-- View 3: Chat Threads & Previous Sessions -->
+          <section id="view-threads">
+            <div class="card" style="margin-bottom:16px;">
+              <div class="card-title-row">
+                <h2 class="card-title">
+                  <span>💬</span>
+                  <span class="friendly-only">Conversational Task Threads</span>
+                  <span class="pro-only">Previous Sessions & Lineage</span>
+                </h2>
+                <div style="display:flex; gap:8px;">
+                  <button type="button" class="btn-sm" id="btn-export-transcripts" title="Export markdown summary">
+                    📥 Export MD
+                  </button>
+                </div>
+              </div>
+              <div class="muted friendly-only" style="font-size:0.78rem; margin-bottom:12px;">
+                Review past task deliverables, see files changed, and continue conversations in the exact same workspace.
+              </div>
+              <div id="threads-container" class="threads-list">
+                <div class="empty">Loading session history…</div>
+              </div>
+            </div>
+
+            <!-- Pro Table (also accessible) -->
+            <div class="card pro-only">
+              <h3 style="margin:0 0 10px; font-size:0.85rem;">Raw Execution Log Table</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Status</th><th>Agent</th><th>Took</th><th>Commits</th><th>For</th><th>Task</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody id="recent">
+                    <tr><td colspan="7" class="empty">Loading…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Specialist Catalog Modal / Library Drawer -->
+    <div class="modal-overlay" id="catalog-modal" role="dialog" aria-modal="true" aria-label="Specialist Library">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div>
+            <h2>👥 The Agency: Specialist Teammate Library</h2>
+            <div class="muted" id="catalog-source" style="font-size:0.76rem; margin-top:3px;"></div>
+            <div class="muted" id="catalog-basis" style="font-size:0.74rem; color:#e8c66a; margin-top:2px;"></div>
+          </div>
+          <button type="button" class="btn-sm" id="catalog-modal-close">Close ✕</button>
+        </div>
+
+        <div class="modal-filters">
+          <input type="search" id="catalog-q" placeholder="Search by name, skill, or keywords…" aria-label="Search specialists" class="cat-input" style="flex:1; min-width:200px;">
           <select id="catalog-sort" aria-label="Sort specialists" class="cat-input">
             <option value="recommended">⭐ Recommended for you</option>
             <option value="used">Most used by you</option>
             <option value="az">A–Z</option>
           </select>
-          <select id="catalog-division" aria-label="Division" class="cat-input"><option value="">All divisions</option></select>
+          <select id="catalog-division" aria-label="Division" class="cat-input">
+            <option value="">All divisions</option>
+          </select>
+          <span class="muted" id="catalog-count" style="align-self:center; font-size:0.75rem;"></span>
+        </div>
+
+        <div class="modal-body">
+          <div class="cat-grid" id="catalog"></div>
+          <button class="btn-sm" id="catalog-more" type="button" hidden style="display:block; margin:16px auto 0">
+            Show more specialists
+          </button>
         </div>
       </div>
-      <div class="muted" id="catalog-source" style="margin-bottom:4px"></div>
-      <div class="muted" id="catalog-basis" style="margin-bottom:10px"></div>
-      <div class="cat-grid" id="catalog"></div>
-      <button class="btn-sm" id="catalog-more" type="button" hidden style="display:block; margin:10px auto 0">Show more</button>
-    </section>
+    </div>
 
-    <section class="card">
-      <h2>Recent runs</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Status</th><th>Agent</th><th>Took</th><th>Commits</th><th>For</th><th>Task</th><th></th></tr></thead>
-          <tbody id="recent"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-        </table>
+    <!-- Deliverable & Visual Preview Modal -->
+    <div class="modal-overlay" id="deliverable-modal" role="dialog" aria-modal="true" aria-label="Task Deliverables & Summary">
+      <div class="modal-dialog deliverable-dialog">
+        <div class="modal-header">
+          <div>
+            <h2 id="deliverable-title" style="display:flex; align-items:center; gap:8px;">
+              <span>📄</span>
+              <span id="deliverable-title-text">Task Deliverable & Summary</span>
+            </h2>
+            <div class="muted" id="deliverable-meta" style="font-size:0.76rem; margin-top:3px;"></div>
+          </div>
+          <button type="button" class="btn-sm" id="deliverable-modal-close">Close ✕</button>
+        </div>
+
+        <div class="modal-body" id="deliverable-content">
+          <!-- Populated dynamically via openDeliverable(r) -->
+        </div>
+
+        <div class="modal-footer" style="padding:14px 24px; border-top:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <span class="muted" id="deliverable-footer-note" style="font-size:0.75rem;"></span>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn-sm" id="deliverable-copy-btn">📋 Copy Summary</button>
+            <button type="button" class="btn-sm" id="deliverable-log-btn">📜 View Raw Log</button>
+            <button type="button" class="btn-sm" id="deliverable-followup-btn" style="color:var(--status-blue); font-weight:600;">💬 Chat / Follow-up</button>
+          </div>
+        </div>
       </div>
-    </section>
+    </div>
   </main>
+
   <script src="agents-page.js"></script>
   <script src="agents-workspace.js"></script>
 </body>

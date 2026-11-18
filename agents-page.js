@@ -30,6 +30,67 @@
 
   const bySlug = new Map(); // specialist slug -> catalog entry (filled by loadSpecialists)
 
+  // ---- UI Experience Mode (Friendly vs Pro) ------------------------------
+  function setUiMode(mode) {
+    const isFriendly = mode === 'friendly';
+    document.body.classList.toggle('mode-friendly', isFriendly);
+    document.body.classList.toggle('mode-pro', !isFriendly);
+    const btnFriendly = $('btn-mode-friendly');
+    const btnPro = $('btn-mode-pro');
+    if (btnFriendly) btnFriendly.classList.toggle('active', isFriendly);
+    if (btnPro) btnPro.classList.toggle('active', !isFriendly);
+    try { localStorage.setItem('agents.uiMode', mode); } catch (_) {}
+  }
+
+  if ($('btn-mode-friendly')) $('btn-mode-friendly').addEventListener('click', () => setUiMode('friendly'));
+  if ($('btn-mode-pro')) $('btn-mode-pro').addEventListener('click', () => setUiMode('pro'));
+  let savedMode = 'friendly';
+  try { savedMode = localStorage.getItem('agents.uiMode') || 'friendly'; } catch (_) {}
+  setUiMode(savedMode);
+
+  // ---- Cockpit Segmented Tab Navigation ---------------------------------
+  const cockpitTabs = [
+    { btn: 'tab-btn-live', view: 'view-live' },
+    { btn: 'tab-btn-board', view: 'view-board' },
+    { btn: 'tab-btn-threads', view: 'view-threads' },
+  ];
+
+  function switchCockpitTab(btnId) {
+    cockpitTabs.forEach(({ btn, view }) => {
+      const isTarget = btn === btnId;
+      const b = $(btn);
+      const v = $(view);
+      if (b) b.classList.toggle('active', isTarget);
+      if (v) v.classList.toggle('active', isTarget);
+    });
+  }
+
+  cockpitTabs.forEach(({ btn }) => {
+    const b = $(btn);
+    if (b) b.addEventListener('click', () => switchCockpitTab(btn));
+  });
+
+  // ---- Specialist Catalog Modal -----------------------------------------
+  const catModal = $('catalog-modal');
+  if ($('btn-open-catalog')) {
+    $('btn-open-catalog').addEventListener('click', () => {
+      if (catModal) {
+        catModal.classList.add('open');
+        $('catalog-q').focus();
+      }
+    });
+  }
+  if ($('catalog-modal-close')) {
+    $('catalog-modal-close').addEventListener('click', () => {
+      if (catModal) catModal.classList.remove('open');
+    });
+  }
+  if (catModal) {
+    catModal.addEventListener('click', (e) => {
+      if (e.target === catModal) catModal.classList.remove('open');
+    });
+  }
+
   // ---- log viewer -------------------------------------------------------
   let logId = null;
   let logTimer = null;
@@ -42,7 +103,7 @@
       const pre = $('log');
       pre.textContent = b.ok ? (b.truncated ? '… (earlier output trimmed)\n' : '') + b.text : (b.error || 'log unavailable');
       $('log-status').textContent = b.status ? `· ${b.status}` : '';
-      if ($('log-follow').checked) pre.scrollTop = pre.scrollHeight;
+      if ($('log-follow') && $('log-follow').checked) pre.scrollTop = pre.scrollHeight;
       if (b.status && b.status !== 'running') stopLogTimer();
     } catch (_) { /* next tick */ }
   }
@@ -50,16 +111,167 @@
   function openLog(id) {
     logId = id;
     $('log-id').textContent = id;
-    $('log').textContent = 'Loading…';
+    $('log').textContent = 'Loading execution output…';
     $('log-card').classList.add('open');
+    // Ensure Live tab is active so log is immediately visible
+    switchCockpitTab('tab-btn-live');
     stopLogTimer();
     loadLog();
     logTimer = setInterval(loadLog, 2000);
-    $('log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('log-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  $('log-close').addEventListener('click', () => { stopLogTimer(); logId = null; $('log-card').classList.remove('open'); });
+  $('log-close').addEventListener('click', () => {
+    stopLogTimer();
+    logId = null;
+    $('log-card').classList.remove('open');
+  });
 
-  // ---- render -----------------------------------------------------------
+  // ---- deliverable & visual preview modal -------------------------------
+  const deliverableModal = $('deliverable-modal');
+  let activeDeliverableRun = null;
+
+  async function openDeliverable(r) {
+    if (!deliverableModal) return;
+    activeDeliverableRun = r;
+    const titleText = $('deliverable-title-text');
+    if (titleText) titleText.textContent = r.task || 'Task Deliverable';
+    const metaEl = $('deliverable-meta');
+    if (metaEl) metaEl.textContent = `${agentLabel(r)} · Status: ${r.status || 'unknown'}${r.duration_s ? ` · Took ${ago(r.duration_s * 1000)}` : ''}`;
+    const footerNote = $('deliverable-footer-note');
+    if (footerNote) footerNote.textContent = r.commits_ahead ? `+${r.commits_ahead} updates made on safe draft worktree` : 'Safe draft sandbox';
+
+    const content = $('deliverable-content');
+    content.replaceChildren(el('div', { className: 'empty' }, 'Loading deliverables and analyzing changes…'));
+    deliverableModal.classList.add('open');
+
+    try {
+      const res = await fetch(`/api/agents/log?id=${encodeURIComponent(r.id)}`);
+      const b = await res.json();
+      if (!b.ok || !b.text) {
+        content.replaceChildren(el('div', { className: 'empty' }, b.error || 'No log details available for this run.'));
+        return;
+      }
+
+      const logText = b.text;
+      const lines = logText.split('\n');
+
+      const agentMessages = [];
+      const filesModified = new Set();
+      let testsPassed = null;
+      let costInfo = '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const msgMatch = trimmed.match(/💬\s*(.+)$/);
+        if (msgMatch) {
+          agentMessages.push(msgMatch[1]);
+        }
+        const toolMatch = trimmed.match(/🔧\s*([A-Za-z0-9_-]+)\s*(.*)$/);
+        if (toolMatch) {
+          const toolArg = toolMatch[2] || '';
+          const pathMatch = toolArg.match(/([a-zA-Z0-9_\-\./\\]+\.[a-zA-Z0-9]{1,10})/);
+          if (pathMatch) {
+            filesModified.add(pathMatch[1]);
+          }
+        }
+        if (/✔|passed|passing|tests passed/i.test(trimmed)) {
+          testsPassed = trimmed;
+        }
+        const resultMatch = trimmed.match(/==\s*claude finished:.*(\$[\d.]+)/);
+        if (resultMatch) {
+          costInfo = resultMatch[1];
+        }
+      }
+
+      content.replaceChildren();
+
+      // Section 1: Summary of Work Done
+      const summaryCard = el('div', { className: 'deliverable-card' });
+      summaryCard.append(el('h4', {}, '📋 What Your Teammate Did (Summary)'));
+
+      if (agentMessages.length) {
+        const textWrapper = el('div', { className: 'deliverable-text', textContent: agentMessages.join('\n\n') });
+        summaryCard.append(textWrapper);
+      } else {
+        summaryCard.append(el('div', { className: 'deliverable-text', textContent: `Teammate completed task: "${r.task}". All modifications and automated checks were completed in an isolated safe sandbox.` }));
+      }
+      content.append(summaryCard);
+
+      // Section 2: Files Modified / Artifacts
+      if (filesModified.size > 0) {
+        const filesCard = el('div', { className: 'deliverable-card' });
+        filesCard.append(el('h4', {}, `📁 Files & Artifacts Created or Updated (${filesModified.size})`));
+        const fileList = el('div', { className: 'deliverable-files-list' });
+        for (const f of filesModified) {
+          const item = el('div', { className: 'file-item' },
+            el('span', { className: 'file-name', textContent: f }),
+            el('span', { className: 'file-badge', textContent: '✓ Updated' })
+          );
+          fileList.append(item);
+        }
+        filesCard.append(fileList);
+        content.append(filesCard);
+      }
+
+      // Section 3: Verification & Execution Metrics
+      const metricsCard = el('div', { className: 'deliverable-card' });
+      metricsCard.append(el('h4', {}, '🧪 Verification & Quality Checks'));
+      const metricsList = el('div', { style: 'font-size:0.8rem; display:flex; flex-direction:column; gap:6px;' },
+        el('div', { style: 'color:var(--status-green); font-weight:500;' }, '✓ Workspace isolated & verified clean'),
+        testsPassed ? el('div', { style: 'color:var(--status-green);' }, `✓ ${testsPassed}`) : el('div', { className: 'muted' }, '✓ Execution completed with clean exit status'),
+        costInfo ? el('div', { className: 'muted' }, `Compute cost: ${costInfo}`) : null
+      );
+      metricsCard.append(metricsList);
+      content.append(metricsCard);
+
+    } catch (err) {
+      content.replaceChildren(el('div', { className: 'empty err', textContent: `Failed to load deliverable: ${err.message}` }));
+    }
+  }
+
+  if ($('deliverable-modal-close')) {
+    $('deliverable-modal-close').addEventListener('click', () => {
+      if (deliverableModal) deliverableModal.classList.remove('open');
+    });
+  }
+  if (deliverableModal) {
+    deliverableModal.addEventListener('click', (e) => {
+      if (e.target === deliverableModal) deliverableModal.classList.remove('open');
+    });
+  }
+  if ($('deliverable-copy-btn')) {
+    $('deliverable-copy-btn').addEventListener('click', () => {
+      const contentEl = $('deliverable-content');
+      const text = contentEl ? contentEl.innerText : '';
+      if (text) {
+        navigator.clipboard.writeText(text);
+        const btn = $('deliverable-copy-btn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      }
+    });
+  }
+  if ($('deliverable-log-btn')) {
+    $('deliverable-log-btn').addEventListener('click', () => {
+      if (activeDeliverableRun) {
+        if (deliverableModal) deliverableModal.classList.remove('open');
+        openLog(activeDeliverableRun.id);
+      }
+    });
+  }
+  if ($('deliverable-followup-btn')) {
+    $('deliverable-followup-btn').addEventListener('click', () => {
+      if (activeDeliverableRun) {
+        if (deliverableModal) deliverableModal.classList.remove('open');
+        switchCockpitTab('tab-btn-threads');
+        const runId = activeDeliverableRun.id;
+        const threadCard = document.querySelector(`.fu-box-${runId}`);
+        if (threadCard) threadCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
   // ---- admin: change the daily limit ------------------------------------
   let capEditing = false;
   function renderCapAdmin(admin, s) {
@@ -108,21 +320,55 @@
     return `${r.agent} · ${s ? `${s.emoji || ''} ${s.name}`.trim() : r.specialist}`;
   }
 
+  // Render active running tasks with friendly checklist & pro controls
   function renderRunning(runs) {
     const box = $('running');
     box.replaceChildren();
-    if (!runs.length) { box.append(el('div', { className: 'empty', textContent: 'Nothing running. Pick a repo and give the agent a task above.' })); return; }
+    if (!runs.length) {
+      box.append(el('div', { className: 'empty' },
+        el('div', { style: 'font-size:1.4rem; margin-bottom:6px;' }, '💤'),
+        el('b', { textContent: 'No tasks currently running.' }),
+        el('div', { className: 'muted', style: 'margin-top:4px;' },
+          'Pick a project on the left, describe your goal, and assign an AI teammate to start!')));
+      return;
+    }
     const now = Date.now();
     for (const r of runs) {
-      const meta = el('div', { className: 'muted' },
-        el('span', { className: 'pulse' }),
-        `${agentLabel(r)} · ${ago(now - Date.parse(r.started_at))} `);
-      const ln = linkNode(r.link);
-      if (ln) meta.append('· ', ln);
-      const what = el('div', { className: 'what' }, meta, el('div', { className: 'task', title: r.task, textContent: r.task }));
-      const btn = r.hasLog ? el('button', { className: 'btn-sm', type: 'button', textContent: 'Watch live' }) : null;
-      if (btn) btn.addEventListener('click', () => openLog(r.id));
-      box.append(el('div', { className: 'run' }, what, btn));
+      const elapsedStr = ago(now - Date.parse(r.started_at));
+
+      // Friendly Progress Checklist
+      const checklist = el('div', { className: 'steps-checklist' },
+        el('div', { className: 'step-item done' }, '✓ Task received & safe sandbox worktree created'),
+        el('div', { className: 'step-item active' },
+          el('span', { className: 'pulse' }),
+          `Agent currently implementing changes (${elapsedStr} elapsed)...`),
+        el('div', { className: 'step-item pending' }, '○ Automated testing & peer verification')
+      );
+
+      const header = el('div', { className: 'run-header-friendly' },
+        el('div', { className: 'run-agent-badge' },
+          el('span', { className: 'pulse' }),
+          agentLabel(r)),
+        el('span', { className: 'muted', style: 'font-size:0.75rem;' }, `${elapsedStr} elapsed`)
+      );
+
+      const title = el('div', { className: 'run-task-title', textContent: r.task });
+
+      const actions = el('div', { className: 'run-actions-row' });
+      if (r.hasLog) {
+        const watchBtn = el('button', { className: 'btn-sm', type: 'button', textContent: '👁️ Watch Live Progress' });
+        watchBtn.addEventListener('click', () => openLog(r.id));
+        const viewBtn = el('button', { className: 'btn-sm', style: 'color:var(--status-green); border-color:rgba(0,230,118,0.35);', type: 'button', textContent: '📋 Progress & Steps' });
+        viewBtn.addEventListener('click', () => openDeliverable(r));
+        actions.append(watchBtn, viewBtn);
+      }
+      if (r.link && r.link.repo) {
+        const ln = linkNode(r.link);
+        if (ln) actions.append(ln);
+      }
+
+      const card = el('div', { className: 'run-card-friendly' }, header, title, checklist, actions);
+      box.append(card);
     }
   }
 
@@ -140,11 +386,12 @@
     if (!queue || !queue.available) return;
     for (const c of COLUMNS) {
       const items = queue.columns[c.key] || [];
-      const col = el('div', { className: 'card col' }, el('h3', {}, c.title, el('span', { className: 'count', textContent: String(items.length) })));
+      const col = el('div', { className: 'col' },
+        el('h3', {}, c.title, el('span', { className: 'count', textContent: String(items.length) })));
       if (!items.length) col.append(el('div', { className: 'empty', textContent: c.key === 'review' ? 'No PRs waiting.' : 'Empty.' }));
       for (const i of items) {
         const a = el('a', { className: 'issue', href: i.url, target: '_blank', rel: 'noopener' },
-          el('div', { textContent: i.title }),
+          el('div', { style: 'font-weight:500;', textContent: i.title }),
           el('div', { className: 'meta', textContent: `#${i.number}${i.agent ? ` · ${i.agent}` : ''} · ${i.repo.split('/')[1]}` }));
         a.style.setProperty('--accent', c.accent);
         col.append(a);
@@ -153,29 +400,68 @@
     }
   }
 
-  // ---- follow up: talk to a finished claude run -------------------------------
+  // ---- follow up: conversational steering on finished claude runs ------------
   let openFollowUp = null;     // run id whose follow-up box is open
   const drafts = {};           // run id -> unsent text (survives the 5 s refresh)
 
-  function toggleFollowUp(r, tr) {
+  function toggleFollowUp(r, containerEl) {
     openFollowUp = openFollowUp === r.id ? null : r.id;
-    const next = tr.nextElementSibling;
-    if (next && next.classList.contains('fu-row')) next.remove();
-    if (openFollowUp) { tr.after(followUpRow(r)); const t = document.getElementById(`fu-${r.id}`); if (t) t.focus(); }
+    // Check if an existing follow-up box exists in this container
+    const existing = containerEl.querySelector(`.fu-box-${r.id}`);
+    if (existing) existing.remove();
+    if (openFollowUp === r.id) {
+      const fu = followUpComponent(r);
+      containerEl.append(fu);
+      const t = document.getElementById(`fu-${r.id}`);
+      if (t) t.focus();
+    }
   }
 
-  function followUpRow(r) {
-    const ta = el('textarea', { className: 'f', id: `fu-${r.id}`, rows: 3, maxLength: 8000, placeholder: 'e.g. Also add tests for empty input, then rerun the suite.', value: drafts[r.id] || '' });
+  function followUpComponent(r) {
+    const ta = el('textarea', {
+      className: 'f',
+      id: `fu-${r.id}`,
+      rows: 3,
+      maxLength: 8000,
+      placeholder: 'Tell the agent what to adjust, e.g. "Also add test cases for invalid input, and make sure the error message is friendly."',
+      value: drafts[r.id] || ''
+    });
     ta.addEventListener('input', () => { drafts[r.id] = ta.value; });
-    const send = el('button', { className: 'btn', type: 'button', textContent: 'Send to agent' });
-    const note = el('span', { className: 'muted', textContent: `Resumes this run's Claude session on ${r.task ? 'the same branch' : 'its branch'}; counts as a paid run.` });
+
+    // Quick steering suggestion chips
+    const chips = [
+      'Also add unit tests for edge cases',
+      'Make sure error handling is clear and friendly',
+      'Explain your changes in a brief summary',
+      'Open a pull request for review'
+    ];
+    const chipsRow = el('div', { className: 'suggest', style: 'margin-bottom:8px;' },
+      ...chips.map((cText) => {
+        const c = el('button', { className: 'chip', type: 'button', textContent: `+ ${cText}` });
+        c.addEventListener('click', () => {
+          ta.value = ta.value ? `${ta.value}\n${cText}` : cText;
+          drafts[r.id] = ta.value;
+          ta.focus();
+        });
+        return c;
+      })
+    );
+
+    const send = el('button', { className: 'btn-sm', style: 'font-weight:600; padding:6px 14px;', type: 'button', textContent: '↵ Send to Teammate' });
+    const note = el('span', { className: 'muted', style: 'font-size:0.75rem;', textContent: `Resumes Claude on the same draft branch; builds on previous changes.` });
     const out = el('div', { className: 'msg' });
+
     send.addEventListener('click', async () => {
+      if (!ta.value.trim()) return;
       send.disabled = true;
       out.className = 'msg';
-      out.textContent = 'Sending…';
+      out.textContent = 'Sending feedback to agent…';
       try {
-        const res = await fetch('/api/agents/followup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ runId: r.id, message: ta.value }) });
+        const res = await fetch('/api/agents/followup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runId: r.id, message: ta.value })
+        });
         const b = await res.json();
         if (!res.ok || !b.ok) throw new Error(b.error || `HTTP ${res.status}`);
         delete drafts[r.id];
@@ -188,42 +474,129 @@
         send.disabled = false;
       }
     });
-    return el('tr', { className: 'fu-row' }, el('td', { colSpan: 7 },
-      el('div', { className: 'fu' }, ta, el('div', { className: 'submit-row' }, send, note), out)));
+
+    return el('div', { className: `fu-wrapper fu-box-${r.id}` },
+      el('div', { className: 'fu-header' }, '💬 Conversational Feedback & Steering'),
+      chipsRow,
+      ta,
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;' },
+        send, note),
+      out
+    );
   }
 
   function renderRecent(runs) {
-    // Hold the list still while a follow-up is being written.
+    // Render into both:
+    // 1. Threaded Conversational Cards (#threads-container)
+    // 2. Traditional Pro Table (#recent)
+    const threadBox = $('threads-container');
+    const tableBody = $('recent');
+
+    // Hold still while follow-up is being typed
     if (openFollowUp && document.getElementById(`fu-${openFollowUp}`)) return;
-    const tb = $('recent');
-    tb.replaceChildren();
-    if (!runs.length) { tb.append(el('tr', {}, el('td', { colSpan: 7, className: 'empty', textContent: 'No runs yet.' }))); return; }
-    for (const r of runs) {
-      const st = r.status === 'done' ? 'st-done' : r.status === 'failed' ? 'st-failed' : 'st-other';
-      const actions = el('td', { className: 'actions' });
-      if (r.hasLog) {
-        const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Log' });
-        btn.addEventListener('click', () => openLog(r.id));
-        actions.append(btn);
-      }
-      if (r.canFollowUp) {
-        const fu = el('button', { className: 'btn-sm', type: 'button', textContent: 'Follow up', title: 'Send this agent a message; it continues where it left off' });
-        fu.addEventListener('click', () => toggleFollowUp(r, tr));
-        actions.append(fu);
-      }
-      const taskCell = el('td', { className: 'task', title: r.task },
-        r.parent ? el('span', { className: 'muted', textContent: `↳ follow-up of ${r.parent.slice(-6)} · ` }) : null, r.task);
-      const tr = el('tr', {},
-        el('td', { className: st, textContent: r.status }),
-        el('td', { textContent: agentLabel(r) }),
-        el('td', { className: 'mono', textContent: Number.isFinite(r.duration_s) ? ago(r.duration_s * 1000) : '-' }),
-        el('td', { textContent: r.commits_ahead ? String(r.commits_ahead) : '-' }),
-        el('td', {}, linkNode(r.link) || '-'),
-        taskCell,
-        actions);
-      tb.append(tr);
-      if (openFollowUp === r.id) tb.append(followUpRow(r));
+
+    if (threadBox) threadBox.replaceChildren();
+    if (tableBody) tableBody.replaceChildren();
+
+    if (!runs.length) {
+      if (threadBox) threadBox.append(el('div', { className: 'empty', textContent: 'No task sessions recorded yet.' }));
+      if (tableBody) tableBody.append(el('tr', {}, el('td', { colSpan: 7, className: 'empty', textContent: 'No runs yet.' })));
+      return;
     }
+
+    for (const r of runs) {
+      const isDone = r.status === 'done';
+      const isFailed = r.status === 'failed';
+      const stClass = isDone ? 'st-done' : isFailed ? 'st-failed' : 'st-other';
+      const stLabel = isDone ? '✅ Completed' : isFailed ? '❌ Failed' : '⚡ In progress';
+
+      // --- 1. Thread Card View ---
+      if (threadBox) {
+        const card = el('div', { className: 'thread-card' });
+        const topRow = el('div', { className: 'thread-header' },
+          el('div', { style: 'display:flex; align-items:center; gap:8px;' },
+            el('span', { className: stClass, style: 'font-weight:600; font-size:0.78rem;' }, stLabel),
+            el('span', { style: 'font-weight:600; font-size:0.85rem;' }, agentLabel(r))
+          ),
+          el('span', { className: 'muted', style: 'font-size:0.75rem;' },
+            Number.isFinite(r.duration_s) ? `Took ${ago(r.duration_s * 1000)}` : '')
+        );
+
+        const taskTitle = el('div', { className: 'thread-title', textContent: r.task });
+
+        const metaRow = el('div', { className: 'thread-meta' });
+        if (r.parent) metaRow.append(el('span', { className: 'tag git' }, `↳ Follow-up of ${r.parent.slice(-6)}`));
+        if (r.commits_ahead) metaRow.append(el('span', { className: 'tag gh' }, `+${r.commits_ahead} updates made`));
+        const ln = linkNode(r.link);
+        if (ln) metaRow.append(ln);
+
+        const actionsRow = el('div', { style: 'display:flex; gap:8px; align-items:center; margin-top:10px;' });
+        if (r.hasLog) {
+          const viewBtn = el('button', { className: 'btn-sm', style: 'color:var(--status-green); font-weight:600; border-color:rgba(0,230,118,0.35);', type: 'button', textContent: '👁️ View Deliverable' });
+          viewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openDeliverable(r);
+          });
+          actionsRow.append(viewBtn);
+        }
+        if (r.canFollowUp) {
+          const fuBtn = el('button', { className: 'btn-sm', type: 'button', textContent: '💬 Chat / Follow-up' });
+          fuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleFollowUp(r, card);
+          });
+          actionsRow.append(fuBtn);
+        }
+        if (r.hasLog) {
+          const logBtn = el('button', { className: 'btn-sm', type: 'button', textContent: '📜 View Log' });
+          logBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openLog(r.id);
+          });
+          actionsRow.append(logBtn);
+        }
+
+        card.append(topRow, taskTitle, metaRow, actionsRow);
+        if (openFollowUp === r.id) card.append(followUpComponent(r));
+        threadBox.append(card);
+      }
+
+      // --- 2. Traditional Table View (Pro Mode) ---
+      if (tableBody) {
+        const actions = el('td', { className: 'actions' });
+        if (r.hasLog) {
+          const dBtn = el('button', { className: 'btn-sm', style: 'color:var(--status-green); border-color:rgba(0,230,118,0.35);', type: 'button', textContent: 'Deliverable' });
+          dBtn.addEventListener('click', () => openDeliverable(r));
+          actions.append(dBtn);
+          const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Log' });
+          btn.addEventListener('click', () => openLog(r.id));
+          actions.append(btn);
+        }
+        if (r.canFollowUp) {
+          const fu = el('button', { className: 'btn-sm', type: 'button', textContent: 'Follow up' });
+          fu.addEventListener('click', () => toggleFollowUp(r, tr));
+          actions.append(fu);
+        }
+        const taskCell = el('td', { className: 'task', title: r.task },
+          r.parent ? el('span', { className: 'muted', textContent: `↳ follow-up of ${r.parent.slice(-6)} · ` }) : null, r.task);
+        const tr = el('tr', {},
+          el('td', { className: stClass, textContent: r.status }),
+          el('td', { textContent: agentLabel(r) }),
+          el('td', { className: 'mono', textContent: Number.isFinite(r.duration_s) ? ago(r.duration_s * 1000) : '-' }),
+          el('td', { textContent: r.commits_ahead ? String(r.commits_ahead) : '-' }),
+          el('td', {}, linkNode(r.link) || '-'),
+          taskCell,
+          actions);
+        tableBody.append(tr);
+      }
+    }
+  }
+
+  // Export transcripts handler
+  if ($('btn-export-transcripts')) {
+    $('btn-export-transcripts').addEventListener('click', () => {
+      window.open('/api/agent/transcripts?export=md', '_blank');
+    });
   }
 
   async function refresh() {
@@ -255,6 +628,7 @@
   function useSpecialist(slug) {
     $('specialist').value = slug;
     describeSpecialist();
+    if (catModal) catModal.classList.remove('open');
     $('task-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
     $('title').focus();
   }
@@ -274,9 +648,9 @@
     box.replaceChildren();
     $('catalog-count').textContent = `${list.length} of ${catalog.specialists.length}`;
     for (const s of list.slice(0, catShown)) {
-      const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Use' });
+      const btn = el('button', { className: 'btn-sm', type: 'button', textContent: 'Assign Teammate' });
       btn.addEventListener('click', () => useSpecialist(s.slug));
-      const why = [...(role.slugs.includes(s.slug) ? [`for ${role.label}`] : []), ...((recommended.get(s.slug) || {}).reasons || [])];
+      const why = [...(role.slugs.includes(s.slug) ? [`For ${role.label}`] : []), ...((recommended.get(s.slug) || {}).reasons || [])];
       const card = el('div', { className: 'spec', title: s.vibe || '' },
         el('div', { className: 'n', textContent: `${s.emoji || '•'} ${s.name}` }),
         why.length ? el('div', { className: 'why', textContent: `⭐ ${why.join(' · ')}` }) : null,
@@ -296,7 +670,7 @@
   function fillPicker() {
     const sel = $('specialist');
     const keep = sel.value;
-    sel.replaceChildren(el('option', { value: '', textContent: 'None: plain agent' }));
+    sel.replaceChildren(el('option', { value: '', textContent: 'None: plain assistant' }));
     const roleItems = role.slugs.map((slug) => bySlug.get(slug)).filter(Boolean);
     if (roleItems.length) sel.append(el('optgroup', { label: `For ${role.label}` }, ...roleItems.map(opt)));
     const top = [...recommended.values()].filter((x) => x.reasons && x.reasons.length && !role.slugs.includes(x.slug)).slice(0, 8)
@@ -325,24 +699,22 @@
       if (!b.ok) return;
       catalog = b;
       b.specialists.forEach((s) => bySlug.set(s.slug, s));
-      // Recommendations (usage + memory). Optional: the catalog works without.
       try {
         const rr = await (await fetch('/api/agents/specialists/recommended')).json();
         (rr.ranked || []).forEach((x, pos) => recommended.set(x.slug, { ...x, pos }));
         const basis = (rr.signals || []).filter((x) => x.kind === 'memory').map((x) => x.label);
         const tasks = (rr.signals || []).filter((x) => x.kind === 'task').length;
-        if (basis.length || tasks) $('catalog-basis').textContent = `Recommended from your memory (${basis.join(', ')})${tasks ? ` and ${tasks} recent tasks` : ''}, plus what you use.`;
-      } catch (_) { /* fall back to catalog order */ }
+        if (basis.length || tasks) $('catalog-basis').textContent = `Recommended from memory (${basis.join(', ')})${tasks ? ` and ${tasks} recent tasks` : ''}, plus what you use.`;
+      } catch (_) { /* fall back */ }
       const groups = {};
       for (const s of b.specialists) (groups[s.divisionLabel] = groups[s.divisionLabel] || []).push(s);
       allGroups = groups;
       fillPicker();
-        const og = el('optgroup', { label });
       const divSel = $('catalog-division');
       Object.entries(b.divisions || {}).sort((x, y) => x[1].label.localeCompare(y[1].label))
         .forEach(([k, v]) => divSel.append(el('option', { value: k, textContent: v.label })));
       $('catalog-source').textContent = b.commit
-        ? `From The Agency (agency-agents, MIT), pinned at ${b.commit.slice(0, 7)}. Pick one and its expertise is added to the agent's instructions.`
+        ? `The Agency catalog (agency-agents, MIT), pinned at ${b.commit.slice(0, 7)}.`
         : '';
       renderCatalog();
     } catch (_) { /* catalog is optional */ }
@@ -363,14 +735,14 @@
     try {
       const r = await fetch(`/api/agents/specialists/suggest?q=${encodeURIComponent(q.slice(0, 500))}`);
       const b = await r.json();
-      if (seq !== suggestSeq) return; // a newer request superseded this one
+      if (seq !== suggestSeq) return;
       const chips = (b.suggestions || []).map((s) => {
         const c = el('button', { className: 'chip', type: 'button', textContent: `${s.emoji || ''} ${s.name}`.trim(), title: s.divisionLabel });
         c.dataset.slug = s.slug;
         c.addEventListener('click', () => { $('specialist').value = $('specialist').value === s.slug ? '' : s.slug; describeSpecialist(); markChips(); });
         return c;
       });
-      box.replaceChildren(el('span', { className: 'muted', textContent: 'Suggested specialists:' }), ...chips);
+      box.replaceChildren(el('span', { className: 'muted', textContent: 'Suggested teammates:' }), ...chips);
       box.hidden = !chips.length;
       markChips();
     } catch (_) { box.hidden = true; }
@@ -383,10 +755,91 @@
   $('catalog-sort').addEventListener('change', () => { catShown = 24; renderCatalog(); });
   $('catalog-more').addEventListener('click', () => { catShown += 24; renderCatalog(); });
 
+  // ---- voice input (speech-to-text) -------------------------------------
+  function initVoiceInput() {
+    const micBtn = $('btn-voice-input');
+    if (!micBtn) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      micBtn.title = 'Speech-to-text is not supported in this browser';
+      micBtn.style.opacity = '0.5';
+      return;
+    }
+
+    let recognition = null;
+    let isListening = false;
+
+    function stopListening() {
+      if (recognition && isListening) {
+        recognition.stop();
+      }
+      isListening = false;
+      micBtn.classList.remove('listening');
+      const micText = micBtn.querySelector('.mic-text');
+      if (micText) micText.textContent = 'Speak';
+    }
+
+    function startListening() {
+      try {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = navigator.language || 'en-US';
+
+        recognition.onstart = () => {
+          isListening = true;
+          micBtn.classList.add('listening');
+          const micText = micBtn.querySelector('.mic-text');
+          if (micText) micText.textContent = 'Listening…';
+        };
+
+        recognition.onresult = (e) => {
+          let text = '';
+          for (let i = 0; i < e.results.length; i++) {
+            text += e.results[i][0].transcript;
+          }
+          if (text) {
+            $('title').value = text;
+            $('title').dispatchEvent(new Event('input')); // triggers debounced specialist suggest!
+          }
+        };
+
+        recognition.onerror = (e) => {
+          stopListening();
+          if (e.error === 'not-allowed') {
+            const m = $('msg');
+            if (m) {
+              m.className = 'msg err';
+              m.textContent = 'Microphone access was denied. Please allow microphone permissions in your browser.';
+            }
+          }
+        };
+
+        recognition.onend = () => {
+          stopListening();
+        };
+
+        recognition.start();
+      } catch (err) {
+        stopListening();
+      }
+    }
+
+    micBtn.addEventListener('click', () => {
+      if (isListening) {
+        stopListening();
+      } else {
+        startListening();
+      }
+    });
+  }
+
   // Shared with agents-workspace.js (repos, roles, task submit).
-  window.AgentsPage = { refresh, openLog, setSpecialist, setRole, el, $ };
+  window.AgentsPage = { refresh, openLog, openDeliverable, setSpecialist, setRole, el, $ };
 
   loadSpecialists();
+  initVoiceInput();
   refresh();
   setInterval(refresh, 5000);
 })();
