@@ -70,6 +70,22 @@ function readOrigin(dir) {
   } catch (_) { return null; }
 }
 
+/** Formats a GitHub/GitLab compare or pull request URL from a remote URL and branch name. */
+function prUrlOf(remote, branch) {
+  if (!remote || !branch) return null;
+  const clean = String(remote).trim().replace(/\.git\/?$/, '');
+  const gh = clean.match(/github\.com[:/]([^/]+)\/([^/]+)$/);
+  if (gh) {
+    return `https://github.com/${gh[1]}/${gh[2]}/compare/${encodeURIComponent(branch)}?expand=1`;
+  }
+  const gl = clean.match(/gitlab\.com[:/](.+)$/);
+  if (gl) {
+    const glPath = gl[1].replace(/^\/+|\/+$/g, '');
+    return `https://gitlab.com/${glPath}/-/merge_requests/new?merge_request%5Bsource_branch%5D=${encodeURIComponent(branch)}`;
+  }
+  return null;
+}
+
 const run = (file, args, opts) => new Promise((resolve, reject) => {
   execFile(file, args, { encoding: 'utf8', ...opts }, (err, stdout, stderr) => {
     if (err) { err.stderr = stderr; reject(err); } else resolve(stdout);
@@ -216,4 +232,4 @@ function createRepoRegistry({ file, cloneDir, builtins = () => [], home = realHo
   return { list, resolve, addLocal, addGit, remove, discover };
 }
 
-module.exports = { createRepoRegistry, realHome, readOrigin, validateGitUrl, validateLocalPath, safeRemote, repoNameFromUrl };
+module.exports = { createRepoRegistry, realHome, readOrigin, validateGitUrl, validateLocalPath, safeRemote, repoNameFromUrl, prUrlOf };

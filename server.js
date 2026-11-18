@@ -52,6 +52,8 @@ const RUNS_FILE = process.env.AGENT_RUNS_FILE ||
 // Default: the parent of the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
 const { readRuns } = require('./runs-reader');
+const { readOrigin, prUrlOf } = require('./repo-registry');
+const { isSameSiteJson } = require('./agents-api');
 const { getInvoicingSummary } = require('./invoicing');
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
@@ -1125,6 +1127,148 @@ function handleRequest(req, res) {
       readme,
       latestRun
     });
+  }
+  if (req.url.startsWith('/api/agents/repo/file') && req.method === 'GET') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const repoName = parsedUrl.searchParams.get('repo') || path.basename(DASHBOARD_DIR);
+    const filePath = parsedUrl.searchParams.get('file') || '';
+    if (!filePath) {
+      return sendJson(res, 400, { ok: false, error: 'file parameter is required' });
+    }
+    const repoPath = resolveRepoPath(repoName);
+    if (!repoPath || !fs.existsSync(repoPath)) {
+      return sendJson(res, 404, { ok: false, error: `repository '${repoName}' not found on disk` });
+    }
+
+    const targetPath = path.resolve(repoPath, filePath);
+    const rel = path.relative(repoPath, targetPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      return sendJson(res, 403, { ok: false, error: 'path traversal forbidden' });
+    }
+
+    const segments = rel.split(path.sep);
+    if (segments.some(s => s.startsWith('.env') || s === '.git' || s === '.ssh' || s === 'id_rsa')) {
+      return sendJson(res, 403, { ok: false, error: 'access to sensitive files is restricted' });
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      return sendJson(res, 404, { ok: false, error: `file '${filePath}' not found` });
+    }
+
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        const items = fs.readdirSync(targetPath)
+          .filter(f => !f.startsWith('.') && f !== 'node_modules')
+          .slice(0, 50)
+          .map(f => {
+            let isDir = false;
+            try { isDir = fs.statSync(path.join(targetPath, f)).isDirectory(); } catch (_) {}
+            return { name: f, isDirectory: isDir };
+          });
+        return sendJson(res, 200, { ok: true, isDirectory: true, file: filePath, repo: repoName, items });
+      }
+
+      const MAX_PREVIEW_BYTES = 512 * 1024;
+      const fd = fs.openSync(targetPath, 'r');
+      const buffer = Buffer.alloc(Math.min(stat.size, MAX_PREVIEW_BYTES));
+      fs.readSync(fd, buffer, 0, buffer.length, 0);
+      fs.closeSync(fd);
+
+      const isBinary = buffer.slice(0, 1024).includes(0);
+      if (isBinary) {
+        return sendJson(res, 200, {
+          ok: true,
+          repo: repoName,
+          file: filePath,
+          isBinary: true,
+          size: stat.size,
+          ext: path.extname(targetPath)
+        });
+      }
+
+      const text = buffer.toString('utf8');
+      return sendJson(res, 200, {
+        ok: true,
+        repo: repoName,
+        file: filePath,
+        isBinary: false,
+        content: text,
+        lines: text.split('\n').length,
+        size: stat.size,
+        ext: path.extname(targetPath),
+        truncated: stat.size > MAX_PREVIEW_BYTES
+      });
+    } catch (err) {
+      return sendJson(res, 500, { ok: false, error: `failed to read file: ${err.message}` });
+    }
+  }
+  if (req.url === '/api/agents/run/push-pr' && req.method === 'POST') {
+    if (!isSameSiteJson(req)) {
+      return sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+    }
+    readJsonBody(req, 16 * 1024)
+      .then((b) => {
+        const runId = String(b.runId || '').trim();
+        if (!runId) return sendJson(res, 400, { ok: false, error: 'runId is required' });
+
+        const { runs = [] } = readRuns(RUNS_FILE, 1000);
+        const run = runs.find(r => r.id === runId);
+        if (!run) return sendJson(res, 404, { ok: false, error: `run '${runId}' not found` });
+        if (!run.branch) return sendJson(res, 400, { ok: false, error: 'this run has no git branch recorded' });
+
+        const pushDir = (run.worktree && fs.existsSync(run.worktree)) ? run.worktree : resolveRepoPath(run.repo);
+        if (!pushDir || !fs.existsSync(pushDir)) {
+          return sendJson(res, 404, { ok: false, error: 'target workspace directory is not available on disk' });
+        }
+
+        let remote = readOrigin(pushDir) || (run.repo ? readOrigin(resolveRepoPath(run.repo)) : null);
+        if (!remote) {
+          try {
+            remote = require('child_process').execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: pushDir, encoding: 'utf8', timeout: 5000 }).trim();
+          } catch (_) {}
+        }
+        if (!remote) {
+          return sendJson(res, 400, { ok: false, error: 'no git remote origin found. Configure a remote URL before pushing.' });
+        }
+
+        const prUrl = prUrlOf(remote, run.branch);
+
+        execFile('git', ['push', '-u', 'origin', run.branch], {
+          cwd: pushDir,
+          timeout: 30000,
+          env: {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+            GIT_SSH_COMMAND: 'ssh -o BatchMode=yes',
+            GIT_LFS_SKIP_SMUDGE: '1'
+          }
+        }, (err, stdout, stderr) => {
+          if (err) {
+            const errStr = `${err.message || ''} ${stderr || ''}`;
+            let userMsg = 'Git push failed';
+            if (/permission denied|publickey|access denied/i.test(errStr)) {
+              userMsg = 'Git push denied: SSH key or push permission required for remote origin.';
+            } else if (/timed? out/i.test(errStr)) {
+              userMsg = 'Git push timed out (30s).';
+            } else if (stderr) {
+              userMsg = `Git push failed: ${stderr.trim()}`;
+            }
+            return sendJson(res, 500, { ok: false, error: userMsg, details: errStr.slice(0, 300) });
+          }
+
+          return sendJson(res, 200, {
+            ok: true,
+            runId: run.id,
+            branch: run.branch,
+            remote,
+            prUrl,
+            stdout: String(stdout || '').trim()
+          });
+        });
+      })
+      .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+    return;
   }
   if (req.url.startsWith('/api/agents/')) {
     if (agentsApi.handle(req, res, { sendJson, readJsonBody })) return;

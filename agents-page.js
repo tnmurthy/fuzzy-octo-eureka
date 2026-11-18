@@ -50,6 +50,244 @@
 
   let activeSelectedRepo = 'fuzzy-octo-eureka';
 
+  // ---- Background Task Audio & Desktop Notifications --------------------
+  function getAlertsEnabled() {
+    try { return localStorage.getItem('task_alerts_enabled') !== 'false'; } catch (_) { return true; }
+  }
+
+  function updateAlertsButtonUi() {
+    const enabled = getAlertsEnabled();
+    const icon = $('notif-icon');
+    const label = $('notif-label');
+    if (icon) icon.textContent = enabled ? '🔔' : '🔕';
+    if (label) label.textContent = enabled ? 'Alerts: On' : 'Alerts: Off';
+  }
+
+  function playCompletionChime(success = true) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      if (success) {
+        // D5 (587.33Hz) -> A5 (880Hz)
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.setValueAtTime(880.00, now + 0.12);
+      } else {
+        // E4 (329.63Hz) -> A3 (220Hz)
+        osc.frequency.setValueAtTime(329.63, now);
+        osc.frequency.setValueAtTime(220.00, now + 0.14);
+      }
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.36);
+    } catch (_) {}
+  }
+
+  async function toggleTaskNotifications() {
+    const currentlyEnabled = getAlertsEnabled();
+    const nextState = !currentlyEnabled;
+    try { localStorage.setItem('task_alerts_enabled', String(nextState)); } catch (_) {}
+    updateAlertsButtonUi();
+
+    if (nextState) {
+      if ('Notification' in window && Notification.permission === 'default') {
+        try { await Notification.requestPermission(); } catch (_) {}
+      }
+      playCompletionChime(true);
+    }
+  }
+
+  if ($('btn-toggle-notifs')) {
+    $('btn-toggle-notifs').addEventListener('click', toggleTaskNotifications);
+  }
+  updateAlertsButtonUi();
+  window.toggleTaskNotifications = toggleTaskNotifications;
+  window.playCompletionChime = playCompletionChime;
+
+  function notifyRunCompletion(run) {
+    if (!getAlertsEnabled()) return;
+    const isSuccess = run.status !== 'failed';
+    playCompletionChime(isSuccess);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const title = isSuccess ? '🤖 Agent Task Completed' : '⚠️ Agent Task Failed';
+        const body = `${run.task || 'Task'}\n${run.commits_ahead ? `+${run.commits_ahead} commits ahead` : 'Status: ' + (run.status || 'done')}`;
+        const n = new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: `run-${run.id}`
+        });
+        n.onclick = () => {
+          window.focus();
+          if (run.hasLog) openDeliverable(run);
+        };
+      } catch (_) {}
+    }
+  }
+
+  let trackedRunningRuns = null;
+  function checkRunCompletions(runningList, recentList) {
+    const currentRunningIds = new Set((runningList || []).map(r => r.id));
+
+    if (trackedRunningRuns === null) {
+      trackedRunningRuns = new Map();
+      for (const r of runningList || []) {
+        trackedRunningRuns.set(r.id, r);
+      }
+      return;
+    }
+
+    for (const [id, prevRun] of trackedRunningRuns.entries()) {
+      if (!currentRunningIds.has(id)) {
+        const finished = (recentList || []).find(r => r.id === id) || { ...prevRun, status: 'done' };
+        notifyRunCompletion(finished);
+        trackedRunningRuns.delete(id);
+      }
+    }
+
+    for (const r of runningList || []) {
+      trackedRunningRuns.set(r.id, r);
+    }
+  }
+
+  // ---- 1-Click Push Branch & Create PR -----------------------------------
+  async function pushRunAndOpenPr(runId, btn) {
+    if (!runId) return;
+    const oldText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Pushing to origin...';
+    }
+
+    try {
+      const res = await fetch('/api/agents/run/push-pr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        alert(data.error || 'Failed to push branch');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '❌ Push Failed (Retry)';
+        }
+        return;
+      }
+
+      if (btn) {
+        btn.textContent = '✅ Pushed!';
+      }
+
+      if (data.prUrl) {
+        window.open(data.prUrl, '_blank');
+      } else {
+        alert(`Branch ${data.branch} was pushed to remote! (${data.remote || 'origin'})`);
+      }
+    } catch (err) {
+      alert(`Error pushing branch: ${err.message}`);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = oldText || '🚀 Push & PR';
+      }
+    }
+  }
+  window.pushRunAndOpenPr = pushRunAndOpenPr;
+
+  // ---- In-Browser Code & File Viewer ------------------------------------
+  let currentFileCode = '';
+
+  async function openFilePreview(fileName) {
+    const box = $('preview-code-viewer');
+    const titleEl = $('code-viewer-filename');
+    const metaEl = $('code-viewer-meta');
+    const contentEl = $('code-viewer-content');
+    if (!box || !titleEl || !contentEl) return;
+
+    box.style.display = 'block';
+    titleEl.textContent = fileName;
+    if (metaEl) metaEl.textContent = 'Loading...';
+    contentEl.textContent = 'Reading file contents...';
+
+    // Highlight active chip
+    document.querySelectorAll('.file-chip-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.file === fileName);
+    });
+
+    try {
+      const repo = activeSelectedRepo || 'fuzzy-octo-eureka';
+      const res = await fetch(`/api/agents/repo/file?repo=${encodeURIComponent(repo)}&file=${encodeURIComponent(fileName)}`);
+      const data = await res.json();
+      if (!data.ok) {
+        if (metaEl) metaEl.textContent = 'Error';
+        contentEl.textContent = data.error || 'Failed to read file.';
+        return;
+      }
+
+      if (data.isDirectory) {
+        if (metaEl) metaEl.textContent = `Folder · ${(data.items || []).length} items`;
+        contentEl.textContent = (data.items || []).map(i => `${i.isDirectory ? '📁' : '📄'} ${i.name}`).join('\n') || '(Empty folder)';
+        currentFileCode = contentEl.textContent;
+        return;
+      }
+
+      if (data.isBinary) {
+        if (metaEl) metaEl.textContent = `Binary · ${(data.size / 1024).toFixed(1)} KB`;
+        contentEl.textContent = `Binary file (${data.ext || 'unknown format'}, ${data.size} bytes). Direct viewing is not supported in text mode.`;
+        currentFileCode = '';
+        return;
+      }
+
+      if (metaEl) {
+        const sizeKb = (data.size / 1024).toFixed(1);
+        metaEl.textContent = `${data.lines} lines · ${sizeKb} KB${data.truncated ? ' (first 512KB shown)' : ''}`;
+      }
+      currentFileCode = data.content || '';
+      contentEl.textContent = data.content || '(Empty file)';
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+      if (metaEl) metaEl.textContent = 'Error';
+      contentEl.textContent = `Error loading file: ${err.message}`;
+    }
+  }
+
+  function closeFileViewer() {
+    const box = $('preview-code-viewer');
+    if (box) box.style.display = 'none';
+    document.querySelectorAll('.file-chip-btn').forEach(btn => btn.classList.remove('active'));
+    currentFileCode = '';
+  }
+
+  function copyCurrentFileCode() {
+    if (!currentFileCode) return;
+    navigator.clipboard.writeText(currentFileCode).then(() => {
+      const btn = $('btn-copy-code');
+      if (btn) {
+        const old = btn.textContent;
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => { btn.textContent = old; }, 2000);
+      }
+    }).catch(() => {});
+  }
+
+  window.openFilePreview = openFilePreview;
+  window.closeFileViewer = closeFileViewer;
+  window.copyCurrentFileCode = copyCurrentFileCode;
+
   // ---- Universal Collapsible Toggle -------------------------------------
   window.toggleSection = function(btn, targetId) {
     const target = $(targetId) || document.getElementById(targetId);
@@ -158,6 +396,17 @@
     const footerNote = $('deliverable-footer-note');
     if (footerNote) footerNote.textContent = r.commits_ahead ? `+${r.commits_ahead} updates made on safe draft worktree` : 'Safe draft sandbox';
 
+    const prBtn = $('deliverable-push-pr-btn');
+    if (prBtn) {
+      if (r.branch) {
+        prBtn.style.display = 'inline-flex';
+        prBtn.disabled = false;
+        prBtn.textContent = '🚀 Push to GitHub & Open PR';
+      } else {
+        prBtn.style.display = 'none';
+      }
+    }
+
     const content = $('deliverable-content');
     content.replaceChildren(el('div', { className: 'empty' }, 'Loading deliverables and analyzing changes…'));
     deliverableModal.classList.add('open');
@@ -221,10 +470,15 @@
         filesCard.append(el('h4', {}, `📁 Files & Artifacts Created or Updated (${filesModified.size})`));
         const fileList = el('div', { className: 'deliverable-files-list' });
         for (const f of filesModified) {
-          const item = el('div', { className: 'file-item' },
+          const item = el('div', { className: 'file-item', style: 'cursor:pointer;', title: 'Click to inspect in Preview Tab' },
             el('span', { className: 'file-name', textContent: f }),
-            el('span', { className: 'file-badge', textContent: '✓ Updated' })
+            el('span', { className: 'file-badge', textContent: '✓ Inspect' })
           );
+          item.onclick = () => {
+            if (deliverableModal) deliverableModal.classList.remove('open');
+            switchCockpitTab('tab-btn-preview');
+            openFilePreview(f);
+          };
           fileList.append(item);
         }
         filesCard.append(fileList);
@@ -275,6 +529,13 @@
       if (activeDeliverableRun) {
         if (deliverableModal) deliverableModal.classList.remove('open');
         openLog(activeDeliverableRun.id);
+      }
+    });
+  }
+  if ($('deliverable-push-pr-btn')) {
+    $('deliverable-push-pr-btn').addEventListener('click', () => {
+      if (activeDeliverableRun) {
+        pushRunAndOpenPr(activeDeliverableRun.id, $('deliverable-push-pr-btn'));
       }
     });
   }
@@ -573,6 +834,18 @@
           });
           actionsRow.append(logBtn);
         }
+        if (r.branch && r.status === 'done') {
+          const prBtn = el('button', {
+            className: 'btn-sm btn-push-pr',
+            type: 'button',
+            textContent: '🚀 Push & PR'
+          });
+          prBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pushRunAndOpenPr(r.id, prBtn);
+          });
+          actionsRow.append(prBtn);
+        }
 
         card.append(topRow, taskTitle, metaRow, actionsRow);
         if (openFollowUp === r.id) card.append(followUpComponent(r));
@@ -594,6 +867,11 @@
           const fu = el('button', { className: 'btn-sm', type: 'button', textContent: 'Follow up' });
           fu.addEventListener('click', () => toggleFollowUp(r, tr));
           actions.append(fu);
+        }
+        if (r.branch && r.status === 'done') {
+          const prBtn = el('button', { className: 'btn-sm', style: 'color:var(--status-blue); font-weight:600;', type: 'button', textContent: 'PR' });
+          prBtn.addEventListener('click', () => pushRunAndOpenPr(r.id, prBtn));
+          actions.append(prBtn);
         }
         const taskCell = el('td', { className: 'task', title: r.task },
           r.parent ? el('span', { className: 'muted', textContent: `↳ follow-up of ${r.parent.slice(-6)} · ` }) : null, r.task);
@@ -627,6 +905,7 @@
       renderRunning(b.running || []);
       renderBoard(b.queue);
       renderRecent(b.recent || []);
+      checkRunCompletions(b.running || [], b.recent || []);
     } catch (_) {
       $('queue-note').textContent = 'Dashboard unreachable; retrying…';
     }
@@ -879,10 +1158,14 @@
         if (Array.isArray(data.files) && data.files.length > 0) {
           data.files.forEach(f => {
             const isDir = !f.includes('.');
-            const chip = el('span', {
-              style: 'display:inline-flex; align-items:center; gap:4px; padding:3px 8px; font-size:0.75rem; border-radius:4px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); font-family:monospace;'
+            const btn = el('button', {
+              type: 'button',
+              className: 'file-chip-btn',
+              title: isDir ? `Browse folder ${f}` : `Click to preview ${f} code`,
+              onclick: () => openFilePreview(f)
             }, `${isDir ? '📁' : '📄'} ${f}`);
-            filesEl.appendChild(chip);
+            btn.dataset.file = f;
+            filesEl.appendChild(btn);
           });
         } else {
           filesEl.appendChild(el('span', { className: 'muted' }, 'No files found in root.'));
@@ -901,7 +1184,13 @@
           const card = el('div', { style: 'font-size:0.82rem; line-height:1.5;' },
             el('div', { style: 'font-weight:600; color:#fff; margin-bottom:4px;' }, `Task: ${lr.task || 'Autonomous Execution'}`),
             el('div', { className: 'muted', style: 'margin-bottom:8px;' }, lr.branch ? `Branch: ${lr.branch}` : ''),
-            el('div', { style: 'display:flex; gap:8px;' },
+            el('div', { style: 'display:flex; gap:8px; flex-wrap:wrap;' },
+              lr.branch ? el('button', {
+                className: 'btn-sm btn-push-pr',
+                type: 'button',
+                textContent: '🚀 Push to GitHub & Open PR',
+                onclick: (e) => pushRunAndOpenPr(lr.id, e.currentTarget)
+              }) : null,
               el('button', {
                 className: 'btn-sm',
                 type: 'button',

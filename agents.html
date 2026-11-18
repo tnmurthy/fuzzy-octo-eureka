@@ -1126,6 +1126,12 @@
           <button type="button" class="mode-btn" id="btn-mode-pro">⚡ Developer</button>
         </div>
 
+        <!-- Background Task Notifications Toggle -->
+        <button type="button" class="nav-btn" id="btn-toggle-notifs" title="Toggle audio chime and desktop notifications for agent task completions" style="display:inline-flex; align-items:center; gap:6px;">
+          <span id="notif-icon">🔔</span>
+          <span id="notif-label">Alerts: On</span>
+        </button>
+
         <!-- Paid Run Cap Meter -->
         <div class="cap-box" id="cap" title="Paid agent runs today (DISPATCH_DAILY_PAID_RUNS)">
           <span class="muted friendly-only">Tasks today:</span>
@@ -1421,6 +1427,22 @@
                   <span class="mono muted" id="preview-repo-path" style="font-size:0.75rem;">Loading path...</span>
                 </div>
                 <div id="preview-files-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;"></div>
+
+                <!-- Interactive In-Browser Code & File Viewer -->
+                <div id="preview-code-viewer" class="code-viewer-box" style="display:none; margin-bottom:14px;">
+                  <div class="code-viewer-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="font-weight:600; color:#fff;" id="code-viewer-filename">filename</span>
+                      <span class="chip mono" id="code-viewer-meta" style="font-size:0.72rem; padding:2px 8px; background:rgba(0,176,255,0.15); border:1px solid rgba(0,176,255,0.3); color:#38bdf8;">0 lines</span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                      <button type="button" class="btn-sm" id="btn-copy-code" onclick="copyCurrentFileCode()">📋 Copy</button>
+                      <button type="button" class="btn-sm" onclick="closeFileViewer()">✕ Close</button>
+                    </div>
+                  </div>
+                  <pre id="code-viewer-content" class="code-viewer-pre"></pre>
+                </div>
+
                 <div style="font-weight:600; color:#fff; margin-bottom:6px;">📖 README / Specification Overview:</div>
                 <div id="preview-readme-text" class="mono" style="font-size:0.78rem; color:#cbd5e1; max-height:220px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:10px 14px; border-radius:6px; white-space:pre-wrap; border:1px solid rgba(255,255,255,0.06);">Loading README overview...</div>
               </div>
@@ -1578,6 +1600,7 @@
         <div class="modal-footer" style="padding:14px 24px; border-top:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <span class="muted" id="deliverable-footer-note" style="font-size:0.75rem;"></span>
           <div style="display:flex; gap:8px;">
+            <button type="button" class="btn-sm btn-push-pr" id="deliverable-push-pr-btn">🚀 Push to GitHub &amp; Open PR</button>
             <button type="button" class="btn-sm" id="deliverable-copy-btn">📋 Copy Summary</button>
             <button type="button" class="btn-sm" id="deliverable-log-btn">📜 View Raw Log</button>
             <button type="button" class="btn-sm" id="deliverable-followup-btn" style="color:var(--status-blue); font-weight:600;">💬 Chat / Follow-up</button>

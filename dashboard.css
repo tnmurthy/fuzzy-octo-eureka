@@ -1352,3 +1352,83 @@ canvas {
   display: none !important;
 }
 
+/* ---- File Chip Buttons & Preview Code Viewer ---- */
+.file-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-family: 'JetBrains Mono', monospace;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.file-chip-btn:hover {
+  background: rgba(0, 176, 255, 0.15);
+  border-color: rgba(0, 176, 255, 0.45);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.file-chip-btn.active {
+  background: rgba(0, 176, 255, 0.25);
+  border-color: var(--status-blue);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: 0 0 10px rgba(0, 176, 255, 0.25);
+}
+
+.code-viewer-box {
+  background: rgba(10, 15, 26, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+}
+.code-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.code-viewer-pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+  max-height: 420px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: pre;
+}
+
+/* Push to GitHub & PR Button */
+.btn-push-pr {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #fff !important;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+}
+.btn-push-pr:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1, #075985);
+  box-shadow: 0 0 12px rgba(2, 132, 199, 0.4);
+  transform: translateY(-1px);
+}
+.btn-push-pr:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

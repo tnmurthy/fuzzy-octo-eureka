@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createRepoRegistry, validateGitUrl, validateLocalPath, safeRemote, repoNameFromUrl, readOrigin } = require('./repo-registry');
+const { createRepoRegistry, validateGitUrl, validateLocalPath, safeRemote, repoNameFromUrl, readOrigin, prUrlOf } = require('./repo-registry');
 
 function sandbox() {
   const home = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'reg-home-')));
@@ -99,4 +99,13 @@ test('built-in repos report their origin from .git/config, without credentials',
   const reg = createRepoRegistry({ ...s, builtins: () => [{ name: 'svc', path: p }] });
   assert.equal(reg.list()[0].remote, 'https://github.com/me/svc.git');
   assert.equal(readOrigin(path.join(s.home, 'nope')), null);
+});
+
+test('prUrlOf builds GitHub and GitLab comparison URLs for pushing PRs', () => {
+  assert.equal(prUrlOf('https://github.com/foo/bar.git', 'agent/run-1'), 'https://github.com/foo/bar/compare/agent%2Frun-1?expand=1');
+  assert.equal(prUrlOf('git@github.com:foo/bar.git', 'agent/feat'), 'https://github.com/foo/bar/compare/agent%2Ffeat?expand=1');
+  assert.equal(prUrlOf('https://gitlab.com/group/sub/repo.git', 'patch-1'), 'https://gitlab.com/group/sub/repo/-/merge_requests/new?merge_request%5Bsource_branch%5D=patch-1');
+  assert.equal(prUrlOf('', 'branch'), null);
+  assert.equal(prUrlOf(null, 'branch'), null);
+  assert.equal(prUrlOf('https://custom-git.com/x/y', 'branch'), null);
 });
