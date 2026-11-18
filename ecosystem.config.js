@@ -57,5 +57,14 @@ module.exports = {
       max_memory_restart: '256M',
       env: { DASHBOARD_URL: 'http://127.0.0.1:8787' },
     },
+    {
+      name: 'CloudflareTunnel',
+      script: '/Users/arunachala/.local/bin/cloudflared',
+      args: 'tunnel --config /Users/arunachala/.cloudflared/config.yml run d23b354e-faee-451b-a23b-6df6bdec117f',
+      autorestart: true,
+      exp_backoff_restart_delay: 2000,
+      max_memory_restart: '256M',
+      time: true,
+    },
   ],
 };
