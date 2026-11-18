@@ -2070,7 +2070,7 @@
       if (!online) {
         setCanvasState(false, 'OpenHands offline',
           'The OpenHands container is not running. On the Mac, run:<br>' +
-          '<code>docker compose -f docker/openhands.compose.yml up -d</code><br>' +
+          '<code>docker-compose -f docker/openhands.compose.yml up -d</code><br>' +
           'then reload this tab (status refreshes within ~30 s).');
         return;
       }

@@ -1,5 +1,5 @@
 # OpenHands (Agent Canvas) - run on this Mac, reachable only from 127.0.0.1.
-#   docker compose -f docker/openhands.compose.yml up -d
+#   docker-compose -f docker/openhands.compose.yml up -d
 #   open http://127.0.0.1:3000
 #
 # Security: the Docker socket mount lets OpenHands start sandbox containers,
