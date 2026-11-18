@@ -1077,8 +1077,9 @@ function handleRequest(req, res) {
   }
   if (req.url.split('?')[0] === '/api/context/overview' && req.method === 'GET') {
     // Context page: team members + memory (mine / shared / combined).
-    if (PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true') return sendJson(res, 404, { ok: false, error: 'not found' });
-    const local = memory.episodicMemory || [];
+    const local = (PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true')
+      ? (memory.episodicMemory || []).filter(m => m.tenantId === 'tenant:drisyon_core' || !m.tenantId)
+      : (memory.episodicMemory || []);
     const team = teamStore
       ? teamStore.teamContext().then((t) => ({ team: t })).catch((err) => ({ error: String(err.message || 'unreachable').slice(0, 120) }))
       : Promise.resolve({});
@@ -1088,8 +1089,6 @@ function handleRequest(req, res) {
     return;
   }
   if (req.url.startsWith('/api/agents/')) {
-    const isDrisyonPortal = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
-    if (isDrisyonPortal) return sendJson(res, 404, { ok: false, error: 'not found' });
     if (agentsApi.handle(req, res, { sendJson, readJsonBody })) return;
     return sendJson(res, 404, { ok: false, error: 'not found' });
   }
