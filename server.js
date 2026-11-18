@@ -54,6 +54,8 @@ const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..
 const { readRuns } = require('./runs-reader');
 const { readOrigin, prUrlOf } = require('./repo-registry');
 const { isSameSiteJson } = require('./agents-api');
+const { recordRunReflection } = require('./task-reflection');
+const { auditDiff } = require('./code-auditor');
 const { getInvoicingSummary } = require('./invoicing');
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
@@ -1119,13 +1121,53 @@ function handleRequest(req, res) {
       latestRun = runs[0] || null;
     } catch (_) {}
 
+    let stack = 'General Repository';
+    const entryPoints = [];
+    try {
+      const allFiles = fs.readdirSync(repoPath);
+      const isPython = allFiles.some(f => f.endsWith('.py') || f === 'requirements.txt' || f === 'pyproject.toml');
+      const isNode = allFiles.includes('package.json');
+      const isRust = allFiles.includes('Cargo.toml');
+      const isGo = allFiles.includes('go.mod');
+
+      if (isPython) {
+        if (readme.toLowerCase().includes('fastapi') || fs.existsSync(path.join(repoPath, 'app.py'))) {
+          stack = 'FastAPI / Python (Async)';
+        } else if (readme.toLowerCase().includes('flask')) {
+          stack = 'Flask / Python';
+        } else {
+          stack = 'Python System';
+        }
+      } else if (isNode) {
+        if (readme.toLowerCase().includes('next') || allFiles.includes('next.config.js')) {
+          stack = 'Next.js / React';
+        } else if (allFiles.includes('server.js')) {
+          stack = 'Node.js Backend';
+        } else {
+          stack = 'Node.js Environment';
+        }
+      } else if (isRust) {
+        stack = 'Rust Engine';
+      } else if (isGo) {
+        stack = 'Go Microservice';
+      }
+
+      ['app.py', 'main.py', 'server.js', 'index.js', 'src/index.js', 'src/main.py', 'src/dashboard.py'].forEach(ep => {
+        if (fs.existsSync(path.join(repoPath, ep))) entryPoints.push(ep);
+      });
+    } catch (_) {}
+
     return sendJson(res, 200, {
       ok: true,
       repo: repoName,
       path: repoPath,
       files,
       readme,
-      latestRun
+      latestRun,
+      architecture: {
+        stack,
+        entryPoints
+      }
     });
   }
   if (req.url.startsWith('/api/agents/repo/file') && req.method === 'GET') {
@@ -1269,6 +1311,65 @@ function handleRequest(req, res) {
       })
       .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
     return;
+  }
+  if (req.url === '/api/agents/run/reflect' && req.method === 'POST') {
+    if (!isSameSiteJson(req)) {
+      return sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+    }
+    readJsonBody(req, 16 * 1024)
+      .then((b) => {
+        const runId = String(b.runId || '').trim();
+        if (!runId) return sendJson(res, 400, { ok: false, error: 'runId is required' });
+
+        const { runs = [] } = readRuns(RUNS_FILE, 1000);
+        const run = runs.find(r => r.id === runId);
+        if (!run) return sendJson(res, 404, { ok: false, error: `run '${runId}' not found` });
+
+        const result = recordRunReflection({ run, memory });
+        return sendJson(res, 200, result);
+      })
+      .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+    return;
+  }
+  if (req.url.startsWith('/api/agents/run/audit') && req.method === 'GET') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const runId = parsedUrl.searchParams.get('id') || '';
+    if (!runId) return sendJson(res, 400, { ok: false, error: 'id parameter is required' });
+
+    const { runs = [] } = readRuns(RUNS_FILE, 1000);
+    const run = runs.find(r => r.id === runId);
+    if (!run) return sendJson(res, 404, { ok: false, error: `run '${runId}' not found` });
+
+    let diffText = '';
+    const worktreeDir = run.worktree && fs.existsSync(run.worktree) ? run.worktree : null;
+    if (worktreeDir) {
+      try {
+        diffText = require('child_process').execFileSync(
+          'git',
+          ['diff', 'HEAD~1...HEAD'],
+          { cwd: worktreeDir, encoding: 'utf8', timeout: 5000 }
+        );
+      } catch (_) {
+        try {
+          diffText = require('child_process').execFileSync(
+            'git',
+            ['diff', 'origin/main...HEAD'],
+            { cwd: worktreeDir, encoding: 'utf8', timeout: 5000 }
+          );
+        } catch (_) {}
+      }
+    }
+
+    if (!diffText && run.log && fs.existsSync(run.log)) {
+      try {
+        const log = fs.readFileSync(run.log, 'utf8');
+        const diffMatches = log.match(/diff --git[\s\S]*?(?=(?:diff --git|== claude finished|\n\n\n|$))/g);
+        if (diffMatches) diffText = diffMatches.join('\n');
+      } catch (_) {}
+    }
+
+    const auditResult = auditDiff(diffText);
+    return sendJson(res, 200, { ok: true, runId: run.id, ...auditResult });
   }
   if (req.url.startsWith('/api/agents/')) {
     if (agentsApi.handle(req, res, { sendJson, readJsonBody })) return;

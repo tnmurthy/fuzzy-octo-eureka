@@ -496,6 +496,86 @@
       metricsCard.append(metricsList);
       content.append(metricsCard);
 
+      // Section 4: Automated Security & Code Quality Review ("Maker / Checker")
+      const auditCard = el('div', { className: 'deliverable-card' });
+      auditCard.append(el('h4', {}, '🛡️ Automated Peer Review (Maker / Checker)'));
+      const auditBody = el('div', { style: 'font-size:0.8rem;', textContent: 'Running automated security and quality audit…' });
+      auditCard.append(auditBody);
+      content.append(auditCard);
+
+      fetch(`/api/agents/run/audit?id=${encodeURIComponent(r.id)}`)
+        .then(res => res.json())
+        .then(aud => {
+          if (!aud.ok) {
+            auditBody.textContent = 'Audit unavailable for this run.';
+            return;
+          }
+          auditBody.replaceChildren();
+          const scoreClass = aud.score >= 85 ? 'var(--status-green)' : aud.score >= 60 ? 'var(--status-yellow)' : 'var(--status-red)';
+          const scoreRow = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;' },
+            el('span', { style: `font-weight:600; color:${scoreClass};` }, `${aud.verdict === 'PASSED' ? '✓' : '⚠️'} Score: ${aud.score}/100 · ${aud.verdict}`),
+            el('span', { className: 'muted', style: 'font-size:0.75rem;' }, `${aud.metrics.linesAdded} lines added, ${aud.metrics.linesDeleted} deleted`)
+          );
+          auditBody.append(scoreRow);
+          auditBody.append(el('div', { className: 'muted', style: 'margin-bottom:6px;' }, aud.summary));
+
+          if (aud.findings && aud.findings.length > 0) {
+            const findingsList = el('div', { style: 'margin-top:6px; display:flex; flex-direction:column; gap:4px;' });
+            aud.findings.forEach(f => {
+              const fItem = el('div', { style: 'font-size:0.75rem; color:#fca5a5; background:rgba(239,68,68,0.1); padding:4px 8px; border-radius:4px;' },
+                `⚠️ [${f.rule}] ${f.file}: ${f.message}`
+              );
+              findingsList.append(fItem);
+            });
+            auditBody.append(findingsList);
+          }
+        })
+        .catch(() => {
+          auditBody.textContent = 'Audit skipped (no code diff detected).';
+        });
+
+      // Section 5: Institutional Knowledge & Reflection
+      const reflectCard = el('div', { className: 'deliverable-card' });
+      reflectCard.append(el('h4', {}, '🧠 Institutional Knowledge & Self-Reflection'));
+      const reflectDesc = el('div', { style: 'font-size:0.8rem; margin-bottom:8px; line-height:1.4;', className: 'muted' },
+        'Extract architectural patterns and operational lessons learned from this run into team memory so future agents automatically inherit this context.'
+      );
+      const reflectBtn = el('button', {
+        className: 'btn-sm',
+        style: 'font-weight:600; color:var(--status-blue);',
+        type: 'button',
+        textContent: '🧠 Store Lesson in Team Memory',
+        onclick: async () => {
+          reflectBtn.disabled = true;
+          reflectBtn.textContent = '⏳ Synthesizing & Storing...';
+          try {
+            const refRes = await fetch('/api/agents/run/reflect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ runId: r.id })
+            });
+            const refData = await refRes.json();
+            if (refData.ok) {
+              reflectBtn.textContent = refData.already ? '✓ Already in Team Memory' : '✓ Stored in Team Memory!';
+              if (refData.reflection && refData.reflection.content) {
+                const note = el('div', { className: 'mono', style: 'margin-top:8px; font-size:0.75rem; color:#a5f3fc; background:rgba(6,182,212,0.1); padding:8px 10px; border-radius:6px;' },
+                  `📖 ${refData.reflection.content}`
+                );
+                reflectCard.append(note);
+              }
+            } else {
+              reflectBtn.disabled = false;
+              reflectBtn.textContent = '❌ Failed to store';
+            }
+          } catch (e) {
+            reflectBtn.disabled = false;
+            reflectBtn.textContent = '❌ Error storing';
+          }
+        }
+      });
+      reflectCard.append(reflectDesc, reflectBtn);
+      content.append(reflectCard);
+
     } catch (err) {
       content.replaceChildren(el('div', { className: 'empty err', textContent: `Failed to load deliverable: ${err.message}` }));
     }
@@ -1151,7 +1231,14 @@
         return;
       }
 
-      if (pathEl) pathEl.textContent = data.path || repo;
+      if (pathEl) {
+        let archBadge = '';
+        if (data.architecture) {
+          const eps = (data.architecture.entryPoints || []).length ? ` (${data.architecture.entryPoints.join(', ')})` : '';
+          archBadge = ` · ⚡ ${data.architecture.stack}${eps}`;
+        }
+        pathEl.textContent = (data.path || repo) + archBadge;
+      }
 
       if (filesEl) {
         filesEl.replaceChildren();
