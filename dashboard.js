@@ -92,8 +92,8 @@
         title: "👐 OpenHands Sandbox Workspace",
         role: "Containerized sandbox execution engine providing an interactive Agent Canvas and file system workspace for complex multistep engineering workflows.",
         prompt: `You are OpenHands, the containerized sandbox agent environment.
-    Your role is to run software engineering tasks inside an isolated Docker sandbox container, providing an interactive Canvas UI on port 8000.`,
-        task: "OpenHands Agent Canvas container online at http://127.0.0.1:8000/canvas/."
+    Your role is to run software engineering tasks inside an isolated Docker sandbox container, providing an interactive workspace UI at 127.0.0.1:3000.`,
+        task: "OpenHands workspace: http://127.0.0.1:3000 (docker/openhands.compose.yml)."
       }
     };
 
@@ -181,6 +181,10 @@
 
       if (tabId === 'kanban') {
         loadKanbanTasks();
+      }
+
+      if (tabId === 'canvas') {
+        refreshCanvas();
       }
 
       if (tabId === 'runs') {
@@ -1577,7 +1581,7 @@
           }
         }
         if (ohStats) {
-          ohStats.innerText = oh.online ? 'Port 8000 Canvas' : 'Container stopped';
+          ohStats.innerText = oh.online ? `127.0.0.1:${oh.port || 3000}` : 'Container stopped';
         }
       }
 
@@ -2029,11 +2033,65 @@
       }
     }
 
-    function reloadCanvasIframe() {
+    // OpenHands listens on 127.0.0.1 of this Mac only, so it can be embedded
+    // only when the dashboard itself was opened on this Mac. Through the
+    // tunnel the viewer's browser cannot reach it; say so instead of a 502.
+    const OPENHANDS_URL = 'http://127.0.0.1:3000/';
+
+    function isLocalDashboard() {
+      return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(window.location.hostname);
+    }
+
+    function setCanvasState(online, text, message) {
+      const dot = document.getElementById('id-canvas-strip-dot');
+      const label = document.getElementById('id-canvas-strip-text');
+      const msg = document.getElementById('id-canvas-message');
+      const iframe = document.getElementById('id-openhands-canvas-iframe');
+      if (dot) dot.className = 'status-dot ' + (online ? 'green' : 'red');
+      if (label) label.textContent = text;
+      if (msg) {
+        msg.style.display = message ? 'block' : 'none';
+        msg.innerHTML = message || '';
+      }
+      if (iframe && message) {
+        iframe.style.display = 'none';
+        iframe.removeAttribute('src');
+      }
+    }
+
+    async function refreshCanvas(force) {
+      let online = false;
+      try {
+        const res = await fetch('/api/telemetry', { cache: 'no-store' });
+        const data = await res.json();
+        online = Boolean(data && data.services && data.services.openhands && data.services.openhands.online);
+      } catch (_) { /* treated as offline */ }
+
+      if (!online) {
+        setCanvasState(false, 'OpenHands offline',
+          'The OpenHands container is not running. On the Mac, run:<br>' +
+          '<code>docker compose -f docker/openhands.compose.yml up -d</code><br>' +
+          'then reload this tab (status refreshes within ~30 s).');
+        return;
+      }
+      if (!isLocalDashboard()) {
+        setCanvasState(true, 'OpenHands online (this Mac only)',
+          'OpenHands is running, but only on the Mac itself (<code>127.0.0.1:3000</code>). ' +
+          'It is not published through <code>' + window.location.hostname + '</code>, because it can start ' +
+          'containers on the host. Open it on the Mac, or ask the admin to add a separate hostname ' +
+          'protected by Cloudflare Access.');
+        return;
+      }
+      setCanvasState(true, 'OpenHands online', '');
       const iframe = document.getElementById('id-openhands-canvas-iframe');
       if (iframe) {
-        iframe.src = '/canvas/?t=' + Date.now();
+        iframe.style.display = 'block';
+        if (force || !iframe.getAttribute('src')) iframe.src = OPENHANDS_URL;
       }
+    }
+
+    function reloadCanvasIframe() {
+      refreshCanvas(true);
     }
 
     function toggleCanvasFullscreen() {

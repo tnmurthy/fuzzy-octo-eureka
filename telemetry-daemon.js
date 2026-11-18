@@ -36,7 +36,7 @@ const HISTORY_MAX_POINTS = 720;
 const OLLAMA_HOST = envValues['OLLAMA_HOST'] || '127.0.0.1';
 const OLLAMA_PORT = Number(envValues['OLLAMA_PORT']) || 11434;
 const OPENCLAW_PORT = 18789;
-const OPENHANDS_PORT = 8000;
+const OPENHANDS_PORT = Number(process.env.OPENHANDS_PORT) || 3000;
 
 function writeDaemonLog(msg, level = 'INFO') {
   try {

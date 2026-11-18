@@ -1,0 +1,25 @@
+# OpenHands (Agent Canvas) - run on this Mac, reachable only from 127.0.0.1.
+#   docker compose -f docker/openhands.compose.yml up -d
+#   open http://127.0.0.1:3000
+#
+# Security: the Docker socket mount lets OpenHands start sandbox containers,
+# which is root-equivalent on the Docker VM. Never publish this port on 0.0.0.0
+# and never add a tunnel hostname for it without a Cloudflare Access app first.
+#
+# LLM: pick the provider in the OpenHands UI (Settings). For local Ollama use
+# model "ollama/<name>" and base URL http://host.docker.internal:11434.
+services:
+  openhands:
+    image: ghcr.io/openhands/openhands:1.3.0
+    container_name: openhands-canvas
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LOG_ALL_EVENTS: "true"
+      LLM_BASE_URL: "http://host.docker.internal:11434"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.openhands:/.openhands

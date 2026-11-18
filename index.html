@@ -30,7 +30,7 @@
               <li class="nav-item active" onclick="switchTab('dashboard')" data-tooltip="Overview of local AI stack, host telemetry, and service health" data-tooltip-pos="right"><span class="nav-link" id="id-nav-dashboard">⚙️ Dashboard</span></li>
               <li class="nav-item" onclick="switchTab('kanban')" data-tooltip="Sprint backlog & task board synced directly with TASKS.md" data-tooltip-pos="right"><span class="nav-link" id="id-nav-kanban">📌 Kanban Board</span></li>
               <li class="nav-item" onclick="switchTab('agents')" data-tooltip="Talk directly with PO, BizDev, Marketing, CFO, Dev, QA, and Mantis" data-tooltip-pos="right"><span class="nav-link" id="id-nav-agents">👥 Agents Board</span></li>
-              <li class="nav-item" onclick="switchTab('canvas')" data-tooltip="OpenHands interactive coding IDE and terminal workspace on port 8000" data-tooltip-pos="right"><span class="nav-link" id="id-nav-canvas">👐 Agent Canvas</span></li>
+              <li class="nav-item" onclick="switchTab('canvas')" data-tooltip="OpenHands coding workspace (Docker, 127.0.0.1:3000)" data-tooltip-pos="right"><span class="nav-link" id="id-nav-canvas">👐 Agent Canvas</span></li>
               <li class="nav-item" onclick="switchTab('infra')" data-tooltip="Inspect system hardware specs, memory usage, and PM2 background processes" data-tooltip-pos="right"><span class="nav-link" id="id-nav-infra">🛠️ Infrastructure</span></li>
               <li class="nav-item" onclick="switchTab('logs')" data-tooltip="Live event stream, console output, and telemetry logs" data-tooltip-pos="right"><span class="nav-link" id="id-nav-logs">📝 Action Logs</span></li>
               <li class="nav-item" onclick="switchTab('runs')" data-tooltip="Inspect active and completed autonomous agent executions & stdout logs" data-tooltip-pos="right"><span class="nav-link" id="id-nav-runs">🧭 Agent Runs</span></li>
@@ -62,9 +62,9 @@
               <span>Google Mantis</span>
               <span class="status-badge"><span class="status-dot green" id="id-mantis-dot"></span>19 Skills</span>
             </div>
-            <div class="status-row" data-tooltip="Interactive containerized coding environment on port 8000" data-tooltip-pos="right">
+            <div class="status-row" data-tooltip="OpenHands coding workspace (Docker, 127.0.0.1:3000)" data-tooltip-pos="right">
               <span>OpenHands Canvas</span>
-              <span class="status-badge"><span class="status-dot green" id="id-openhands-dot"></span>Online</span>
+              <span class="status-badge"><span class="status-dot" id="id-openhands-dot"></span>Checking</span>
             </div>
             <div class="status-row" data-tooltip="Automated container image update and lifecycle monitor" data-tooltip-pos="right">
               <span>Docker Watchtower</span>
@@ -607,13 +607,13 @@
                   <div class="agent-desc">Executes fast iterative code-fix loops entirely on local Ollama models with zero token costs.</div>
                 </div>
 
-                <div class="agent-card" onclick="selectAgent('openhands')" data-tooltip="Open containerized visual IDE canvas and interactive code editor on port 8000">
+                <div class="agent-card" onclick="selectAgent('openhands')" data-tooltip="OpenHands coding workspace (Docker, 127.0.0.1:3000)">
                   <div class="agent-card-header">
                     <div class="agent-name">👐 OpenHands Sandbox</div>
                     <div class="agent-badge active">Active</div>
                   </div>
                   <div class="agent-role">Containerized Agent Canvas Workspace</div>
-                  <div class="agent-desc">Isolated Docker runtime environment on port 8000 with interactive multi-agent canvas.</div>
+                  <div class="agent-desc">Docker sandbox on 127.0.0.1:3000 with an interactive agent workspace.</div>
                 </div>
 
               </div>
@@ -731,12 +731,12 @@
             <section class="header-panel">
               <div class="header-title">
                 <h2>OpenHands Agent Canvas Workspace</h2>
-                <p>Interactive containerized sandbox environment on port 8000 powered by local Ollama models (<code>host.docker.internal:11434</code>).</p>
+                <p>OpenHands runs in Docker on this Mac at <code>127.0.0.1:3000</code> (<code>docker/openhands.compose.yml</code>). Pick the LLM in its Settings; local Ollama is <code>http://host.docker.internal:11434</code>.</p>
               </div>
               <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button class="btn btn-secondary" onclick="reloadCanvasIframe()">🔄 Reload Canvas</button>
                 <button class="btn btn-secondary" onclick="toggleCanvasFullscreen()">⛶ Fullscreen</button>
-                <a href="/canvas/" target="_blank" class="btn btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                <a id="id-canvas-open-link" href="http://127.0.0.1:3000/" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
                   <span>🔗 Open in New Window</span>
                 </a>
               </div>
@@ -745,20 +745,15 @@
             <section class="card" style="padding: 0; overflow: hidden; background: #000; border: 1px solid var(--border-color); border-radius: 12px; margin-top: 16px;">
               <div style="background: rgba(0,0,0,0.4); padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem;">
-                  <span class="status-dot green"></span>
-                  <span style="font-weight: 600; color: #fff;">OpenHands Canvas Active</span>
+                  <span class="status-dot" id="id-canvas-strip-dot"></span>
+                  <span style="font-weight: 600; color: #fff;" id="id-canvas-strip-text">Checking OpenHands...</span>
                   <span style="color: var(--color-text-muted);">|</span>
-                  <span style="color: var(--status-blue); font-family: 'JetBrains Mono', monospace;">Docker: openhands-canvas (:8000)</span>
-                  <span style="color: var(--color-text-muted);">|</span>
-                  <span style="color: #86efac; font-family: 'JetBrains Mono', monospace;">LLM Backend: http://host.docker.internal:11434</span>
-                </div>
-                <div style="font-size: 0.75rem; color: var(--color-text-muted);">
-                  Target: <code>/canvas/</code> · Ingress: <code>Port 8000</code>
+                  <span style="color: var(--status-blue); font-family: 'JetBrains Mono', monospace;">Docker: openhands-canvas (127.0.0.1:3000)</span>
                 </div>
               </div>
-              <iframe id="id-openhands-canvas-iframe" 
-                      src="/canvas/" 
-                      style="width: 100%; height: calc(100vh - 230px); min-height: 720px; border: none; display: block; background: #0b0f19;"
+              <div id="id-canvas-message" style="display: none; padding: 32px; color: var(--color-text-muted); font-size: 0.9rem; line-height: 1.6;"></div>
+              <iframe id="id-openhands-canvas-iframe"
+                      style="display: none; width: 100%; height: calc(100vh - 230px); min-height: 720px; border: none; background: #0b0f19;"
                       allow="clipboard-read; clipboard-write; fullscreen">
               </iframe>
             </section>
@@ -941,11 +936,11 @@
                   <div style="background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                     <div>
                       <strong style="color:#fff; font-size:0.9rem;">👐 OpenHands (Agent Canvas Workspace)</strong>
-                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Containerized sandbox execution engine on :8000 (ghcr.io/openhands)</div>
+                      <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Containerized sandbox on 127.0.0.1:3000 (ghcr.io/openhands)</div>
                     </div>
                     <div style="text-align:right;">
-                      <span id="id-openhands-status-badge" class="status-badge" style="background-color:rgba(0,230,118,0.15); color:var(--status-green); border-color:var(--status-green); font-size:0.7rem; font-weight:bold;">Online</span>
-                      <div id="id-openhands-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">Port 8000 Canvas</div>
+                      <span id="id-openhands-status-badge" class="status-badge" style="font-size:0.7rem; font-weight:bold;">Checking</span>
+                      <div id="id-openhands-stats" style="font-size:0.75rem; color:#fff; font-family:'JetBrains Mono', monospace; margin-top:4px;">-</div>
                     </div>
                   </div>
                 </div>

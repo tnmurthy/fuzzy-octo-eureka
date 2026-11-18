@@ -48,9 +48,19 @@ worktree is kept for inspection).
 - State: `logs/issue-poller-state.json` (run id -> issue). Tests:
   `orchestration/issue-poller.test.js`.
 
-Not under PM2 on this Mac (as of 2026-11-17): `openclaw` is not installed, and
-`cloudflared` has no tunnel credentials in `~/.cloudflared`, so
-`drisyon.mytestbed.tech` answers 530 until a tunnel is set up here.
+Not under PM2 on this Mac (as of 2026-11-17): `openclaw` is not installed.
+`cloudflared` runs outside PM2 (tunnel `d23b354e-...`, `~/.cloudflared/config.yml`,
+as of 2026-11-18) and routes team / drisyon hostnames to 8787 / 8788.
+
+**OpenHands (Agent Canvas):** Docker container `openhands-canvas` from
+`docker/openhands.compose.yml`, bound to `127.0.0.1:3000` only (Docker runtime:
+OrbStack - `orb start` if `docker ps` cannot reach the daemon). It mounts the
+Docker socket, so it is never proxied or tunnelled: the old `/canvas/` proxy
+was removed 2026-11-18 (OpenHands serves from `/` with absolute paths, so the
+subpath proxy only ever returned 502/blank). The Canvas tab embeds
+`127.0.0.1:3000` when the dashboard is opened on this Mac and shows a notice
+otherwise. Telemetry probes `OPENHANDS_PORT` (default 3000). Remote access
+needs its own hostname with a Cloudflare Access app created first.
 
 **Reboot:** a per-user LaunchAgent, `~/Library/LaunchAgents/pm2.arunachala.plist`
 (installed 2026-11-17, no sudo needed), runs `pm2 resurrect` at login and
