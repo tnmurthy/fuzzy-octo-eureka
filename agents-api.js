@@ -242,7 +242,10 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const message = String(b.message || '').trim();
           if (!message) return sendJson(res, 400, { ok: false, error: 'write a message for the agent' });
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
-          const r = await dispatchRun({ followUpOf: String(b.runId || ''), task: `Follow-up: ${message}` });
+          // The level is capped at the parent run's by startDispatch (approval-levels.js).
+          const r = await dispatchRun({
+            followUpOf: String(b.runId || ''), task: `Follow-up: ${message}`, ...(b.level ? { level: String(b.level) } : {}),
+          });
           return sendJson(res, r.status, r.body);
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
@@ -264,7 +267,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const task = details ? `${title}\n\n${details}` : title;
           const r = await dispatchRun({
             agent, repo: String(b.repo || ''), task, specialist: b.specialist || null,
-            branch: `agent/run-${now().toString(36)}`,
+            branch: `agent/run-${now().toString(36)}`, ...(b.level ? { level: String(b.level) } : {}),
           });
           if (r.status < 300 && recommender) recommender.invalidate();
           return sendJson(res, r.status, r.body);

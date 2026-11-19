@@ -180,3 +180,51 @@ test('a malformed session id is never passed to claude', () => {
   assert.equal(res.status, 0, res.stderr);
   assert.equal(fs.readFileSync(argsFile, 'utf8').includes('--resume'), false);
 });
+
+// --- approval levels and cards (approval-levels.js, approval-mcp.js) ---------
+
+function runClaude(t, extraEnv, runId = 'run-a') {
+  const argsFile = path.join(t.dir, `claude-args-${runId}`);
+  const res = spawnSync(BASH, [posix(SCRIPT), 'claude', posix(t.repo), `task/${runId}`, posix(t.prompt), runId], {
+    encoding: 'utf8',
+    env: {
+      ...process.env, PATH: `${t.bin}${path.delimiter}${process.env.PATH}`, AGENT_RUNS_DIR: posix(t.runs),
+      CLAUDE_ARGS: posix(argsFile), CLAUDE_MARK: posix(path.join(t.dir, 'm')), AI_CALLS_FILE: posix(path.join(t.dir, 'ai.jsonl')),
+      ...extraEnv,
+    },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  return fs.readFileSync(argsFile, 'utf8').split('\n');
+}
+
+test('with a run token, claude asks through the approval helper; the config is removed after', () => {
+  const t = setup({ withTests: false });
+  const args = runClaude(t, { APPROVAL_TOKEN: 'tok-123', CLAUDE_PERMISSION_MODE: 'default', AGENT_LEVEL: 'ask' });
+  const i = args.indexOf('--permission-prompt-tool');
+  assert.equal(args[i + 1], 'mcp__arunachala_approvals__approve');
+  assert.equal(args[args.indexOf('--permission-mode') + 1], 'default');
+  const cfg = args[args.indexOf('--mcp-config') + 1];
+  assert.ok(cfg.endsWith('run-a.mcp.json'));
+  assert.ok(!fs.existsSync(cfg), 'the config with the token is removed when the run ends');
+  assert.ok(!args.join(' ').includes('tok-123'), 'the token is never on the command line');
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal(start.level, 'ask');
+});
+
+test('without a token nothing is asked, as before', () => {
+  const t = setup({ withTests: false });
+  const args = runClaude(t, {});
+  assert.equal(args.indexOf('--permission-prompt-tool'), -1);
+  assert.equal(args[args.indexOf('--permission-mode') + 1], 'acceptEdits');
+});
+
+test('a review gets the diff as a file that git ignores', () => {
+  const t = setup({ withTests: false });
+  spawnSync('git', ['-C', t.repo, 'remote', 'add', 'origin', t.repo]);
+  spawnSync('git', ['-C', t.repo, 'fetch', '-q', 'origin']);
+  runClaude(t, { AGENT_REVIEW_BASE: 'main' }, 'run-r');
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.ok(fs.existsSync(path.join(start.worktree, '.arunachala-review.diff')), 'diff written');
+  const status = spawnSync('git', ['-C', start.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout;
+  assert.ok(!status.includes('.arunachala-review.diff'), 'and ignored by git');
+});

@@ -35,6 +35,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # merges. Override with CLAUDE_ALLOWED_TOOLS for a different task shape.
 CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-Read Edit Write Glob Grep Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(supabase:*) Bash(node:*) Bash(ls:*) Bash(cat:*) Bash($HERE/db-lock.sh:*)}"
 CLAUDE_DENIED_TOOLS="${CLAUDE_DENIED_TOOLS:-Bash(git push:*) Bash(gh:*)}"
+# The dashboard sets these from the run's approval level (approval-levels.js).
+CLAUDE_PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
 # Model for dispatched claude runs: routine tasks do not need the account's
 # default (often the most expensive) model.
 CLAUDE_MODEL="${CLAUDE_MODEL:-sonnet}"
@@ -165,7 +167,19 @@ started=$(date +%s)
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$repo" \
   branch="$branch" worktree="$worktree" log="$log" status=running \
   task="$(if [ -n "${AGENT_TASK_TITLE:-}" ]; then printf '%s' "$AGENT_TASK_TITLE" | head -c 160; else head -c 160 "$prompt_file"; fi | tr '\r\n' '  ')" \
-  ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} ${AGENT_PARENT_RUN:+"parent=$AGENT_PARENT_RUN"} started_at="$(iso_date)"
+  ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} ${AGENT_PARENT_RUN:+"parent=$AGENT_PARENT_RUN"} \
+  ${AGENT_LEVEL:+"level=$AGENT_LEVEL"} started_at="$(iso_date)"
+
+# A review reads the change from a file instead of running `git diff` (its
+# level allows no shell). The file is excluded from git, so it never shows as
+# a change on the PR branch.
+if [[ "${AGENT_REVIEW_BASE:-}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  git -C "$(native "$worktree")" diff "origin/$AGENT_REVIEW_BASE...HEAD" > "$worktree/.arunachala-review.diff" 2>/dev/null || true
+  exclude="$(git -C "$(native "$worktree")" rev-parse --git-path info/exclude)"
+  case "$exclude" in /*) ;; *) exclude="$worktree/$exclude" ;; esac
+  mkdir -p "$(dirname "$exclude")"
+  grep -qx '.arunachala-review.diff' "$exclude" 2>/dev/null || echo '.arunachala-review.diff' >> "$exclude"
+fi
 
 export AGENT_NAME="$agent"
 
@@ -220,11 +234,26 @@ run_claude() {
   # A follow-up continues an earlier run's conversation (same worktree, so the
   # session's project folder matches). The dashboard validated the id.
   [[ "${AGENT_RESUME_SESSION:-}" =~ ^[0-9a-fA-F-]{36}$ ]] && resume=(--resume "$AGENT_RESUME_SESSION")
-  (cd "$worktree" && run_timeout "$limit" claude -p "$prompt" --permission-mode acceptEdits \
+  # Approval cards (OMB-3): with a run token from the dashboard, anything the
+  # level does not pre-allow goes to approval-mcp.js, which asks a person on
+  # /agents and denies when nobody answers. Without a token nothing is asked
+  # and such tools are simply refused, as before. The config holds the token,
+  # so it is private to this user and removed when the run ends.
+  local asks=() mcp_cfg="$RUNS_DIR/$run_id.mcp.json"
+  if [ -n "${APPROVAL_TOKEN:-}" ]; then
+    (umask 077; node -e 'const [f, h, ...e] = process.argv.slice(1); const env = Object.fromEntries(e.map((x) => [x.slice(0, x.indexOf("=")), x.slice(x.indexOf("=") + 1)])); require("fs").writeFileSync(f, JSON.stringify({ mcpServers: { arunachala_approvals: { command: process.execPath, args: [h], env } } }));' \
+      "$(native "$mcp_cfg")" "$(native "$HERE/approval-mcp.js")" \
+      "APPROVAL_URL=${APPROVAL_URL:-http://127.0.0.1:8787}" "APPROVAL_RUN_ID=$run_id" "APPROVAL_TOKEN=$APPROVAL_TOKEN" \
+      "APPROVAL_TIMEOUT_MS=${APPROVAL_TIMEOUT_MS:-600000}")
+    asks=(--mcp-config "$mcp_cfg" --permission-prompt-tool mcp__arunachala_approvals__approve)
+  fi
+  (cd "$worktree" && run_timeout "$limit" claude -p "$prompt" --permission-mode "$CLAUDE_PERMISSION_MODE" \
      --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "$CLAUDE_DENIED_TOOLS" \
-     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format stream-json --verbose "${lean[@]}" ${resume[@]+"${resume[@]}"}) \
+     --model "$CLAUDE_MODEL" --max-turns "$CLAUDE_MAX_TURNS" --output-format stream-json --verbose "${lean[@]}" \
+     ${resume[@]+"${resume[@]}"} ${asks[@]+"${asks[@]}"}) \
     | node "$(native "$HERE/stream-log.js")" "$(native "$json")"
   rc=${PIPESTATUS[0]}
+  rm -f "$mcp_cfg"
   echo "== result"
   node "$(native "$HERE/claude-usage.mjs")" "$(native "$json")" "$(native "$AI_CALLS_FILE")" "$run_id"
   return "$rc"

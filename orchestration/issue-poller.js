@@ -74,7 +74,8 @@ function buildReviewTask({ repo, number, pr, base, title, issueBody }) {
   return [
     `Review pull request #${pr} in ${repo}: the changes on this branch, which close issue #${number} ("${title}").`,
     '',
-    `Read the change with \`git diff origin/${base}...HEAD\` and open whatever files you need for context.`,
+    `The change (\`git diff origin/${base}...HEAD\`) is in \`.arunachala-review.diff\` at the repository root: read it, then open whatever files you need for context.`,
+    'You have Read, Glob and Grep only: no shell.',
     'You are a reviewer: do not edit files and do not commit.',
     '',
     'Reply in markdown, under 400 words:',
@@ -165,6 +166,7 @@ function createPoller(deps) {
       branch: job.branch,
       task: buildReviewTask({ repo: job.repo, number: job.number, pr, base: job.base, title: job.title, issueBody: job.issueBody }),
       readOnly: true,
+      reviewBase: job.base,
       ...(reviewSpecialist ? { specialist: reviewSpecialist } : {}),
     });
     state.active[runId] = {
