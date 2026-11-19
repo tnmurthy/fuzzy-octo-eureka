@@ -702,13 +702,25 @@ async function startDispatch(payload) {
   }
   const safetyCheck = readOnly ? { ok: true } : validateDispatchSafety(task, payload);
   if (!safetyCheck.ok) return { status: 400, body: safetyCheck };
+  // The run's approval level. A follow-up never gets more than the run it continues.
+  if (payload.level != null && !approvalLevels.parseLevel(payload.level)) {
+    return { status: 400, body: { ok: false, error: `level is one of: ${approvalLevels.LEVELS.join(', ')}` } };
+  }
+  const parentLevel = followUp
+    ? ((readRuns(RUNS_FILE, 5000).runs || []).find((r) => r.id === followUp.parent) || {}).level || 'auto'
+    : null;
+  const level = approvalLevels.effectiveLevel({
+    requested: payload.level, readOnly, parentLevel, fallback: process.env.DISPATCH_DEFAULT_LEVEL || 'auto',
+  });
+  const reviewBase = readOnly && typeof payload.reviewBase === 'string' && /^[A-Za-z0-9._/-]+$/.test(payload.reviewBase)
+    ? payload.reviewBase : null;
   const specialist = payload.specialist == null || payload.specialist === '' ? null : payload.specialist;
   if (specialist !== null && !specialists.get(specialist)) {
     return { status: 400, body: { ok: false, error: 'unknown specialist (see /api/agents/specialists)' } };
   }
   try {
     const result = await spawnAgentDispatch({
-      agent, repo, repoPath, branch, task, readOnly, specialist,
+      agent, repo, repoPath, branch, task, readOnly, specialist, level, reviewBase,
       ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
     });
     return { status: 202, body: { ok: true, ...result, note: 'started; poll /api/runs for completion' } };
@@ -728,11 +740,8 @@ function resolveRepoPath(repo) {
   return path.resolve(PROJECTS_DIR, repo);
 }
 
-// Tool lists for a read-only claude run (a PR review). Headless claude cannot
-// ask, and --permission-mode acceptEdits would wave edits through, so edits
-// and commits are denied outright rather than just left off the allow-list.
-const READ_ONLY_ALLOWED_TOOLS = 'Read Glob Grep Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git status:*) Bash(ls:*) Bash(cat:*)';
-const READ_ONLY_DENIED_TOOLS = 'Edit Write NotebookEdit Bash(git commit:*) Bash(git push:*) Bash(git reset:*) Bash(git checkout:*) Bash(gh:*)';
+// Read-only runs (PR reviews) use the `review` level in approval-levels.js:
+// Read, Glob and Grep only, by exact name. Only these agents can be locked down so.
 const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 
 // Paid runs this server started, kept until their start line is surely in
@@ -796,6 +805,19 @@ const repoRegistry = require('./repo-registry').createRepoRegistry({
   cloneDir: process.env.AGENT_REPOS_DIR || path.join(require('os').homedir(), 'agent-repos'),
   builtins: () => listAvailableRepos(),
 });
+// Approval levels and cards (OMB-1..4): what a run may do unasked, and the
+// Allow/Deny cards for the rest. approval-levels.js, approvals.js, approvals-api.js.
+const approvalLevels = require('./approval-levels');
+const approvals = require('./approvals').createApprovals({
+  file: path.join(DASHBOARD_DIR, 'logs', 'always-allow.json'),
+  timeoutMs: Number(process.env.APPROVAL_TIMEOUT_MS) || undefined,
+});
+const approvalsApi = require('./approvals-api').createApprovalsApi({
+  store: approvals,
+  isLocal: (req) => !accessGate.requiresAccess(req),
+  isAdmin,
+  actorOf,
+});
 const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
@@ -814,7 +836,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
 });
 
-function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null, resumeSession = null, parentRun = null }) {
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null, resumeSession = null, parentRun = null, level = null, reviewBase = null }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -866,10 +888,22 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
     // Follow-ups: resume the earlier session; record which run this continues.
     if (resumeSession) dispatchEnv.AGENT_RESUME_SESSION = resumeSession; else delete dispatchEnv.AGENT_RESUME_SESSION;
     if (parentRun) dispatchEnv.AGENT_PARENT_RUN = parentRun; else delete dispatchEnv.AGENT_PARENT_RUN;
-    if (readOnly) {
-      dispatchEnv.CLAUDE_ALLOWED_TOOLS = READ_ONLY_ALLOWED_TOOLS;
-      dispatchEnv.CLAUDE_DENIED_TOOLS = READ_ONLY_DENIED_TOOLS;
+    // Approval level -> claude's flags. Levels that ask get a run token for
+    // the approval helper; a review never asks (approval-levels.js).
+    const runLevel = level || (readOnly ? 'review' : 'auto');
+    const tools = approvalLevels.toolsFor(runLevel, { scriptsDir: path.resolve(DASHBOARD_DIR, 'orchestration').replace(/\\/g, '/') });
+    Object.assign(dispatchEnv, {
+      AGENT_LEVEL: runLevel,
+      CLAUDE_PERMISSION_MODE: tools.permissionMode,
+      CLAUDE_ALLOWED_TOOLS: tools.allowed,
+      CLAUDE_DENIED_TOOLS: tools.denied,
+    });
+    delete dispatchEnv.APPROVAL_TOKEN;
+    if (tools.asks && (agent === 'claude' || agent === 'auto')) {
+      dispatchEnv.APPROVAL_TOKEN = approvals.registerRun({ runId: effectiveRunId, repo, level: runLevel });
+      dispatchEnv.APPROVAL_URL = `http://127.0.0.1:${PORT}`;
     }
+    if (reviewBase) dispatchEnv.AGENT_REVIEW_BASE = reviewBase; else delete dispatchEnv.AGENT_REVIEW_BASE;
 
     if (isWin) {
       dispatchEnv.APPDATA = path.join(OPENCLAW_HOME, 'AppData', 'Roaming');
@@ -1357,6 +1391,7 @@ function handleRequest(req, res) {
     return sendJson(res, 200, { ok: true, runId: run.id, ...auditResult });
   }
   if (req.url.startsWith('/api/agents/')) {
+    if (approvalsApi.handle(req, res, { sendJson, readJsonBody })) return;
     if (agentsApi.handle(req, res, { sendJson, readJsonBody })) return;
     return sendJson(res, 404, { ok: false, error: 'not found' });
   }

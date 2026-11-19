@@ -184,6 +184,9 @@ test('a new PR gets a read-only review run on the same branch, and keeps its wor
   assert.equal(dispatched[0].repo, 'demo');
   assert.match(dispatched[0].task, /pull request #99/);
   assert.match(dispatched[0].task, /do not edit files and do not commit/);
+  // The reviewer has no shell: the dispatch writes the diff against the base to a file it reads.
+  assert.equal(dispatched[0].reviewBase, job.base);
+  assert.match(dispatched[0].task, /\.arunachala-review\.diff/);
   assert.match(dispatched[0].task, /Make it faster/);
   assert.ok(!gitCalls.some((c) => c[0] === 'worktree'));
   const review = saved().active['run-1'];

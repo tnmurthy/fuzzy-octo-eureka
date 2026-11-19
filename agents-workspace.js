@@ -324,6 +324,7 @@
     btn.disabled = true;
     msg.className = 'msg';
     const payload = { agent: $('agent').value, title: $('title').value, body: $('body').value, specialist: $('specialist').value };
+    if ($('level') && modeValue() !== 'issue') payload.level = $('level').value;
     try {
       if (modeValue() === 'issue') {
         msg.textContent = 'Opening GitHub issue…';

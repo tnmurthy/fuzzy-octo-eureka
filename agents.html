@@ -1097,7 +1097,17 @@
       color: var(--status-green);
       border: 1px solid rgba(0, 230, 118, 0.25);
     }
-  </style>
+  
+    /* Approval cards (agents-approvals.js) */
+    .approvals-box:empty { display: none; }
+    .approvals-box { margin-bottom: 12px; }
+    .approvals-title { font-size: 13px; margin: 0 0 6px; color: #b45309; }
+    .approval-card { border: 1px solid #f59e0b; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: rgba(245, 158, 11, 0.08); }
+    .approval-meta { font-size: 11px; opacity: 0.75; }
+    .approval-input { white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 6px 0; max-height: 160px; overflow: auto; }
+    .approval-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .approval-msg { font-size: 11px; opacity: 0.8; }
+</style>
 </head>
 <body class="mode-friendly">
   <main class="page">
@@ -1294,6 +1304,15 @@
               </div>
 
               <div>
+                <label class="l" for="level">How much it may do without asking</label>
+                <select class="f" id="level" title="Anything not allowed here shows up as an Allow/Deny card on this page">
+                  <option value="auto">Auto: edits and dev commands; asks for the rest</option>
+                  <option value="edits">Edits: changes files; asks before any command</option>
+                  <option value="ask">Ask: reads freely; asks before every change</option>
+                </select>
+              </div>
+
+              <div>
                 <label class="l" for="specialist">
                   <span class="friendly-only">Specialist Persona</span>
                   <span class="pro-only">Specialist Skill</span>
@@ -1378,6 +1397,7 @@
                   <button type="button" class="collapse-btn" onclick="toggleSection(this, 'running')" title="Toggle Active Tasks" aria-label="Toggle Active Tasks">▾</button>
                 </h2>
               </div>
+              <div id="approvals" class="approvals-box" aria-live="polite"></div>
               <div id="running" class="running-box collapsible-target">
                 <div class="empty">Checking for active tasks…</div>
               </div>
@@ -1612,5 +1632,6 @@
 
   <script src="agents-page.js"></script>
   <script src="agents-workspace.js"></script>
+  <script src="agents-approvals.js"></script>
 </body>
 </html>
