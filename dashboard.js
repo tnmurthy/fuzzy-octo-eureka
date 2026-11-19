@@ -2037,6 +2037,7 @@
     // only when the dashboard itself was opened on this Mac. Through the
     // tunnel the viewer's browser cannot reach it; say so instead of a 502.
     const OPENHANDS_URL = 'http://127.0.0.1:3000/';
+    const OPENHANDS_PUBLIC_URL = 'https://canvas.mytestbed.tech/';
 
     function isLocalDashboard() {
       return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(window.location.hostname);
@@ -2060,6 +2061,8 @@
     }
 
     async function refreshCanvas(force) {
+      const openLink = document.getElementById('id-canvas-open-link');
+      if (openLink) openLink.href = isLocalDashboard() ? OPENHANDS_URL : OPENHANDS_PUBLIC_URL;
       let online = false;
       try {
         const res = await fetch('/api/telemetry', { cache: 'no-store' });
@@ -2075,11 +2078,12 @@
         return;
       }
       if (!isLocalDashboard()) {
-        setCanvasState(true, 'OpenHands online (this Mac only)',
-          'OpenHands is running, but only on the Mac itself (<code>127.0.0.1:3000</code>). ' +
-          'It is not published through <code>' + window.location.hostname + '</code>, because it can start ' +
-          'containers on the host. Open it on the Mac, or ask the admin to add a separate hostname ' +
-          'protected by Cloudflare Access.');
+        // Not embedded: the Access cookie for the canvas host is not sent to
+        // a cross-site iframe, so it opens in its own tab.
+        setCanvasState(true, 'OpenHands online',
+          'OpenHands has its own address behind Cloudflare Access: ' +
+          '<a href="' + OPENHANDS_PUBLIC_URL + '" target="_blank" rel="noopener">' + OPENHANDS_PUBLIC_URL + '</a>' +
+          '<br>It opens in a new tab and asks you to sign in the first time.');
         return;
       }
       setCanvasState(true, 'OpenHands online', '');

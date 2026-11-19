@@ -58,9 +58,24 @@ OrbStack - `orb start` if `docker ps` cannot reach the daemon). It mounts the
 Docker socket, so it is never proxied or tunnelled: the old `/canvas/` proxy
 was removed 2026-11-18 (OpenHands serves from `/` with absolute paths, so the
 subpath proxy only ever returned 502/blank). The Canvas tab embeds
-`127.0.0.1:3000` when the dashboard is opened on this Mac and shows a notice
-otherwise. Telemetry probes `OPENHANDS_PORT` (default 3000). Remote access
-needs its own hostname with a Cloudflare Access app created first.
+`127.0.0.1:3000` when the dashboard is opened on this Mac and links to
+`https://canvas.mytestbed.tech` otherwise. Telemetry probes `OPENHANDS_PORT`
+(default 3000).
+
+Remote (2026-11-19): `canvas.mytestbed.tech` -> tunnel -> **CanvasGate**
+(`canvas-gate.js`, PM2, `127.0.0.1:3001`) -> OpenHands. Two locks, as for the
+team host: Cloudflare Access app `OpenHands Canvas` (AUD `851ddaae...6d53`,
+set as `CANVAS_ACCESS_AUD` in `ecosystem.config.js`; recreate the app = update
+it) at the edge, and the gate re-verifies the Access JWT on every request and
+WebSocket (fails closed, refuses to start without the AUD, strips the Access
+cookie before forwarding). OpenHands tells the browser to reach sandboxes at
+`http://localhost:<random port>`; the gate rewrites those URLs in JSON to
+`https://canvas.mytestbed.tech/sandbox/<port>` and forwards `/sandbox/<port>`
+only to ports Docker lists for containers labelled `sandbox_spec_id`
+(`canvas-sandbox.js`, Docker socket `~/.orbstack/run/docker.sock` or
+`DOCKER_SOCKET`). Tests: `canvas-gate.test.js`, `canvas-sandbox.test.js`.
+Caveat: OpenHands publishes sandbox ports on all interfaces (LAN-reachable,
+protected only by each sandbox's session API key).
 
 **Reboot:** a per-user LaunchAgent, `~/Library/LaunchAgents/pm2.arunachala.plist`
 (installed 2026-11-17, no sudo needed), runs `pm2 resurrect` at login and

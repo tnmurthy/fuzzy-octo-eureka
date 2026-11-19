@@ -58,6 +58,20 @@ module.exports = {
       env: { DASHBOARD_URL: 'http://127.0.0.1:8787' },
     },
     {
+      // canvas.mytestbed.tech -> tunnel -> here -> OpenHands on 127.0.0.1:3000.
+      // Re-checks the Cloudflare Access JWT (app "OpenHands Canvas") on every
+      // request and WebSocket; refuses to start without CANVAS_ACCESS_AUD.
+      ...base,
+      name: 'CanvasGate',
+      script: path.join(ROOT, 'canvas-gate.js'),
+      max_memory_restart: '256M',
+      env: {
+        CANVAS_GATE_PORT: '3001',
+        OPENHANDS_PORT: '3000',
+        CANVAS_ACCESS_AUD: '851ddaae37f988f3eaa3305496b6e9afd729e14b844630e2b9d318cd1f246d53',
+      },
+    },
+    {
       name: 'CloudflareTunnel',
       script: '/Users/arunachala/.local/bin/cloudflared',
       args: 'tunnel --config /Users/arunachala/.cloudflared/config.yml run d23b354e-faee-451b-a23b-6df6bdec117f',
