@@ -59,6 +59,7 @@ function dispatch(t, stubLocal) {
       PATH: `${t.bin}${path.delimiter}${process.env.PATH}`,
       AGENT_RUNS_DIR: posix(t.runs),
       HERMES_BIN: posix(path.join(t.bin, 'hermes-stub')),
+      AGENT_HERMES_SANDBOX: 'off', // the sandbox has its own tests below
       STUB_LOCAL: stubLocal,
       CLAUDE_MARK: posix(mark),
       AI_CALLS_FILE: posix(ledger),
@@ -228,4 +229,84 @@ test('a review gets the diff as a file that git ignores', () => {
   assert.ok(fs.existsSync(path.join(start.worktree, '.arunachala-review.diff')), 'diff written');
   const status = spawnSync('git', ['-C', start.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout;
   assert.ok(!status.includes('.arunachala-review.diff'), 'and ignored by git');
+});
+
+// ---- hermes sandbox (2026-11-22) ----------------------------------------------
+// A stub hermes that behaves like a sandboxed agent: it edits files in the
+// worktree but cannot commit, and (SANDBOX_EVIL) rewrites the .git pointer.
+const BOXED_HERMES = `#!/usr/bin/env bash
+wt=""; prompt=""; while [ $# -gt 0 ]; do case "$1" in --in) wt="$2"; shift ;; -q) prompt="$2"; shift ;; esac; shift; done
+printf '%s\\n' "$HERMES_HOME" > "$STUB_SEEN_HOME"
+printf '%s\\n' "$prompt" > "$STUB_SEEN_PROMPT"
+echo boxed-change > "$wt/boxed.txt"
+[ -n "$SANDBOX_EVIL" ] && printf 'gitdir: /tmp/evil\\n' > "$wt/.git"
+echo '{"type":"system","subtype":"init","model":"","session_id":""}'
+echo '{"type":"tool_use","name":"write_file","input":{"path":"boxed.txt"}}'
+echo '{"type":"result","session_id":"local-0123456789abcdef0123","exit_code":0,"text":"done"}'
+`;
+
+function boxed(t, { docker = 'ok', evil = false } = {}) {
+  fs.writeFileSync(path.join(t.bin, 'hermes-stub'), BOXED_HERMES, { mode: 0o755 });
+  fs.writeFileSync(path.join(t.bin, 'docker'), `#!/usr/bin/env bash\n${docker === 'ok' ? 'exit 0' : 'exit 1'}\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(t.bin, 'orb'), '#!/usr/bin/env bash\nexit 1\n', { mode: 0o755 });
+  const home = path.join(t.dir, 'agent-home');
+  const seenHome = path.join(t.dir, 'seen-home');
+  const seenPrompt = path.join(t.dir, 'seen-prompt');
+  const res = spawnSync(BASH, [posix(SCRIPT), 'hermes', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${t.bin}${path.delimiter}${process.env.PATH}`,
+      AGENT_RUNS_DIR: posix(t.runs),
+      HERMES_BIN: posix(path.join(t.bin, 'hermes-stub')),
+      AGENT_HERMES_HOME: posix(home),
+      AGENT_TASK_TITLE: 'Add boxed file',
+      STUB_SEEN_HOME: posix(seenHome),
+      STUB_SEEN_PROMPT: posix(seenPrompt),
+      SANDBOX_EVIL: evil ? '1' : '',
+    },
+  });
+  const wt = path.join(t.dir, 'repo--task-x');
+  const git = (...a) => spawnSync('git', ['-C', wt, ...a], { encoding: 'utf8' }).stdout.trim();
+  const lines = fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  return {
+    res, wt, git, home, end: lines.at(-1),
+    log: fs.readFileSync(path.join(t.runs, 'run-1.log'), 'utf8'),
+    seenHome: fs.existsSync(seenHome) ? fs.readFileSync(seenHome, 'utf8').trim() : null,
+    seenPrompt: fs.existsSync(seenPrompt) ? fs.readFileSync(seenPrompt, 'utf8') : '',
+  };
+}
+
+test('sandboxed hermes: own HERMES_HOME + locked config, changes committed on the host with hooks off', () => {
+  const t = setup({ withTests: false });
+  // A hook in the main repo must never run for the agent's commit.
+  const hook = path.join(t.repo, '.git', 'hooks', 'pre-commit');
+  fs.writeFileSync(hook, `#!/bin/sh\ntouch ${posix(path.join(t.dir, 'HOOK-RAN'))}\n`, { mode: 0o755 });
+  const r = boxed(t);
+  assert.equal(r.res.status, 0, r.log);
+  assert.equal(r.seenHome, posix(r.home));
+  assert.match(fs.readFileSync(path.join(r.home, 'config.yaml'), 'utf8'), /backend: docker/);
+  assert.match(r.seenPrompt, /git is not available/);
+  assert.match(r.log, /== sandbox: hermes in Docker/);
+  assert.equal(r.git('log', '-1', '--format=%an|%s'), 'Hermes local agent|agent(hermes): Add boxed file');
+  assert.equal(r.git('status', '--porcelain'), '');
+  assert.equal(r.git('rev-list', '--count', 'main..HEAD'), '1');
+  assert.ok(!fs.existsSync(path.join(t.dir, 'HOOK-RAN')), 'repo hook did not run');
+});
+
+test('sandboxed hermes: a rewritten .git pointer is restored before committing', () => {
+  const t = setup({ withTests: false });
+  const r = boxed(t, { evil: true });
+  assert.match(r.log, /changed the worktree's .git pointer - restored it/);
+  assert.doesNotMatch(fs.readFileSync(path.join(r.wt, '.git'), 'utf8'), /evil/);
+  assert.equal(r.git('log', '-1', '--format=%an'), 'Hermes local agent');
+});
+
+test('sandboxed hermes: no Docker means no run, never an unboxed one', () => {
+  const t = setup({ withTests: false });
+  const r = boxed(t, { docker: 'down' });
+  assert.notEqual(r.res.status, 0);
+  assert.match(r.log, /Docker is not reachable, so the local agent was not started/);
+  assert.equal(r.seenHome, null, 'hermes never started');
+  assert.equal(r.end.status, 'failed');
 });
