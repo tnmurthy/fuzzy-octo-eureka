@@ -11,7 +11,10 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "agents": "node scripts/agents.js"
+    "agents": "node scripts/agents.js",
+    "reload": "pm2 reload ArunachalaDashboard DrisyonDashboard",
+    "restart:stack": "pm2 restart ecosystem.config.js",
+    "setup:hooks": "bash scripts/install-git-hooks.sh"
   },
   "engines": {
     "node": ">=18"
