@@ -12,8 +12,9 @@ const BASH = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C
 const SCRIPT = path.join(__dirname, 'agent-dispatch.sh');
 const posix = (p) => p.replace(/\\/g, '/');
 
+// Stands in for \`hermes chat -q <prompt> --oneshot --format stream-json --in <wt>\`.
 const HERMES_STUB = `#!/usr/bin/env bash
-wt="$2"
+wt=""; while [ $# -gt 0 ]; do [ "$1" = --in ] && { wt="$2"; shift; }; shift; done
 case "$STUB_LOCAL" in
   fix)  echo local > "$wt/fixed"; git -C "$wt" add -A; git -C "$wt" -c user.email=t@t -c user.name=t commit -qm local ;;
   junk) echo junk > "$wt/junk.txt" ;;

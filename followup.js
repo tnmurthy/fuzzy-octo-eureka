@@ -3,32 +3,44 @@
 // agent remembers what it did and builds on its own commits.
 //
 // Used by a person ("Follow up" on the Agents page) and by agents (the issue
-// poller hands a reviewer's findings back to the worker). Only claude runs
-// keep a session: its id is in <run>.claude.json, written by stream-log.js.
+// poller hands a reviewer's findings back to the worker). claude and hermes
+// (local) runs keep a session: its id is in <run>.claude.json or
+// <run>.hermes.json, written by stream-log.js. A follow-up resumes with the
+// same agent, so a local run stays local.
 
 const fs = require('fs');
 const path = require('path');
 
-const SESSION_RE = /^[0-9a-fA-F-]{36}$/;
+const SESSION_RE = /^(?:[0-9a-fA-F-]{36}|local-[0-9a-f]{16,128})$/;
+const RESULT_EXT = ['.claude.json', '.hermes.json'];
+
+/** The run's saved result object (claude or hermes), or null. */
+function resultOf(run, readFile = fs.readFileSync) {
+  if (!run || !run.log) return null;
+  for (const ext of RESULT_EXT) {
+    try { return JSON.parse(readFile(String(run.log).replace(/\.log$/, ext), 'utf8')); } catch (_) { /* next */ }
+  }
+  return null;
+}
 const RUN_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
 
 /** The session id saved next to a run's log, or null. */
 function sessionOf(run, readFile = fs.readFileSync) {
-  if (!run || !run.log) return null;
-  try {
-    const j = JSON.parse(readFile(String(run.log).replace(/\.log$/, '.claude.json'), 'utf8'));
-    return SESSION_RE.test(j.session_id || '') ? j.session_id : null;
-  } catch (_) { return null; }
+  const j = resultOf(run, readFile);
+  return j && SESSION_RE.test(j.session_id || '') ? j.session_id : null;
 }
+
+/** Which agent continues a run: hermes stays hermes; claude and auto resume claude. */
+const resumeAgentOf = (run) => (run && run.agent === 'hermes' ? 'hermes' : 'claude');
 
 /** Whether a run can be followed up, and why not. */
 function followUpStatus(run, { readFile } = {}) {
   if (!run) return { ok: false, error: 'run not found' };
   if (run.status === 'running') return { ok: false, error: 'the run is still going; wait for it to finish' };
-  if (run.agent !== 'claude' && run.agent !== 'auto') return { ok: false, error: 'only Claude runs keep a session to resume' };
+  if (!['claude', 'auto', 'hermes'].includes(run.agent)) return { ok: false, error: 'only Claude and Hermes runs keep a session to resume' };
   if (!run.branch || !run.repo) return { ok: false, error: 'the run has no branch to continue on' };
   const session = sessionOf(run, readFile);
-  if (!session) return { ok: false, error: 'this run saved no Claude session (it may have run on Hermes only)' };
+  if (!session) return { ok: false, error: 'this run saved no session to resume (it may have been stopped before it reported one)' };
   return { ok: true, session };
 }
 
@@ -52,7 +64,7 @@ function resolveFollowUp({ runs, runId, resolveRepo, readFile }) {
   if (!known || path.resolve(known).toLowerCase() !== path.resolve(run.repo).toLowerCase()) {
     return { ok: false, error: `the repo ${name} is no longer registered on this dashboard` };
   }
-  return { ok: true, repo: name, repoPath: known, branch: run.branch, session: st.session, parent: run.id };
+  return { ok: true, repo: name, repoPath: known, branch: run.branch, session: st.session, parent: run.id, agent: resumeAgentOf(run) };
 }
 
-module.exports = { resolveFollowUp, followUpStatus, sessionOf };
+module.exports = { resolveFollowUp, followUpStatus, sessionOf, resultOf, resumeAgentOf };

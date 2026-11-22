@@ -505,10 +505,14 @@ if (require.main === module) {
           loadState, saveState, repos,
           authors: (process.env.POLLER_AUTHORS || '').split(',').map((s) => s.trim()).filter(Boolean),
           maxConcurrent: Number(process.env.POLLER_MAX_CONCURRENT) || 2,
-          defaultAgent: process.env.POLLER_DEFAULT_AGENT || 'claude',
+          // Local by default (2026-11-22): issues run on hermes (Ollama) unless
+          // labelled agent:claude or POLLER_DEFAULT_AGENT says otherwise.
+          defaultAgent: process.env.POLLER_DEFAULT_AGENT || 'hermes',
           // claude (default) | noop | off. Only agents the dashboard can
           // lock to read-only tools may review.
-          reviewAgent: process.env.POLLER_REVIEW_AGENT || 'claude',
+          // Reviews must be locked read-only, which only claude/noop support,
+          // so with a local default they are off unless asked for (paid).
+          reviewAgent: process.env.POLLER_REVIEW_AGENT || ((process.env.POLLER_DEFAULT_AGENT || 'hermes') === 'hermes' ? 'off' : 'claude'),
           // agency-agents persona for reviews; 'off' for none.
           // Issues without a specialist label get the dashboard's top
           // suggestion (local models, free). POLLER_AUTO_SPECIALIST=false: off.

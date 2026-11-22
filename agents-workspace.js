@@ -17,10 +17,10 @@
       desc: 'Build features, fix bugs & refactor',
       specialists: ['engineering-senior-developer', 'engineering-ai-engineer', 'engineering-backend-architect', 'engineering-frontend-developer', 'engineering-code-reviewer'],
       starters: [
-        { title: 'Explain this codebase: architecture, entry points and how to run it', body: 'Write the answer to docs/ONBOARDING.md. Do not change code.', specialist: 'engineering-codebase-onboarding-engineer', agent: 'claude' },
-        { title: 'Find and fix the top 3 bugs or risky spots, with a test for each', specialist: 'engineering-senior-developer', agent: 'claude' },
-        { title: 'Add input validation and clear error handling to the API routes', specialist: 'engineering-backend-architect', agent: 'claude' },
-        { title: 'Split the largest file into smaller modules without changing behaviour', body: 'Keep every existing test passing; no new features.', specialist: 'engineering-minimal-change-engineer', agent: 'claude' },
+        { title: 'Explain this codebase: architecture, entry points and how to run it', body: 'Write the answer to docs/ONBOARDING.md. Do not change code.', specialist: 'engineering-codebase-onboarding-engineer' },
+        { title: 'Find and fix the top 3 bugs or risky spots, with a test for each', specialist: 'engineering-senior-developer' },
+        { title: 'Add input validation and clear error handling to the API routes', specialist: 'engineering-backend-architect' },
+        { title: 'Split the largest file into smaller modules without changing behaviour', body: 'Keep every existing test passing; no new features.', specialist: 'engineering-minimal-change-engineer' },
       ],
     },
     {
@@ -28,10 +28,10 @@
       desc: 'Verify edge cases & write tests',
       specialists: ['testing-test-automation-engineer', 'testing-api-tester', 'testing-accessibility-auditor', 'testing-performance-benchmarker', 'testing-reality-checker'],
       starters: [
-        { title: 'Write unit tests for the least-tested module and report the coverage change', specialist: 'testing-test-automation-engineer', agent: 'claude' },
-        { title: 'Write API tests for every endpoint: happy path, bad input, auth', specialist: 'testing-api-tester', agent: 'claude' },
-        { title: 'Find flaky or slow tests and fix or document them', specialist: 'testing-test-results-analyzer', agent: 'claude' },
-        { title: 'Audit the UI for accessibility (WCAG 2.2 AA) and fix what is quick', specialist: 'testing-accessibility-auditor', agent: 'claude' },
+        { title: 'Write unit tests for the least-tested module and report the coverage change', specialist: 'testing-test-automation-engineer' },
+        { title: 'Write API tests for every endpoint: happy path, bad input, auth', specialist: 'testing-api-tester' },
+        { title: 'Find flaky or slow tests and fix or document them', specialist: 'testing-test-results-analyzer' },
+        { title: 'Audit the UI for accessibility (WCAG 2.2 AA) and fix what is quick', specialist: 'testing-accessibility-auditor' },
       ],
     },
     {
@@ -39,9 +39,9 @@
       desc: 'Roadmaps, PRDs & backlog prioritization',
       specialists: ['product-manager', 'product-sprint-prioritizer', 'product-feedback-synthesizer', 'engineering-technical-writer'],
       starters: [
-        { title: 'Write a one-page PRD for the next feature, from the README and open TODOs', body: 'Save it as docs/PRD-next.md.', specialist: 'product-manager', agent: 'hermes' },
-        { title: 'Turn the TODO and FIXME comments into a prioritised backlog', body: 'Save it as docs/BACKLOG.md with effort and impact for each item.', specialist: 'product-sprint-prioritizer', agent: 'hermes' },
-        { title: 'Rewrite the README for a first-time user: what it is, setup, first task', specialist: 'engineering-technical-writer', agent: 'hermes' },
+        { title: 'Write a one-page PRD for the next feature, from the README and open TODOs', body: 'Save it as docs/PRD-next.md.', specialist: 'product-manager' },
+        { title: 'Turn the TODO and FIXME comments into a prioritised backlog', body: 'Save it as docs/BACKLOG.md with effort and impact for each item.', specialist: 'product-sprint-prioritizer' },
+        { title: 'Rewrite the README for a first-time user: what it is, setup, first task', specialist: 'engineering-technical-writer' },
       ],
     },
     {
@@ -49,9 +49,9 @@
       desc: 'Design reviews, mobile UI & accessibility',
       specialists: ['design-ux-architect', 'design-ui-designer', 'design-ux-researcher', 'testing-accessibility-auditor'],
       starters: [
-        { title: 'Review the UI for consistency: spacing, colours, type; list fixes and apply the quick ones', specialist: 'design-ui-designer', agent: 'claude' },
-        { title: 'Make the main pages work well on a phone (320-414 px wide)', specialist: 'design-ux-architect', agent: 'claude' },
-        { title: 'Write a UX review of the main user flow with the top 5 friction points', body: 'Save it as docs/UX-REVIEW.md. Do not change code.', specialist: 'design-ux-researcher', agent: 'hermes' },
+        { title: 'Review the UI for consistency: spacing, colours, type; list fixes and apply the quick ones', specialist: 'design-ui-designer' },
+        { title: 'Make the main pages work well on a phone (320-414 px wide)', specialist: 'design-ux-architect' },
+        { title: 'Write a UX review of the main user flow with the top 5 friction points', body: 'Save it as docs/UX-REVIEW.md. Do not change code.', specialist: 'design-ux-researcher' },
       ],
     },
     {
@@ -59,9 +59,9 @@
       desc: 'CI/CD workflows, health checks & runbooks',
       specialists: ['engineering-devops-automator', 'engineering-sre', 'engineering-incident-response-commander'],
       starters: [
-        { title: 'Add a CI workflow that installs, lints and runs the tests on every PR', specialist: 'engineering-devops-automator', agent: 'claude' },
-        { title: 'Add health checks and structured logs to the services', specialist: 'engineering-sre', agent: 'claude' },
-        { title: 'Write a runbook: how to deploy, roll back and debug this project', body: 'Save it as docs/RUNBOOK.md.', specialist: 'engineering-sre', agent: 'hermes' },
+        { title: 'Add a CI workflow that installs, lints and runs the tests on every PR', specialist: 'engineering-devops-automator' },
+        { title: 'Add health checks and structured logs to the services', specialist: 'engineering-sre' },
+        { title: 'Write a runbook: how to deploy, roll back and debug this project', body: 'Save it as docs/RUNBOOK.md.', specialist: 'engineering-sre' },
       ],
     },
     {
@@ -69,9 +69,9 @@
       desc: 'OWASP audits & secret vulnerability scans',
       specialists: ['security-appsec-engineer', 'security-architect', 'security-penetration-tester', 'engineering-code-reviewer'],
       starters: [
-        { title: 'Audit the code for OWASP Top 10 issues and fix the critical ones', specialist: 'security-appsec-engineer', agent: 'claude' },
-        { title: 'Find hardcoded secrets and move them to environment variables', specialist: 'security-appsec-engineer', agent: 'claude' },
-        { title: 'Threat-model the app: assets, entry points, top risks and mitigations', body: 'Save it as docs/THREAT-MODEL.md. Do not change code.', specialist: 'security-architect', agent: 'hermes' },
+        { title: 'Audit the code for OWASP Top 10 issues and fix the critical ones', specialist: 'security-appsec-engineer' },
+        { title: 'Find hardcoded secrets and move them to environment variables', specialist: 'security-appsec-engineer' },
+        { title: 'Threat-model the app: assets, entry points, top risks and mitigations', body: 'Save it as docs/THREAT-MODEL.md. Do not change code.', specialist: 'security-architect' },
       ],
     },
   ];
@@ -109,7 +109,7 @@
       b.addEventListener('click', () => {
         $('title').value = s.title;
         $('body').value = s.body || '';
-        $('agent').value = s.agent || 'claude';
+        // Starters keep the selected agent (local by default).
         setSpecialist(s.specialist || '');
         $('title').dispatchEvent(new Event('input')); // refresh suggestions
         $('title').focus();

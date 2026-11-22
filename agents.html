@@ -1341,9 +1341,9 @@
                   <span class="pro-only">Agent Engine</span>
                 </label>
                 <select class="f" id="agent">
-                  <option value="claude">Claude 3.7: Deep Code (Smart, Paid)</option>
-                  <option value="hermes">Hermes 3: Docs & Drafts (Free, Local)</option>
-                  <option value="auto">Auto: Hermes first, Claude fallback</option>
+                  <option value="hermes" selected>Local: Hermes on Ollama (Free, private, default)</option>
+                  <option value="auto">Auto: local first, Claude only if tests fail (Paid if escalated)</option>
+                  <option value="claude">Claude: hardest tasks (Paid)</option>
                   <option value="codex">Codex (Paid)</option>
                   <option value="noop">Noop: Dry Run / Preview (Free)</option>
                 </select>
