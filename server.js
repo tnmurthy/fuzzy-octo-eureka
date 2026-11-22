@@ -227,6 +227,7 @@ function getReqUserNode(req) {
 }
 
 const { isServable } = require('./static-policy');
+const secretScan = require('./secret-scan');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -1309,6 +1310,23 @@ function handleRequest(req, res) {
         }
 
         const prUrl = prUrlOf(remote, run.branch);
+
+        // Never push a secret the agent committed (secret-scan.js). Findings
+        // name file, line and rule only; the value is never sent back.
+        let leaks;
+        try {
+          const gitOut = (args, cwd) => require('child_process').execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 30000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+          leaks = secretScan.scanRange({ git: gitOut, cwd: pushDir, base: 'origin/HEAD', head: run.branch });
+        } catch (err) {
+          return sendJson(res, 500, { ok: false, error: 'could not check the branch for secrets, so it was not pushed' });
+        }
+        if (leaks.length) {
+          return sendJson(res, 409, {
+            ok: false,
+            error: `Not pushed: the agent's commits look like they contain secrets (${leaks.length}). Rotate anything real and remove it from the branch first.`,
+            findings: leaks.slice(0, 20),
+          });
+        }
 
         execFile('git', ['push', '-u', 'origin', run.branch], {
           cwd: pushDir,

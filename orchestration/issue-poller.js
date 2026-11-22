@@ -129,8 +129,12 @@ function createPoller(deps) {
     // specialist:<slug> label. Null turns auto-picking off.
     suggestSpecialist = null,
     readLog = () => '',
+    // (cwd, base, head) => findings: refuses a push whose commits carry a
+    // secret (secret-scan.js). Default: no scan (tests).
+    scanSecrets = () => [],
     now = Date.now, log = console.log,
   } = deps;
+  const leakList = (f) => f.slice(0, 10).map((x) => `- \`${x.file}${x.line ? `:${x.line}` : ''}\`: ${x.rule}`).join('\n');
   const authors = (deps.authors || []).map((a) => a.toLowerCase());
   const defaultBranches = new Map();
   let state = loadState() || { active: {} };
@@ -191,6 +195,12 @@ function createPoller(deps) {
     const answer = String(readLog(run.log) || '').trim().slice(0, 4000);
     const commits = Number(run.commits_ahead) || 0;
     if (run.status === 'done' && commits > job.commitsBefore) {
+      const leaks = scanSecrets(path, `origin/${branch}`, branch);
+      if (leaks.length) {
+        await github.comment(repo, pr, `### Push blocked (round ${job.round}, run \`${runId}\`)\n\nThe agent's new commits look like they contain secrets, so they were not pushed:\n\n${leakList(leaks)}\n\nThe commits stay in the worktree on the agent host. Rotate anything real, remove it from the branch, then push by hand.`);
+        log(`[poller] ${repo}#${pr} fix push blocked: ${leaks.length} possible secret(s)`);
+        return; // keep the worktree for inspection
+      }
       git(['push', 'origin', `${branch}:${branch}`], path);
       await github.comment(repo, pr, `### Agent fixes (round ${job.round}, run \`${runId}\`)\n\n${commits - job.commitsBefore} new commit(s).${answer ? `\n\n${answer}` : ''}`);
       const pseudoRun = { ...run, id: runId, commits_ahead: commits, worktree: job.worktree };
@@ -241,6 +251,13 @@ function createPoller(deps) {
     const commits = Number(run.commits_ahead) || 0;
 
     if (run.status === 'done' && commits > 0) {
+      const leaks = scanSecrets(path, `origin/${job.base}`, branch);
+      if (leaks.length) {
+        await setLabel(repo, number, LABELS.running, LABELS.failed);
+        await github.comment(repo, number, `Run \`${runId}\` (\`${job.agent}\`) finished, but its commits look like they contain secrets, so nothing was pushed:\n\n${leakList(leaks)}\n\nThe branch \`${branch}\` stays in the worktree on the agent host. Rotate anything real, remove it, then re-label \`${LABELS.ready}\` or push by hand.`);
+        log(`[poller] ${repo}#${number} push blocked: ${leaks.length} possible secret(s)`);
+        return; // keep the worktree for inspection
+      }
       git(['push', '-u', 'origin', `${branch}:${branch}`], path);
       const pr = await github.createPull(repo, {
         head: branch,
@@ -408,6 +425,7 @@ if (require.main === module) {
   require('../load-env').loadEnv(ROOT);
   const { createGitHubClient } = require('./github-client');
   const { readRuns } = require('../runs-reader');
+  const secretScan = require('../secret-scan');
 
   const STATE_FILE = path.join(ROOT, 'logs', 'issue-poller-state.json');
   const RUNS_FILE = process.env.AGENT_RUNS_FILE || path.join(ROOT, '..', '..', '04_internal', 'agent-runs', 'runs.jsonl');
@@ -481,6 +499,8 @@ if (require.main === module) {
         poller = createPoller({
           github: createGitHubClient({ token: process.env.GITHUB_TOKEN }),
           dispatch, git,
+          // Every push is scanned first; known values come from .env + secrets file.
+          scanSecrets: (cwd, base, head) => secretScan.scanRange({ git, cwd, base, head }),
           readRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
           loadState, saveState, repos,
           authors: (process.env.POLLER_AUTHORS || '').split(',').map((s) => s.trim()).filter(Boolean),

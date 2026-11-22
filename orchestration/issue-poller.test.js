@@ -25,7 +25,7 @@ function fakeGitHub(issues = []) {
   };
 }
 
-function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, suggestSpecialist = null, readLog, fixRounds = 0 } = {}) {
+function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, gitImpl, now = () => 1_000_000, maxConcurrent = 2, authors, reviewAgent = 'off', reviewSpecialist = null, suggestSpecialist = null, readLog, fixRounds = 0, scanSecrets } = {}) {
   const github = fakeGitHub(issues);
   const gitCalls = [];
   const dispatched = [];
@@ -38,7 +38,7 @@ function setup({ issues = [], runs = [], state = { active: {} }, dispatchImpl, g
     loadState: () => JSON.parse(JSON.stringify(state)),
     saveState: (s) => { saved = JSON.parse(JSON.stringify(s)); },
     repos: [{ repo: REPO, path: '/work/demo', name: 'demo' }],
-    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, suggestSpecialist, readLog, fixRounds,
+    authors, maxConcurrent, now, log: () => {}, reviewAgent, reviewSpecialist, suggestSpecialist, readLog, fixRounds, ...(scanSecrets ? { scanSecrets } : {}),
   });
   return { poller, github, gitCalls, dispatched, saved: () => saved };
 }
@@ -369,4 +369,30 @@ test('a fix run that changes nothing posts its answer and cleans up', async () =
   assert.equal(dispatched.length, 0);
   assert.match(commentsOf(github)[0], /Agent reply[\s\S]*No new commits[\s\S]*already exists/);
   assert.ok(gitCalls.some((a) => a[0] === 'worktree' && a[1] === 'remove'));
+});
+
+// ---- secret scan gates every push (2026-11-22) -------------------------------
+test('a run whose commits carry a secret is not pushed; the issue is failed and says where', async () => {
+  const scans = [];
+  const { poller, github, gitCalls } = setup({
+    state: { active: { r1: job } },
+    runs: [{ id: 'r1', status: 'done', commits_ahead: 1, worktree: '/work/demo--agent-issue-7-x' }],
+    scanSecrets: (cwd, base, head) => { scans.push([cwd, base, head]); return [{ file: 'notes.md', line: 3, rule: 'value of GITHUB_TOKEN' }]; },
+  });
+  await poller.tick();
+  assert.deepEqual(scans, [['/work/demo', 'origin/main', 'agent/issue-7-x']]);
+  assert.ok(!gitCalls.some((a) => a[0] === 'push' || a[0] === 'worktree'), 'nothing pushed, worktree kept');
+  assert.ok(!github.calls.some((c) => c[0] === 'pull'));
+  assert.ok(github.calls.some((c) => c[0] === 'add' && c[3][0] === LABELS.failed));
+  assert.match(commentsOf(github).pop(), /contain secrets[\s\S]*`notes\.md:3`: value of GITHUB_TOKEN/);
+});
+
+test('a clean scan pushes as before', async () => {
+  const { poller, gitCalls } = setup({
+    state: { active: { r1: job } },
+    runs: [{ id: 'r1', status: 'done', commits_ahead: 1, worktree: '/w' }],
+    scanSecrets: () => [],
+  });
+  await poller.tick();
+  assert.equal(gitCalls[0][0], 'push');
 });
