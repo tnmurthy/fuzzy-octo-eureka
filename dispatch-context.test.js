@@ -104,3 +104,18 @@ test('just-in-time skills are injected into dispatch prompt when matched', () =>
   assert.match(out, /### Skill: sqlite-wal/);
   assert.match(out, /Always set PRAGMA journal_mode = WAL;/);
 });
+
+test('cognitive blackboard facts are injected into dispatch prompt when present', () => {
+  const mockBlackboard = {
+    formatBlackboardPrompt: () => '\n\n---\nCognitive Blackboard (Live Cross-Agent Signals):\n- [fact_1] (hermes/global): API v2 live -> tokens required\n'
+  };
+
+  const out = buildDispatchPrompt(
+    'Build auth client',
+    [],
+    { blackboard: mockBlackboard }
+  );
+
+  assert.match(out, /Cognitive Blackboard \(Live Cross-Agent Signals\):/);
+  assert.match(out, /- \[fact_1\] \(hermes\/global\): API v2 live -> tokens required/);
+});

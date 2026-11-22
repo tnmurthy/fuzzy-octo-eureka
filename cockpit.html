@@ -104,6 +104,7 @@
       <button class="tab" id="tab-matrix" aria-selected="false" onclick="switchView('matrix')">Decision Matrix</button>
       <button class="tab" id="tab-handoffs" aria-selected="false" onclick="switchView('handoffs')">Federation Stream</button>
       <button class="tab" id="tab-direction" aria-selected="false" onclick="switchView('direction')">Direction & Intent</button>
+      <button class="tab" id="tab-blackboard" aria-selected="false" onclick="switchView('blackboard')">Blackboard Feed</button>
     </div>
 
     <!-- Timeline View -->
@@ -209,6 +210,35 @@
         </table>
       </div>
     </div>
+
+    <!-- Blackboard View -->
+    <div id="view-blackboard" class="card" style="display: none;">
+      <h2>Cognitive Blackboard Feed <span class="badge b-purple" id="blackboard-status">Live Stream</span> <span class="badge b-blue">Synced with Supabase arunachala_memory</span></h2>
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 16px;">
+        Real-time cross-agent signal bus. Signals broadcast instantly via SSE (&lt;1ms) and replicate to Supabase for multi-host federation.
+      </p>
+
+      <!-- Post Signal Form -->
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <h3 style="margin: 0 0 12px; font-size: 0.95rem; font-weight: 600;">Broadcast Signal to Blackboard</h3>
+        <form id="blackboard-form" onsubmit="submitBlackboardFact(event)">
+          <div class="form-row">
+            <input type="text" id="fact-author" class="form-control" placeholder="Author (e.g. agent:hermes)" value="operator" style="width: 170px;" required>
+            <input type="text" id="fact-scope" class="form-control" placeholder="Scope (e.g. global or repo-core)" value="global" style="width: 170px;" required>
+            <input type="text" id="fact-title" class="form-control" placeholder="Signal Title (e.g. Auth API Contract Updated)" style="flex: 1; min-width: 220px;" required>
+          </div>
+          <div class="form-row">
+            <textarea id="fact-content" class="form-control" placeholder="Fact description, contract payload, or discovery details..." maxlength="500" required rows="2" style="width: 100%; resize: vertical;"></textarea>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div id="blackboard-feedback" class="msg-feedback"></div>
+            <button type="submit" class="btn">Broadcast Signal</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="blackboard-feed">Loading blackboard signals...</div>
+    </div>
   </div>
 
   <script>
@@ -234,6 +264,10 @@
 
         // Load Direction & Intent Rules
         loadDirectionData();
+
+        // Load Cognitive Blackboard Feed & SSE stream
+        loadBlackboardData();
+        initBlackboardStream();
       } catch (err) {
         document.getElementById('timeline-container').innerHTML = `<div class="t-sub">Failed to load cockpit telemetry: ${err.message}</div>`;
       }
@@ -423,12 +457,105 @@
     }
 
     function switchView(viewName) {
-      ['timeline', 'matrix', 'handoffs', 'direction'].forEach(v => {
+      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard'].forEach(v => {
         const el = document.getElementById(`view-${v}`);
         const tab = document.getElementById(`tab-${v}`);
         if (el) el.style.display = v === viewName ? 'block' : 'none';
         if (tab) tab.setAttribute('aria-selected', v === viewName ? 'true' : 'false');
       });
+    }
+
+    let blackboardFacts = [];
+
+    async function loadBlackboardData() {
+      try {
+        const res = await fetch('/api/blackboard/facts');
+        const data = await res.json();
+        if (data.ok) {
+          blackboardFacts = data.facts || [];
+          renderBlackboardFeed(blackboardFacts);
+        }
+      } catch (err) {
+        document.getElementById('blackboard-feed').innerHTML = `<div class="t-sub">Failed to load blackboard signals: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function initBlackboardStream() {
+      if (!window.EventSource) return;
+      try {
+        const sse = new EventSource('/api/blackboard/stream');
+        sse.onmessage = (e) => {
+          try {
+            const fact = JSON.parse(e.data);
+            blackboardFacts.unshift(fact);
+            renderBlackboardFeed(blackboardFacts);
+          } catch (_) {}
+        };
+        sse.onerror = () => {
+          const s = document.getElementById('blackboard-status');
+          if (s) s.textContent = 'Connecting...';
+        };
+        sse.onopen = () => {
+          const s = document.getElementById('blackboard-status');
+          if (s) s.textContent = 'Live Stream';
+        };
+      } catch (_) {}
+    }
+
+    function renderBlackboardFeed(facts) {
+      const container = document.getElementById('blackboard-feed');
+      if (!facts || !facts.length) {
+        container.innerHTML = '<div class="t-sub">No blackboard signals broadcast yet.</div>';
+        return;
+      }
+
+      container.innerHTML = facts.map(f => `
+        <div class="timeline-item" style="margin-bottom: 14px;">
+          <div class="t-title">
+            <span>${escapeHtml(f.title)}</span>
+            <span class="badge b-purple">${escapeHtml(f.author || 'agent')}</span>
+            <span class="badge b-blue">${escapeHtml(f.scope || 'global')}</span>
+            ${(f.tags || []).map(t => `<span class="badge b-amber">${escapeHtml(t)}</span>`).join(' ')}
+          </div>
+          <div class="t-sub">Signal ID: <span class="mono">${escapeHtml(f.id)}</span> · ${new Date(f.createdAt).toLocaleString()}</div>
+          <div class="t-body">${escapeHtml(f.content)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function submitBlackboardFact(e) {
+      e.preventDefault();
+      const feedback = document.getElementById('blackboard-feedback');
+      feedback.textContent = 'Broadcasting...';
+      feedback.className = 'msg-feedback';
+
+      const author = document.getElementById('fact-author').value.trim() || 'operator';
+      const scope = document.getElementById('fact-scope').value.trim() || 'global';
+      const title = document.getElementById('fact-title').value.trim();
+      const content = document.getElementById('fact-content').value.trim();
+
+      try {
+        const res = await fetch('/api/blackboard/post', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ author, scope, title, content, syncToMemory: true })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          feedback.textContent = `Error: ${data.error}`;
+          feedback.className = 'msg-feedback msg-err';
+          return;
+        }
+
+        feedback.textContent = `Broadcast signal ${data.fact.id} successfully!`;
+        feedback.className = 'msg-feedback msg-ok';
+        document.getElementById('blackboard-form').reset();
+        document.getElementById('fact-author').value = 'operator';
+        document.getElementById('fact-scope').value = 'global';
+      } catch (err) {
+        feedback.textContent = `Network error: ${err.message}`;
+        feedback.className = 'msg-feedback msg-err';
+      }
     }
 
     function escapeHtml(str) {

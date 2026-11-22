@@ -79,3 +79,11 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Rule / Decision:** Enforce an automated Maker/Checker quality rubric (`quality-gatekeeper.js`) prior to code landing. Score changes on 4 dimensions: Security & Leak Defense (35%), Governance Invariant Compliance (25%), Verification & Test Rigor (25%), and Blast Radius & Scope Isolation (15%). Passing threshold is >= 80/100 with zero critical invariant or security failures.
 - **Trade-offs:** Prevents silent architectural drift, credential leaks, and zero-evidence pass states (Invariant I-8) across autonomous agent commits.
 ---
+## [DEC-012] Dual-Tier Cognitive Blackboard (Sub-Millisecond SSE + Supabase Cloud Memory Sync)
+- **Date:** 2026-11-22
+- **Driver:** Systems Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Real-time agent collaboration is organized via a dual-tier cognitive blackboard (`blackboard.js`). Local agents publish and subscribe to facts, contracts, and schema mutations with sub-millisecond latency (<1ms) via native EventEmitter and SSE (`/api/blackboard/stream`). Simultaneously, all blackboard entries are stored in `memory-engine.js` (`category: blackboard`) and replicated every 30 seconds into Supabase `arunachala_memory`, unifying local Apple Silicon execution with cross-machine multi-agent federation.
+- **Trade-offs:** Delivers sub-millisecond responsiveness for local processes while ensuring 100% cloud persistent context sharing across all agents and team members without creating duplicate database infrastructure.
+---

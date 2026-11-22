@@ -37,7 +37,8 @@ function findMatchingAntidotes(task, files = [], memoryEngine = null) {
  * @param {Array} [options.antidotes] - Explicit list of matching antidotes
  * @param {object} [options.directionLayer] - Budgeted direction and intent layer
  * @param {object} [options.skillLoader] - Just-In-Time skill loader instance
- * @param {string} [options.projectId] - Project ID for targeted direction rules
+ * @param {object} [options.blackboard] - Cognitive blackboard instance
+ * @param {string} [options.projectId] - Project ID for targeted direction rules & blackboard
  * @param {string} [options.userId] - User ID for targeted direction rules
  * @param {string[]} [options.files] - Target files involved in task
  * @param {boolean} [options.tiered] - Whether to use L0/L1 tiered memory presentation
@@ -89,7 +90,17 @@ function buildDispatchPrompt(task, memories, options = {}) {
     }
   }
 
-  // 4. Process Team Context / Memories
+  // 4. Process Cognitive Blackboard (Live cross-agent signals & facts)
+  if (options.blackboard && typeof options.blackboard.formatBlackboardPrompt === 'function') {
+    const blackboardBlock = options.blackboard.formatBlackboardPrompt({
+      scope: options.projectId || options.scope
+    });
+    if (blackboardBlock) {
+      result += blackboardBlock;
+    }
+  }
+
+  // 5. Process Team Context / Memories
   if (!Array.isArray(memories) || !memories.length) {
     return result;
   }

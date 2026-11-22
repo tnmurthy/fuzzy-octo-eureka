@@ -77,6 +77,8 @@ const { createSkillLoader } = require('./skill-loader');
 const skillLoader = createSkillLoader();
 const { createQualityGatekeeper } = require('./quality-gatekeeper');
 const qualityGatekeeper = createQualityGatekeeper({ ledgerDB });
+const { createBlackboard } = require('./blackboard');
+const blackboard = createBlackboard({ ledgerDB, memoryEngine: memory });
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
@@ -2200,6 +2202,45 @@ function handleRequest(req, res) {
           evaluation,
           rubricMarkdown
         });
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, error: err.message });
+      }
+    });
+    return;
+  }
+
+  // --- Cognitive Blackboard API ---
+  if (req.url === '/api/blackboard/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+    res.write('retry: 4000\n\n');
+    const unsubscribe = blackboard.subscribe((fact) => {
+      res.write(`data: ${JSON.stringify(fact)}\n\n`);
+    });
+    req.on('close', () => unsubscribe());
+    return;
+  }
+
+  if (req.url.startsWith('/api/blackboard/facts')) {
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const scope = parsedUrl.searchParams.get('scope');
+    const tag = parsedUrl.searchParams.get('tag');
+    const limit = Number(parsedUrl.searchParams.get('limit')) || 30;
+    const facts = blackboard.getRecentFacts({ limit, scope, tag });
+    return sendJson(res, 200, { ok: true, count: facts.length, facts });
+  }
+
+  if (req.url.startsWith('/api/blackboard/post') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const fact = blackboard.postFact(payload);
+        return sendJson(res, 201, { ok: true, fact });
       } catch (err) {
         return sendJson(res, 400, { ok: false, error: err.message });
       }
