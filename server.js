@@ -107,6 +107,7 @@ const {
 } = require('./chat-transcripts');
 const { classifyTaskDifficulty, routeTask } = require('./orchestration/model-router');
 const precompactPreserver = require('./precompact-preserver');
+const incidentToAntidote = require('./incident-to-antidote');
 
 // Ollama connection details (can be local or remote, e.g. a Mac Studio on LAN/VPN)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
@@ -1510,6 +1511,53 @@ function handleRequest(req, res) {
     const checkpoint = precompactPreserver.getPrecompactCheckpoint(runId, { ledgerDB });
     if (!checkpoint) return sendJson(res, 404, { ok: false, error: `no checkpoint found for run ${runId}` });
     return sendJson(res, 200, { ok: true, checkpoint });
+  }
+  if (req.url === '/api/antidotes/synthesize' && req.method === 'POST') {
+    readJsonBody(req, 64 * 1024)
+      .then((b) => {
+        const entry = incidentToAntidote.synthesizeAntidote(b);
+        if (b.autoRegister !== false) {
+          incidentToAntidote.registerAntidote(entry, {
+            memoryEngine: memory,
+            ledgerDB,
+            blackboard
+          });
+        }
+        return sendJson(res, 200, { ok: true, antidote: entry });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: `bad request: ${err.message}` }));
+    return;
+  }
+  if (req.url === '/api/antidotes/mine' && req.method === 'POST') {
+    readJsonBody(req, 32 * 1024)
+      .then((b) => {
+        const source = b.source || 'git';
+        const limit = Number(b.limit) || 15;
+        let candidates = [];
+        if (source === 'runs') {
+          const { runs = [] } = readRuns(RUNS_FILE, 200);
+          candidates = incidentToAntidote.mineFailedRuns(runs, { limit });
+        } else {
+          candidates = incidentToAntidote.mineGitCommits(DASHBOARD_DIR, { limit });
+        }
+        let addedCount = 0;
+        if (b.autoRegister === true) {
+          const resBatch = incidentToAntidote.batchRegister(candidates, {
+            memoryEngine: memory,
+            ledgerDB,
+            blackboard
+          });
+          addedCount = resBatch.added;
+        }
+        return sendJson(res, 200, { ok: true, source, minedCount: candidates.length, added: addedCount, candidates });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: `bad request: ${err.message}` }));
+    return;
+  }
+  if (req.url.startsWith('/api/antidotes') && req.method === 'GET') {
+    const scope = (new URL(req.url, 'http://localhost')).searchParams.get('scope') || null;
+    const antidotes = memory.getAntidotes({ scope });
+    return sendJson(res, 200, { ok: true, count: antidotes.length, antidotes });
   }
   if (req.url.startsWith('/api/agents/')) {
     if (approvalsApi.handle(req, res, { sendJson, readJsonBody })) return;

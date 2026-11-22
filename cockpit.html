@@ -117,6 +117,7 @@
       <button class="tab" id="tab-direction" aria-selected="false" onclick="switchView('direction')">Direction & Intent</button>
       <button class="tab" id="tab-blackboard" aria-selected="false" onclick="switchView('blackboard')">Blackboard Feed</button>
       <button class="tab" id="tab-router" aria-selected="false" onclick="switchView('router')">Model Router</button>
+      <button class="tab" id="tab-antidotes" aria-selected="false" onclick="switchView('antidotes')">Operational Antidotes</button>
     </div>
 
     <!-- Timeline View -->
@@ -303,6 +304,58 @@
         </div>
       </div>
     </div>
+
+    <!-- Antidotes View -->
+    <div id="view-antidotes" class="card" style="display: none;">
+      <h2>Operational Failure Antidotes <span class="badge b-purple">Self-Healing Memory</span> <span class="badge b-blue" id="antidotes-count-badge">0 Active</span></h2>
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 16px;">
+        Institutional knowledge synthesized automatically from git fix/revert commits and failed agent runs. Injected into agent prompts to permanently prevent regression loops.
+      </p>
+
+      <!-- Action & Mine Bar -->
+      <div style="display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+        <button class="btn" onclick="mineGitAntidotes()">⛏ Mine Recent Git Commits</button>
+        <button class="btn" style="background: var(--bg-card); border: 1px solid var(--border-color);" onclick="const b = document.getElementById('antidote-form-box'); b.style.display = b.style.display === 'none' ? 'block' : 'none'">+ Add Antidote Manually</button>
+        <span id="antidote-action-msg" class="msg-feedback"></span>
+      </div>
+
+      <!-- Add Antidote Form -->
+      <div id="antidote-form-box" style="display: none; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <h3 style="margin: 0 0 12px; font-size: 0.95rem; font-weight: 600;">Register New Failure Antidote</h3>
+        <form onsubmit="submitAntidoteForm(event)">
+          <div class="form-row">
+            <input type="text" id="ant-pattern" class="form-control" placeholder="Pattern / Title (e.g. PORT_BIND: Premature port listener)" style="flex: 1;" required>
+            <input type="text" id="ant-scope" class="form-control" placeholder="Scope (e.g. server, auth, git)" style="width: 180px;">
+          </div>
+          <div class="form-row">
+            <input type="text" id="ant-symptom" class="form-control" placeholder="Symptom / Error message (e.g. EADDRINUSE :::8787)" style="width: 100%;" required>
+          </div>
+          <div class="form-row">
+            <textarea id="ant-directive" class="form-control" placeholder="Antidote / Actionable directive (e.g. Always use pm2 reload ArunachalaDashboard instead of spawning node)..." required rows="2" style="width: 100%; resize: vertical;"></textarea>
+          </div>
+          <button type="submit" class="btn">Register Antidote</button>
+        </form>
+      </div>
+
+      <!-- Antidotes Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Pattern Mode</th>
+              <th>Symptom Trigger</th>
+              <th>Actionable Antidote</th>
+              <th>Scope</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody id="antidotes-tbody">
+            <tr><td colspan="6">Loading operational antidotes...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -332,6 +385,9 @@
         // Load Cognitive Blackboard Feed & SSE stream
         loadBlackboardData();
         initBlackboardStream();
+
+        // Load Operational Failure Antidotes
+        loadAntidotesData();
 
         // Check for pending agent action approvals
         loadApprovalsData();
@@ -524,12 +580,101 @@
     }
 
     function switchView(viewName) {
-      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router'].forEach(v => {
+      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router', 'antidotes'].forEach(v => {
         const el = document.getElementById(`view-${v}`);
         const tab = document.getElementById(`tab-${v}`);
         if (el) el.style.display = v === viewName ? 'block' : 'none';
         if (tab) tab.setAttribute('aria-selected', v === viewName ? 'true' : 'false');
       });
+    }
+
+    async function loadAntidotesData() {
+      try {
+        const res = await fetch('/api/antidotes');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.antidotes)) {
+          renderAntidotes(data.antidotes);
+          const badge = document.getElementById('antidotes-count-badge');
+          if (badge) badge.textContent = `${data.antidotes.length} Active`;
+          const stat = document.getElementById('stat-antidotes');
+          if (stat) stat.textContent = data.antidotes.length;
+        }
+      } catch (err) {
+        document.getElementById('antidotes-tbody').innerHTML = `<tr><td colspan="6">Failed to load antidotes: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderAntidotes(antidotes) {
+      const tbody = document.getElementById('antidotes-tbody');
+      if (!tbody) return;
+      if (!antidotes.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--color-text-muted);">No operational failure antidotes registered yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = antidotes.map(a => `
+        <tr>
+          <td><span class="badge b-purple mono">${escapeHtml(a.id || '')}</span></td>
+          <td><strong>${escapeHtml(a.pattern || '')}</strong></td>
+          <td><code class="mono" style="font-size: 0.78rem; color: #ff7b72;">${escapeHtml(a.symptom || '')}</code></td>
+          <td style="font-size: 0.82rem; color: #7ee787;">${escapeHtml(a.antidote || '')}</td>
+          <td>${(a.scope || []).map(s => `<span class="badge b-blue" style="margin-right: 4px;">${escapeHtml(s)}</span>`).join('')}</td>
+          <td><span class="mono" style="font-size: 0.78rem; color: var(--color-text-muted);">${escapeHtml(a.source || 'manual')}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    async function mineGitAntidotes() {
+      const msg = document.getElementById('antidote-action-msg');
+      msg.textContent = 'Mining git commits for fixes and reverts...';
+      msg.className = 'msg-feedback';
+      try {
+        const res = await fetch('/api/antidotes/mine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'git', limit: 15, autoRegister: true })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          msg.textContent = `Mined ${data.minedCount} commits (${data.added} new antidotes registered!)`;
+          loadAntidotesData();
+        } else {
+          msg.className = 'msg-feedback msg-error';
+          msg.textContent = data.error || 'Failed to mine git commits';
+        }
+      } catch (err) {
+        msg.className = 'msg-feedback msg-error';
+        msg.textContent = err.message;
+      }
+    }
+
+    async function submitAntidoteForm(event) {
+      event.preventDefault();
+      const pattern = document.getElementById('ant-pattern').value.trim();
+      const scopeRaw = document.getElementById('ant-scope').value.trim();
+      const symptom = document.getElementById('ant-symptom').value.trim();
+      const antidote = document.getElementById('ant-directive').value.trim();
+      const scope = scopeRaw ? scopeRaw.split(',').map(s => s.trim()).filter(Boolean) : ['general'];
+
+      try {
+        const res = await fetch('/api/antidotes/synthesize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pattern, symptom, antidote, scope, autoRegister: true })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('antidote-form-box').style.display = 'none';
+          document.getElementById('ant-pattern').value = '';
+          document.getElementById('ant-scope').value = '';
+          document.getElementById('ant-symptom').value = '';
+          document.getElementById('ant-directive').value = '';
+          loadAntidotesData();
+        } else {
+          alert(`Error: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Failed: ${err.message}`);
+      }
     }
 
     async function testModelRoute(event) {

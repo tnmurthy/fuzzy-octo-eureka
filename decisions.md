@@ -111,3 +111,16 @@ Governed by least-privilege principles and AI workforce invariants.
   - Checkpoints are saved locally in SQLite WAL and synchronized with `memory-engine.js` (`trajectory_checkpoint`) for team and cross-host continuity. Resumed or compacted sessions prepend the precompact state directly into the agent prompt, eliminating loss of earlier discoveries and preventing repeated mistakes.
 - **Trade-offs:** Eliminates execution amnesia and infinite retry loops without consuming excessive context window tokens.
 ---
+
+## [DEC-015] Automated Incident-to-Antidote Knowledge Synthesizer
+- **Date:** 2026-11-22
+- **Driver:** Quality Gatekeeper & Systems Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Transform all software failures, commit reverts, and failed agent runs into permanent, self-healing operational guardrails. Implement the Automated Incident-to-Antidote Synthesizer (`incident-to-antidote.js`).
+  - Automatically mines git fix/revert commits and failed agent trajectories.
+  - Extracts short failure pattern, exact trigger symptom, actionable remedy directive, and domain scopes.
+  - Registers synthesized antidotes into `memory-engine.js` (synced to Supabase `arunachala_memory`), logs audit records to SQLite WAL ledger, and broadcasts real-time alerts across the Cognitive Blackboard.
+  - When future agents receive tasks touching matching files or error symptoms, `dispatch-context.js` injects the matching operational antidotes, permanently eliminating recurring regressions.
+- **Trade-offs:** Provides closed-loop self-healing across distributed human and autonomous agent teams with zero overhead.
+---
