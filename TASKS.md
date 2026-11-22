@@ -8,9 +8,6 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 |---|---|---|---|---|
 | TASK-105 | Persistent vector index clustering for multi-tenant memory | ai-engine | Tech Lead | copilot |
 
-| TASK-104 | Interactive operator dispatch terminal in dashboard | frontend | Tech Lead | autonomous |
-| TASK-1695 | how will team will respond if I ask this, "build a plan and help me in enrolling 30 users for this https://drisyon.com/cloud-security" | fuzzy-octo-eureka | Tech Lead | autonomous |
-| TASK-6055 | build a plan and help me in enrolling 30 users for this https://drisyon.com/cloud-security | fuzzy-octo-eureka | marketing | copilot |
 ## 2. Scope & FinOps Gate
 
 | ID | Task | Project | Owner | Decision |
@@ -21,6 +18,9 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 | ID | Task | Project | Owner | Decision |
 |---|---|---|---|---|
+| TASK-104 | Interactive operator dispatch terminal in dashboard | frontend | Tech Lead | autonomous |
+| TASK-1695 | Multi-agent execution response for 30-user cloud security enrollment (https://drisyon.com/cloud-security) | fuzzy-octo-eureka | Tech Lead | autonomous |
+| TASK-6055 | Marketing user acquisition & enrollment plan for Cloud Security cohort | fuzzy-octo-eureka | Marketing | copilot |
 
 ## 4. Evals & AppSec Verification
 
@@ -36,6 +36,7 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 | Task | Completed |
 |---|---|
+| Modular-NeuroClips production backlog synthesized & merged to main (docs/BACKLOG.md) | 2026-11-22 |
 | Drisyon Cloud Security Cohort 01 30-Seat Enrollment Playbook (docs/DRISYON_COHORT_01_ENROLLMENT_PLAYBOOK.md) | 2026-11-10 |
 | ReBAC end-to-end security gating across all API routes | 2026-11-09 |
 | Risky dispatch pre-flight safety filter (FR-CHAT-07) | 2026-11-09 |

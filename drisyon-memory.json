@@ -1,8 +1,64 @@
 {
-  "updatedAt": "2026-11-18T08:43:34.955Z",
-  "episodicCount": 43,
+  "updatedAt": "2026-11-22T12:08:43.024Z",
+  "episodicCount": 44,
   "alignmentsCount": 3,
+  "antidotesCount": 2,
   "episodicMemory": [
+    {
+      "id": "mem_4777b4e89c73",
+      "tenantId": "tenant:drisyon_core",
+      "projectId": "fuzzy-octo-eureka",
+      "category": "growth_strategy",
+      "title": "Drisyon Cloud Security Cohort 01 30-Seat Enrollment Architecture (TASK-1695)",
+      "content": "Multi-agent acquisition strategy for enrolling 30 learners into https://drisyon.com/cloud-security. Allocates 30 seats across 3 streams: Corporate B2B L&D (12 seats across 4 companies), Live Threat Defense Masterclass (10 seats), and Targeted SRE ICP Outreach (8 seats). Total projected gross revenue ~k-k with >75% net margin.",
+      "vector": {
+        "multi-agent": 1,
+        "acquisition": 1,
+        "strategy": 1,
+        "for": 1,
+        "enrolling": 1,
+        "learners": 1,
+        "into": 1,
+        "https": 1,
+        "drisyon": 2,
+        "com": 1,
+        "cloud-security": 1,
+        "allocates": 1,
+        "seats": 4,
+        "across": 2,
+        "streams": 1,
+        "corporate": 1,
+        "b2b": 1,
+        "companies": 1,
+        "live": 1,
+        "threat": 1,
+        "defense": 1,
+        "masterclass": 1,
+        "and": 1,
+        "targeted": 1,
+        "sre": 1,
+        "icp": 1,
+        "outreach": 1,
+        "total": 1,
+        "projected": 1,
+        "gross": 1,
+        "revenue": 1,
+        "k-k": 1,
+        "with": 1,
+        "net": 1,
+        "margin": 1,
+        "cloud": 1,
+        "security": 1,
+        "cohort": 1,
+        "30-seat": 1,
+        "enrollment": 1,
+        "architecture": 1,
+        "task-1695": 1
+      },
+      "tags": [],
+      "metadata": {},
+      "createdAt": "2026-11-22T12:08:43.024Z"
+    },
     {
       "id": "mem_83c7aa52355d",
       "tenantId": "global",
@@ -1719,6 +1775,30 @@
         "mandated": 1,
         "dec-001": 1
       }
+    }
+  ],
+  "antidotes": [
+    {
+      "id": "ANT-001",
+      "pattern": "PM2 respawns killed PID / Port conflict",
+      "symptom": "EADDRINUSE 8787 or daemon respawn loop",
+      "antidote": "Never kill daemons with kill -9. Supervised by PM2. Use pm2 restart ArunachalaDashboard or check pm2 list.",
+      "scope": [
+        "server.js",
+        "ecosystem.config.js"
+      ],
+      "createdAt": "2026-11-22T08:00:00.000Z"
+    },
+    {
+      "id": "ANT-002",
+      "pattern": "Git index lock contention",
+      "symptom": "fatal: Unable to create .git/index.lock: File exists",
+      "antidote": "Check for concurrent git process or stale lock. Remove .git/index.lock only if no git process is active.",
+      "scope": [
+        "git",
+        "orchestration"
+      ],
+      "createdAt": "2026-11-22T08:00:00.000Z"
     }
   ]
 }

@@ -66,6 +66,64 @@
     .msg-feedback { font-size: 0.82rem; margin-top: 8px; }
     .msg-err { color: #ff5252; }
     .msg-ok { color: var(--status-green); }
+
+    /* Interactive Operator Terminal */
+    .terminal-window {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      margin-top: 16px;
+    }
+    .terminal-header {
+      background: #0f172a;
+      padding: 9px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      font-size: 0.78rem;
+    }
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .terminal-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #10b981; }
+    .terminal-body {
+      padding: 14px;
+      min-height: 240px;
+      max-height: 440px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: #38bdf8;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .preset-chip {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 4px 12px;
+      font-size: 0.76rem;
+      cursor: pointer;
+      color: var(--color-text-muted);
+      transition: all 0.2s;
+    }
+    .preset-chip:hover {
+      border-color: var(--status-blue);
+      color: #fff;
+      background: rgba(56, 139, 253, 0.15);
+    }
   </style>
 </head>
 <body>
@@ -117,6 +175,7 @@
       <button class="tab" id="tab-direction" aria-selected="false" onclick="switchView('direction')">Direction & Intent</button>
       <button class="tab" id="tab-blackboard" aria-selected="false" onclick="switchView('blackboard')">Blackboard Feed</button>
       <button class="tab" id="tab-router" aria-selected="false" onclick="switchView('router')">Model Router</button>
+      <button class="tab" id="tab-terminal" aria-selected="false" onclick="switchView('terminal')">Operator Terminal</button>
       <button class="tab" id="tab-antidotes" aria-selected="false" onclick="switchView('antidotes')">Operational Antidotes</button>
       <button class="tab" id="tab-eval" aria-selected="false" onclick="switchView('eval')">Agent Benchmarks</button>
     </div>
@@ -306,6 +365,115 @@
       </div>
     </div>
 
+    <!-- Interactive Operator Dispatch Terminal View -->
+    <div id="view-terminal" class="card" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <h2>Interactive Operator Dispatch Terminal <span class="badge b-purple">DEC-013 Model Routing</span> <span class="badge b-green">Autonomous Runtime</span></h2>
+        <span id="terminal-agent-status" class="badge b-blue">SYSTEM READY</span>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 16px;">
+        Sovereign operator terminal for dispatching, routing, and live-monitoring autonomous agents (Hermes on Apple Silicon M5 Max, Claude 3.5 Sonnet, Mantis Security Patrol).
+      </p>
+
+      <!-- Quick Presets -->
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+        <span style="font-size: 0.78rem; color: var(--color-text-muted);">Quick Presets:</span>
+        <button type="button" class="preset-chip" onclick="applyTerminalPreset('mantis')">🛡️ Mantis Security Patrol</button>
+        <button type="button" class="preset-chip" onclick="applyTerminalPreset('tests')">⚡ Unit Test Verification</button>
+        <button type="button" class="preset-chip" onclick="applyTerminalPreset('cloudsec')">📈 Drisyon 30-Seat Acquisition (TASK-1695)</button>
+        <button type="button" class="preset-chip" onclick="applyTerminalPreset('neuroclips')">🧠 Modular-NeuroClips Audit</button>
+      </div>
+
+      <!-- Dispatch Form Controls -->
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+        <div class="form-row">
+          <div style="flex: 1; min-width: 180px;">
+            <label style="display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-bottom: 4px;">Target Repository</label>
+            <select id="term-repo-select" class="form-control" style="width: 100%;">
+              <option value="fuzzy-octo-eureka">fuzzy-octo-eureka (Local Stack)</option>
+              <option value="Modular-NeuroClips">Modular-NeuroClips</option>
+              <option value="ruflo">ruflo</option>
+            </select>
+          </div>
+          <div style="flex: 1; min-width: 160px;">
+            <label style="display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-bottom: 4px;">Agent Engine</label>
+            <select id="term-agent-select" class="form-control" style="width: 100%;" onchange="assessTerminalTask()">
+              <option value="auto">Auto (Local-First + Frontier Fallback)</option>
+              <option value="hermes">Hermes (Local Ollama / 0 Token Cost)</option>
+              <option value="claude">Claude 3.5 Sonnet (Frontier)</option>
+              <option value="mantis">Mantis (Security Auditor)</option>
+              <option value="codex">Codex</option>
+              <option value="noop">Noop (Dry Run / Test)</option>
+            </select>
+          </div>
+          <div style="flex: 1; min-width: 180px;">
+            <label style="display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-bottom: 4px;">Specialist Persona</label>
+            <select id="term-specialist-select" class="form-control" style="width: 100%;">
+              <option value="">General Purpose Agent</option>
+              <option value="systems-architect">Systems Architect</option>
+              <option value="product-engineer">Product Engineer</option>
+              <option value="security-auditor">Security Auditor</option>
+              <option value="product-sprint-prioritizer">Product Sprint Prioritizer</option>
+              <option value="devops">DevOps & Cloud Engineer</option>
+              <option value="qa-engineer">QA Engineer</option>
+            </select>
+          </div>
+          <div style="flex: 1; min-width: 140px;">
+            <label style="display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-bottom: 4px;">Approval Level</label>
+            <select id="term-level-select" class="form-control" style="width: 100%;">
+              <option value="auto">Auto (Autonomous Run)</option>
+              <option value="review">Review (Human Review)</option>
+              <option value="interactive">Interactive (HITL)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-bottom: 4px;">Task Instruction / Directive</label>
+          <textarea id="term-task-input" class="form-control" rows="3" style="width: 100%; resize: vertical; font-family: 'JetBrains Mono', monospace;" placeholder="Enter operator directive, refactor task, or feature implementation instructions..." oninput="debouncedAssessTask()"></textarea>
+        </div>
+
+        <!-- Dynamic Assessment Banner -->
+        <div id="term-assessment-banner" style="display: none; background: rgba(56, 139, 253, 0.08); border: 1px solid rgba(56, 139, 253, 0.2); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div id="term-assessment-summary"></div>
+            <div id="term-assessment-savings" style="font-weight: 600;"></div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button id="term-dispatch-btn" type="button" class="btn" onclick="executeTerminalDispatch()">🚀 Launch Agent Dispatch</button>
+          <button type="button" class="btn" style="background: var(--bg-card); border: 1px solid var(--border-color);" onclick="assessTerminalTask()">🔍 Pre-Flight Complexity Check</button>
+          <button id="term-stop-btn" type="button" class="btn-danger" style="display: none; padding: 8px 14px; font-size: 0.82rem;" onclick="stopTerminalRun()">⏹ Stop Current Run</button>
+          <button type="button" class="btn" style="background: transparent; border: 1px solid var(--border-color); color: var(--color-text-muted);" onclick="clearTerminalConsole()">Clear Console</button>
+          <span id="term-action-msg" class="msg-feedback"></span>
+        </div>
+      </div>
+
+      <!-- Live Terminal Console -->
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="terminal-dots">
+              <div class="terminal-dot dot-red"></div>
+              <div class="terminal-dot dot-yellow"></div>
+              <div class="terminal-dot dot-green"></div>
+            </div>
+            <span style="font-family: 'JetBrains Mono', monospace; color: #8b949e;">operator@arunachala-m5max:~$ console</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="term-run-id-pill" class="mono" style="color: #79c0ff; font-size: 0.74rem;">IDLE</span>
+            <span id="term-timer-pill" class="mono" style="color: #8b949e; font-size: 0.74rem;">0s</span>
+          </div>
+        </div>
+        <div id="dispatch-terminal-console" class="terminal-body">Arunachala Multi-Agent OS [Version 1.0.0]
+Host: Apple Silicon M5 Max (36GB Unified Memory)
+Status: Autonomous Dispatch Terminal initialized. Ready for sovereign operator directives.
+Type or select a preset task above and click 'Launch Agent Dispatch'.</div>
+      </div>
+    </div>
+
     <!-- Antidotes View -->
     <div id="view-antidotes" class="card" style="display: none;">
       <h2>Operational Failure Antidotes <span class="badge b-purple">Self-Healing Memory</span> <span class="badge b-blue" id="antidotes-count-badge">0 Active</span></h2>
@@ -441,6 +609,9 @@
 
         // Load Agent Evaluation Benchmarks
         loadEvalData();
+
+        // Load Repositories for Operator Terminal
+        loadTerminalRepos();
 
         // Check for pending agent action approvals
         loadApprovalsData();
@@ -633,12 +804,250 @@
     }
 
     function switchView(viewName) {
-      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router', 'antidotes', 'eval'].forEach(v => {
+      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router', 'terminal', 'antidotes', 'eval'].forEach(v => {
         const el = document.getElementById(`view-${v}`);
         const tab = document.getElementById(`tab-${v}`);
         if (el) el.style.display = v === viewName ? 'block' : 'none';
         if (tab) tab.setAttribute('aria-selected', v === viewName ? 'true' : 'false');
       });
+    }
+
+    // ── Operator Dispatch Terminal Runtime (TASK-104) ──
+    let terminalActiveRunId = null;
+    let terminalPollInterval = null;
+    let terminalTimerInterval = null;
+    let terminalStartTime = null;
+    let assessDebounceTimer = null;
+
+    function applyTerminalPreset(preset) {
+      const taskInput = document.getElementById('term-task-input');
+      const agentSelect = document.getElementById('term-agent-select');
+      const repoSelect = document.getElementById('term-repo-select');
+      const specSelect = document.getElementById('term-specialist-select');
+      const levelSelect = document.getElementById('term-level-select');
+
+      if (preset === 'mantis') {
+        repoSelect.value = 'fuzzy-octo-eureka';
+        agentSelect.value = 'mantis';
+        specSelect.value = 'security-auditor';
+        levelSelect.value = 'auto';
+        taskInput.value = 'Automated security sweep: audit API authorization, verify ReBAC boundaries, and check tenant memory isolation.';
+      } else if (preset === 'tests') {
+        repoSelect.value = 'fuzzy-octo-eureka';
+        agentSelect.value = 'hermes';
+        specSelect.value = 'qa-engineer';
+        levelSelect.value = 'auto';
+        taskInput.value = 'Run repository test suite, check for regressions, verify all assertions pass, and output test summary.';
+      } else if (preset === 'cloudsec') {
+        repoSelect.value = 'fuzzy-octo-eureka';
+        agentSelect.value = 'auto';
+        specSelect.value = 'product-engineer';
+        levelSelect.value = 'auto';
+        taskInput.value = 'Execute TASK-1695: build and format the 30-user enrollment execution plan for https://drisyon.com/cloud-security with B2B corporate packages and live breach workshop funnels.';
+      } else if (preset === 'neuroclips') {
+        repoSelect.value = 'Modular-NeuroClips';
+        agentSelect.value = 'hermes';
+        specSelect.value = 'product-sprint-prioritizer';
+        levelSelect.value = 'auto';
+        taskInput.value = 'Verify docs/BACKLOG.md, audit active worker routes, and report next high-priority sprint items.';
+      }
+      assessTerminalTask();
+    }
+
+    function debouncedAssessTask() {
+      clearTimeout(assessDebounceTimer);
+      assessDebounceTimer = setTimeout(assessTerminalTask, 350);
+    }
+
+    async function assessTerminalTask() {
+      const taskInput = document.getElementById('term-task-input');
+      const task = taskInput ? taskInput.value.trim() : '';
+      const banner = document.getElementById('term-assessment-banner');
+      const summaryEl = document.getElementById('term-assessment-summary');
+      const savingsEl = document.getElementById('term-assessment-savings');
+      if (!task || !banner) {
+        if (banner) banner.style.display = 'none';
+        return;
+      }
+      try {
+        const res = await fetch('/api/agents/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          banner.style.display = 'block';
+          summaryEl.innerHTML = `<span class="badge ${data.difficulty === 'high' ? 'b-red' : data.difficulty === 'low' ? 'b-green' : 'b-blue'}">${data.difficulty.toUpperCase()}</span> Score: <strong>${data.score}/100</strong> · Recommended: <span class="mono" style="color:#79c0ff; font-weight:600;">${data.agent}</span> (${data.tier.toUpperCase()})`;
+          if (data.tier === 'local') {
+            savingsEl.innerHTML = `<span style="color:#7ee787;">★ 0-Cost Local Tier (Save ~$${data.costPrediction.potentialSavingsUsd})</span>`;
+          } else {
+            savingsEl.innerHTML = `<span style="color:#f59e0b;">⚡ Frontier Tier (~${data.costPrediction.estimatedTokens} tokens)</span>`;
+          }
+        }
+      } catch (_) {
+        banner.style.display = 'none';
+      }
+    }
+
+    function appendTerminalLog(msg, color = '#38bdf8') {
+      const consoleEl = document.getElementById('dispatch-terminal-console');
+      if (!consoleEl) return;
+      const ts = new Date().toLocaleTimeString();
+      consoleEl.innerHTML += `\n<span style="color:#8b949e;">[${ts}]</span> <span style="color:${color};">${escapeHtml(msg)}</span>`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function clearTerminalConsole() {
+      const consoleEl = document.getElementById('dispatch-terminal-console');
+      if (consoleEl) {
+        consoleEl.innerHTML = `Arunachala Multi-Agent OS [Version 1.0.0]\nHost: Apple Silicon M5 Max (36GB Unified Memory)\nStatus: Console cleared. System ready.`;
+      }
+    }
+
+    async function loadTerminalRepos() {
+      try {
+        const res = await fetch('/api/repos');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.repos)) {
+          const select = document.getElementById('term-repo-select');
+          if (!select) return;
+          const current = select.value;
+          const known = new Set(data.repos.map(r => r.name));
+          ['fuzzy-octo-eureka', 'Modular-NeuroClips', 'ruflo'].forEach(r => known.add(r));
+          select.innerHTML = Array.from(known).map(name =>
+            `<option value="${escapeHtml(name)}" ${name === current ? 'selected' : ''}>${escapeHtml(name)}</option>`
+          ).join('');
+        }
+      } catch (_) {}
+    }
+
+    async function executeTerminalDispatch() {
+      const repo = document.getElementById('term-repo-select').value;
+      const agent = document.getElementById('term-agent-select').value;
+      const specialist = document.getElementById('term-specialist-select').value || null;
+      const level = document.getElementById('term-level-select').value;
+      const task = document.getElementById('term-task-input').value.trim();
+      const msg = document.getElementById('term-action-msg');
+      const statusBadge = document.getElementById('terminal-agent-status');
+      const runPill = document.getElementById('term-run-id-pill');
+      const stopBtn = document.getElementById('term-stop-btn');
+      const dispatchBtn = document.getElementById('term-dispatch-btn');
+
+      if (!task) {
+        msg.className = 'msg-feedback msg-err';
+        msg.textContent = 'Please enter a task or select a preset.';
+        return;
+      }
+
+      msg.className = 'msg-feedback';
+      msg.textContent = 'Initiating agent dispatch...';
+      dispatchBtn.disabled = true;
+
+      appendTerminalLog(`>>> INITIATING DISPATCH [agent=${agent}, repo=${repo}, level=${level}${specialist ? `, specialist=${specialist}` : ''}]`, '#e2e8f0');
+      appendTerminalLog(`Directive: ${task}`, '#94a3b8');
+
+      try {
+        const res = await fetch('/api/dispatch/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            repo,
+            agent,
+            task,
+            specialist,
+            level
+          })
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          terminalActiveRunId = data.runId || (data.record && data.record.id) || 'run-' + Date.now();
+          runPill.textContent = terminalActiveRunId;
+          statusBadge.textContent = 'RUNNING';
+          statusBadge.className = 'badge b-amber';
+          stopBtn.style.display = 'inline-block';
+          msg.className = 'msg-feedback msg-ok';
+          msg.textContent = `Dispatched successfully (Run ID: ${terminalActiveRunId})`;
+
+          appendTerminalLog(`✔ Dispatch accepted. Active Run ID: ${terminalActiveRunId}`, '#10b981');
+          if (data.note) appendTerminalLog(`Note: ${data.note}`, '#94a3b8');
+
+          terminalStartTime = Date.now();
+          clearInterval(terminalTimerInterval);
+          terminalTimerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - terminalStartTime) / 1000);
+            const timerPill = document.getElementById('term-timer-pill');
+            if (timerPill) timerPill.textContent = `${elapsed}s`;
+          }, 1000);
+
+          clearInterval(terminalPollInterval);
+          terminalPollInterval = setInterval(pollActiveTerminalRun, 3000);
+        } else {
+          dispatchBtn.disabled = false;
+          statusBadge.textContent = 'ERROR';
+          statusBadge.className = 'badge b-red';
+          msg.className = 'msg-feedback msg-err';
+          msg.textContent = `Dispatch refused: ${data.error || 'Unknown error'}`;
+          appendTerminalLog(`✖ Dispatch refused: ${data.error || 'Unknown error'}`, '#ef4444');
+        }
+      } catch (err) {
+        dispatchBtn.disabled = false;
+        msg.className = 'msg-feedback msg-err';
+        msg.textContent = `Network error: ${err.message}`;
+        appendTerminalLog(`✖ Network error: ${err.message}`, '#ef4444');
+      }
+    }
+
+    async function pollActiveTerminalRun() {
+      if (!terminalActiveRunId) return;
+      try {
+        const res = await fetch('/api/runs');
+        const data = await res.json();
+        const runs = Array.isArray(data.runs) ? data.runs : [];
+        const current = runs.find(r => r.id === terminalActiveRunId);
+
+        if (current) {
+          if (current.status === 'done' || current.status === 'stopped' || current.status === 'failed') {
+            clearInterval(terminalPollInterval);
+            clearInterval(terminalTimerInterval);
+            const dispatchBtn = document.getElementById('term-dispatch-btn');
+            const stopBtn = document.getElementById('term-stop-btn');
+            if (dispatchBtn) dispatchBtn.disabled = false;
+            if (stopBtn) stopBtn.style.display = 'none';
+
+            const statusBadge = document.getElementById('terminal-agent-status');
+            if (current.status === 'done') {
+              if (statusBadge) { statusBadge.textContent = 'DONE'; statusBadge.className = 'badge b-green'; }
+              appendTerminalLog(`✔ Run ${current.id} completed successfully (exit code 0, duration: ${current.duration_s || '?'}s)`, '#10b981');
+              if (current.commits_ahead) appendTerminalLog(`Commits ahead: ${current.commits_ahead} (HEAD: ${current.head})`, '#38bdf8');
+            } else if (current.status === 'stopped') {
+              if (statusBadge) { statusBadge.textContent = 'STOPPED'; statusBadge.className = 'badge b-amber'; }
+              appendTerminalLog(`⏹ Run ${current.id} stopped by operator.`, '#f59e0b');
+            } else {
+              if (statusBadge) { statusBadge.textContent = 'FAILED'; statusBadge.className = 'badge b-red'; }
+              appendTerminalLog(`✖ Run ${current.id} failed (exit ${current.exit_code}). See log: ${current.log}`, '#ef4444');
+            }
+            loadData();
+          }
+        }
+      } catch (_) {}
+    }
+
+    async function stopTerminalRun() {
+      if (!terminalActiveRunId) return;
+      appendTerminalLog(`Attempting to stop active run ${terminalActiveRunId}...`, '#f59e0b');
+      try {
+        const res = await fetch(`/api/agents/runs/${terminalActiveRunId}/stop`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          appendTerminalLog(`Run stop signal delivered.`, '#10b981');
+        } else {
+          appendTerminalLog(`Failed to stop run: ${data.error}`, '#ef4444');
+        }
+      } catch (err) {
+        appendTerminalLog(`Stop error: ${err.message}`, '#ef4444');
+      }
     }
 
     async function loadEvalData() {
