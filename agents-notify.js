@@ -205,6 +205,8 @@
       const ta = box.querySelector('.mt-input');
       if (ta) ta.focus();
     };
+    const openThread = () => window.AgentsThread && window.AgentsThread.open(r.id);
+    if (!t.issue && window.AgentsThread) btn('💬 Open', openThread, 'mt-open');
     if (t.issue) {
       actions.append(el('a', { className: 'btn-sm', href: t.issue.url, target: '_blank', rel: 'noopener', textContent: `Issue #${t.issue.number}` }));
     } else if (t.stage.question) {
@@ -222,8 +224,13 @@
     const main = el('div', { className: 'mt-main' },
       el('div', { className: 'mt-task', title: r.task || '' },
         r.parent ? el('span', { className: 'muted', textContent: '↳ follow-up: ' }) : null,
-        TF.clip(r.task, 140)),
+        TF.clip(String(r.task || '').replace(/^Follow-up:\s*/, ''), 140)),
       el('div', { className: `mt-next ${t.stage.question ? 'mt-question' : 'muted'}`, textContent: t.stage.next }));
+    if (!t.issue && window.AgentsThread) {
+      main.classList.add('mt-clickable');
+      main.title = 'Open the conversation for this task';
+      main.addEventListener('click', openThread);
+    }
     const rowEl = el('div', { className: `mt-row mt-${t.stage.key}` },
       el('span', { className: `mt-pill mt-tone-${t.stage.tone}`, textContent: t.stage.label }),
       main,

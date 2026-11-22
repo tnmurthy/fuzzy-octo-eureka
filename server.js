@@ -1124,6 +1124,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
   repoRegistry,
   dispatchRun: startDispatch,
   canFollowUp: (run) => followUpStatus(run).ok,
+  queueFile: path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'),
   runControl: require('./run-control').createRunControl({
     runsDir: path.dirname(RUNS_FILE),
     loadRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
@@ -1136,6 +1137,14 @@ const agentsApi = require('./agents-api').createAgentsApi({
       })
     : null,
 });
+
+// Queued messages go out when their agent finishes (agent-queue.js). Off on
+// the Drisyon portal, which does not serve the Agents page.
+if (PORT != 8788) {
+  setInterval(() => {
+    agentsApi.tickQueue().catch((err) => console.error('queue tick failed:', err.message));
+  }, 5000).unref();
+}
 
 function spawnAgentDispatch({
   agent,

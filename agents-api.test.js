@@ -338,3 +338,76 @@ test('redirect of a local run stopped before it saved a session starts afresh on
   assert.deepEqual([sent[1].agent, sent[1].repo, sent[1].branch], ['hermes', 'app', 'agent/run-x']);
   assert.match(sent[1].task, /New instruction: Use SQLite/);
 });
+
+// ---- thread view + message queue (2026-11-22) -------------------------------
+function threadApi({ runs, dispatchRun, runControl } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-thread-'));
+  fs.writeFileSync(path.join(dir, 'a.claude.json'), JSON.stringify({ session_id: 'x', result: 'Planned it.\nQUESTION: SQLite or Postgres?' }));
+  let current = runs || [
+    { id: 'a', agent: 'claude', status: 'done', task: 'Add a cache', started_at: '2026-11-22T10:00:00Z', log: path.join(dir, 'a.log'), branch: 'agent/x', repo: '/r/app' },
+    { id: 'b', agent: 'claude', status: 'running', parent: 'a', task: 'Follow-up: SQLite', started_at: '2026-11-22T10:05:00Z', log: path.join(dir, 'b.log'), branch: 'agent/x', repo: '/r/app' },
+  ];
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs: current }), capNow: () => ({}),
+    repos: REPOS, github: null, queueFile: path.join(dir, 'q.json'),
+    dispatchRun: dispatchRun || (async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: `n${sent.length}` } }; }),
+    runControl,
+  });
+  return { api, sent, setRuns: (r) => { current = r; }, runs: () => current };
+}
+
+test('thread: a task and its follow-ups, with answers, open questions and the queue', async () => {
+  const t = threadApi();
+  const r = await call(t.api, { method: 'GET', url: '/api/agents/thread?id=b' });
+  assert.equal(r.status, 200);
+  assert.equal(r.payload.threadId, 'a');
+  assert.deepEqual(r.payload.runs.map((x) => [x.id, x.status]), [['a', 'done'], ['b', 'running']]);
+  assert.equal(r.payload.runs[0].answer, 'Planned it.\nQUESTION: SQLite or Postgres?');
+  assert.equal(r.payload.runs[0].question, null, 'answered by follow-up b');
+  assert.equal((await call(t.api, { method: 'GET', url: '/api/agents/thread?id=../x' })).status, 400);
+  assert.equal((await call(t.api, { method: 'GET', url: '/api/agents/thread?id=zzz' })).status, 404);
+});
+
+test('queue: a message to a working agent waits, then goes out as a follow-up when it finishes', async () => {
+  const t = threadApi();
+  const q = await call(t.api, { url: '/api/agents/queue', body: { runId: 'a', text: 'also add tests' } });
+  assert.equal(q.status, 201);
+  assert.equal(q.payload.queued, true);
+  assert.equal(t.sent.length, 0);
+  await t.api.tickQueue();
+  assert.equal(t.sent.length, 0, 'agent still working');
+  t.setRuns(t.runs().map((r) => (r.id === 'b' ? { ...r, status: 'done' } : r)));
+  await t.api.tickQueue();
+  assert.deepEqual([t.sent[0].followUpOf, t.sent[0].task], ['b', 'Follow-up: also add tests']);
+  const view = await call(t.api, { method: 'GET', url: '/api/agents/thread?id=a' });
+  assert.equal(view.payload.queue.length, 0);
+  assert.equal((await call(t.api, { url: '/api/agents/queue', body: { runId: 'a', text: 'x' }, headers: { origin: 'https://evil.example' } })).status, 403);
+});
+
+test('queue: a message to an idle agent is sent at once', async () => {
+  const t = threadApi();
+  t.setRuns(t.runs().map((r) => ({ ...r, status: 'done' })));
+  const r = await call(t.api, { url: '/api/agents/queue', body: { runId: 'a', text: 'ship it' } });
+  assert.equal(r.status, 202);
+  assert.equal(r.payload.sent, true);
+  assert.equal(t.sent[0].followUpOf, 'b', 'continues the newest run of the task');
+});
+
+test('queue: edit and remove; steer stops the agent and delivers that message now', async () => {
+  const calls = [];
+  const runControl = {
+    stop: (id) => { calls.push(['stop', id]); return { ok: true }; },
+    waitForEnd: async (id) => ({ id, status: 'stopped', agent: 'claude', branch: 'agent/x', repo: '/r/app' }),
+  };
+  const t = threadApi({ runControl });
+  const { payload: { item, threadId } } = await call(t.api, { url: '/api/agents/queue', body: { runId: 'b', text: 'one' } });
+  assert.equal((await call(t.api, { url: '/api/agents/queue/update', body: { threadId, itemId: item.id, text: 'one, edited' } })).status, 200);
+  const s = await call(t.api, { url: '/api/agents/queue/steer', body: { threadId, itemId: item.id } });
+  assert.equal(s.status, 202);
+  assert.deepEqual(calls, [['stop', 'b']]);
+  assert.match(t.sent[0].task, /New instruction: one, edited$/);
+  const second = (await call(t.api, { url: '/api/agents/queue', body: { runId: 'b', text: 'two' } })).payload.item;
+  assert.equal((await call(t.api, { url: '/api/agents/queue/update', body: { threadId, itemId: second.id, remove: true } })).status, 200);
+  assert.equal((await call(t.api, { method: 'GET', url: '/api/agents/thread?id=a' })).payload.queue.length, 0);
+});
