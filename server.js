@@ -56,7 +56,12 @@ const { readOrigin, prUrlOf } = require('./repo-registry');
 const { isSameSiteJson } = require('./agents-api');
 const { recordRunReflection } = require('./task-reflection');
 const { auditDiff } = require('./code-auditor');
-const { getInvoicingSummary } = require('./invoicing');
+const {
+  getInvoicingSummary,
+  generateMilestoneSOW,
+  estimateOnboardingMargin,
+  SOW_TEMPLATES,
+} = require('./invoicing');
 const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
   storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json'),
@@ -1476,6 +1481,27 @@ function handleRequest(req, res) {
       clientKey,
     });
     return sendJson(res, 200, summary);
+  }
+  if (req.url.startsWith('/api/invoicing/templates') && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, templates: SOW_TEMPLATES });
+  }
+  if (req.url.startsWith('/api/invoicing/sow') && req.method === 'POST') {
+    readJsonBody(req, 16 * 1024)
+      .then((b) => {
+        const sow = generateMilestoneSOW(b);
+        return sendJson(res, 200, { ok: true, sow });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    return;
+  }
+  if (req.url.startsWith('/api/invoicing/margin') && req.method === 'POST') {
+    readJsonBody(req, 16 * 1024)
+      .then((b) => {
+        const margin = estimateOnboardingMargin(b);
+        return sendJson(res, 200, { ok: true, margin });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    return;
   }
   if (req.url.startsWith('/api/config')) {
     return sendJson(res, 200, {

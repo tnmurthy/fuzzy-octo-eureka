@@ -185,3 +185,18 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Trade-offs:** Dramatically improves retrieval speed and scalability on large knowledge bases while guaranteeing 100% cryptographic and logical tenant memory boundary separation.
 
 ---
+
+## [DEC-018] Client Milestone SOW & FinOps Margin Estimation Model
+
+- **Date:** 2026-11-22
+- **Driver:** Commercial / CFO & Product Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Formalize the commercial onboarding and financial margin architecture for enterprise clients (`invoicing.js`).
+  - Standardizes milestone-based Statement of Work (SOW) templates (`enterprise-onboarding`, `sprint-retainer`, `corporate-cloud-security`) with explicit acceptance criteria, AppSec gates, and staged milestone payouts.
+  - Mandates inclusion of non-negotiable compliance invariants in all client SOWs: Zero Production Secrets (`DEC-001`), Evidence-Based QA Gates (`DEC-005`), and Unit Economic Edge Optimization (`DEC-013`).
+  - Implements the FinOps Margin Estimation Model: computes accurate COGS (frontier token consumption, local Apple Silicon compute subsidy, cloud infrastructure) and unit economic multipliers (>25x) ensuring gross margins exceed 80% on on-premises hybrid agent execution.
+  - Exposes SOW catalogs and margin models via REST API (`/api/invoicing/templates`, `/api/invoicing/sow`, `/api/invoicing/margin`).
+- **Trade-offs:** Delivers transparent, reproducible commercial contracts with rigorous FinOps unit economics, protecting gross margins while providing enterprise buyers with auditable milestone gating.
+
+---

@@ -9,9 +9,8 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 ## 2. Scope & FinOps Gate
 
-| ID       | Task                                                               | Project    | Owner        | Decision |
-| -------- | ------------------------------------------------------------------ | ---------- | ------------ | -------- |
-| TASK-106 | Client milestone SOW and margin estimate for enterprise onboarding | commercial | BizDev / CFO | copilot  |
+| ID  | Task | Project | Owner | Decision |
+| --- | ---- | ------- | ----- | -------- |
 
 ## 3. Autonomous Execution
 
@@ -35,6 +34,7 @@ Active engineering tasks and autonomous pipeline items for Team Arunachala and D
 
 | Task                                                                                                         | Completed  |
 | ------------------------------------------------------------------------------------------------------------ | ---------- |
+| TASK-106: Client milestone SOW generator & FinOps margin estimator (invoicing.js)                            | 2026-11-22 |
 | TASK-105: Persistent vector index clustering for multi-tenant memory (vector-cluster-engine.js)              | 2026-11-22 |
 | Modular-NeuroClips production backlog synthesized & merged to main (docs/BACKLOG.md)                         | 2026-11-22 |
 | Drisyon Cloud Security Cohort 01 30-Seat Enrollment Playbook (docs/DRISYON_COHORT_01_ENROLLMENT_PLAYBOOK.md) | 2026-11-10 |
