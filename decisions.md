@@ -99,3 +99,15 @@ Governed by least-privilege principles and AI workforce invariants.
   - **High / Complex tasks (score >= 65):** Security audits, ReBAC/Auth boundaries, cryptography, AST transformations, and database migrations are routed directly to frontier models (Claude 3.5 Sonnet), skipping local attempts to eliminate wasted compute and 5-10 minute turn delays.
 - **Trade-offs:** Optimizes unit economics by saving up to 80% of token costs on routine maintenance while eliminating developer latency on high-complexity refactors.
 ---
+
+## [DEC-014] Pre-Compact State Preservation & Lossless Trajectory Checkpointing
+- **Date:** 2026-11-22
+- **Driver:** Systems Architect & Product Engineer
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Prevent context amnesia and regression loops during LLM context compaction or multi-turn session restarts. Implement Pre-Compact State Preservation (`precompact-preserver.js`) and SQLite WAL persistence (`precompact_checkpoints` table).
+  - Automatically extracts completed steps, pending checklist items, working hypotheses, touched files, and active error diagnoses.
+  - Enforces a strict character quota (<= 1200 chars) in `<precompact_state>` markdown XML format.
+  - Checkpoints are saved locally in SQLite WAL and synchronized with `memory-engine.js` (`trajectory_checkpoint`) for team and cross-host continuity. Resumed or compacted sessions prepend the precompact state directly into the agent prompt, eliminating loss of earlier discoveries and preventing repeated mistakes.
+- **Trade-offs:** Eliminates execution amnesia and infinite retry loops without consuming excessive context window tokens.
+---

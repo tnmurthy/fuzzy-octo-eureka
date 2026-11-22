@@ -70,6 +70,19 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS precompact_checkpoints (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      summary TEXT,
+      completed_steps TEXT,
+      pending_steps TEXT,
+      working_hypotheses TEXT,
+      files_touched TEXT,
+      active_failures TEXT,
+      token_usage TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Prepared statements
@@ -127,6 +140,22 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
   `);
 
   const selectDirectionRulesStmt = db.prepare(`SELECT * FROM direction_rules ORDER BY created_at DESC`);
+
+  const upsertPrecompactStmt = db.prepare(`
+    INSERT INTO precompact_checkpoints (id, run_id, summary, completed_steps, pending_steps, working_hypotheses, files_touched, active_failures, token_usage, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      summary=excluded.summary,
+      completed_steps=excluded.completed_steps,
+      pending_steps=excluded.pending_steps,
+      working_hypotheses=excluded.working_hypotheses,
+      files_touched=excluded.files_touched,
+      active_failures=excluded.active_failures,
+      token_usage=excluded.token_usage,
+      created_at=excluded.created_at
+  `);
+
+  const selectPrecompactStmt = db.prepare(`SELECT * FROM precompact_checkpoints WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`);
 
   function logEvent({ type, runId = null, payload = {} }) {
     const id = 'evt_' + crypto.randomBytes(6).toString('hex');
@@ -237,6 +266,41 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     });
   }
 
+  function savePrecompactCheckpoint(checkpoint) {
+    const id = checkpoint.id || ('pc_' + crypto.randomBytes(6).toString('hex'));
+    const createdAt = checkpoint.createdAt || new Date().toISOString();
+    upsertPrecompactStmt.run(
+      id,
+      checkpoint.runId,
+      checkpoint.summary || '',
+      JSON.stringify(checkpoint.completedSteps || []),
+      JSON.stringify(checkpoint.pendingSteps || []),
+      JSON.stringify(checkpoint.workingHypotheses || []),
+      JSON.stringify(checkpoint.filesTouched || []),
+      JSON.stringify(checkpoint.activeFailures || []),
+      JSON.stringify(checkpoint.tokenUsage || {}),
+      createdAt
+    );
+    return { ...checkpoint, id, createdAt };
+  }
+
+  function getPrecompactCheckpoint(runId) {
+    const row = selectPrecompactStmt.get(runId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      runId: row.run_id,
+      summary: row.summary,
+      completedSteps: JSON.parse(row.completed_steps || '[]'),
+      pendingSteps: JSON.parse(row.pending_steps || '[]'),
+      workingHypotheses: JSON.parse(row.working_hypotheses || '[]'),
+      filesTouched: JSON.parse(row.files_touched || '[]'),
+      activeFailures: JSON.parse(row.active_failures || '[]'),
+      tokenUsage: JSON.parse(row.token_usage || '{}'),
+      createdAt: row.created_at
+    };
+  }
+
   function close() {
     try {
       db.close();
@@ -252,6 +316,8 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     loadDecisions,
     saveDirectionRule,
     loadDirectionRules,
+    savePrecompactCheckpoint,
+    getPrecompactCheckpoint,
     close
   };
 }

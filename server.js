@@ -106,6 +106,7 @@ const {
   exportTranscriptsMarkdown
 } = require('./chat-transcripts');
 const { classifyTaskDifficulty, routeTask } = require('./orchestration/model-router');
+const precompactPreserver = require('./precompact-preserver');
 
 // Ollama connection details (can be local or remote, e.g. a Mac Studio on LAN/VPN)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
@@ -907,7 +908,15 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
     fs.mkdirSync(tmpDir, { recursive: true });
     const promptFile = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
     // Order: task (its first 160 chars name the run), specialist role, memories.
-    fs.writeFileSync(promptFile, buildDispatchPrompt(task + specialists.roleBlock(specialist), memories), 'utf8');
+    fs.writeFileSync(promptFile, buildDispatchPrompt(task + specialists.roleBlock(specialist), memories, {
+      precompactPreserver,
+      runId: effectiveRunId,
+      directionLayer,
+      skillLoader,
+      blackboard,
+      projectId: repo,
+      memoryEngine: memory
+    }), 'utf8');
 
     const scriptPath = path.resolve(DASHBOARD_DIR, 'orchestration', 'agent-dispatch.sh');
     const bashBin = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash');
@@ -1478,6 +1487,29 @@ function handleRequest(req, res) {
       })
       .catch((err) => sendJson(res, 400, { ok: false, error: `bad request: ${err.message}` }));
     return;
+  }
+  if (req.url === '/api/agents/precompact/save' && req.method === 'POST') {
+    readJsonBody(req, 128 * 1024)
+      .then((b) => {
+        const runId = String(b.runId || '').trim();
+        if (!runId) return sendJson(res, 400, { ok: false, error: 'runId is required' });
+        const saved = precompactPreserver.savePrecompactCheckpoint(runId, b.state || b.transcript || b.steps || b, {
+          ledgerDB,
+          memoryEngine: memory,
+          tokenUsage: b.tokenUsage
+        });
+        return sendJson(res, 200, { ok: true, checkpoint: saved });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: `bad request: ${err.message}` }));
+    return;
+  }
+  if (req.url.startsWith('/api/agents/precompact') && req.method === 'GET') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const runId = parsedUrl.searchParams.get('runId') || '';
+    if (!runId) return sendJson(res, 400, { ok: false, error: 'runId query parameter required' });
+    const checkpoint = precompactPreserver.getPrecompactCheckpoint(runId, { ledgerDB });
+    if (!checkpoint) return sendJson(res, 404, { ok: false, error: `no checkpoint found for run ${runId}` });
+    return sendJson(res, 200, { ok: true, checkpoint });
   }
   if (req.url.startsWith('/api/agents/')) {
     if (approvalsApi.handle(req, res, { sendJson, readJsonBody })) return;

@@ -47,6 +47,22 @@ function findMatchingAntidotes(task, files = [], memoryEngine = null) {
 function buildDispatchPrompt(task, memories, options = {}) {
   let result = task;
 
+  // 0. Prepend Pre-Compact State Checkpoint if available (lossless trajectory preservation)
+  let precompactBlock = '';
+  if (options.precompactState) {
+    precompactBlock = typeof options.precompactState === 'string'
+      ? options.precompactState
+      : (options.precompactPreserver ? options.precompactPreserver.formatPrecompactPrompt(options.precompactState) : '');
+  } else if (options.precompactPreserver && options.runId) {
+    const cp = options.precompactPreserver.getPrecompactCheckpoint(options.runId, options);
+    if (cp) {
+      precompactBlock = options.precompactPreserver.formatPrecompactPrompt(cp);
+    }
+  }
+  if (precompactBlock) {
+    result = `${precompactBlock}\n\n${result}`;
+  }
+
   // 1. Process matching antidotes (prevent repeating known traps)
   let matchedAntidotes = options.antidotes || [];
   if ((!matchedAntidotes || !matchedAntidotes.length) && options.memoryEngine) {

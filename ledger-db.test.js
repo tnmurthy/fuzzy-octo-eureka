@@ -69,6 +69,28 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
     assert.equal(dirRules[0].id, 'DIR-001');
     assert.equal(dirRules[0].active, true);
     assert.equal(dirRules[0].ruleText, 'Require at least 1 test before merging.');
+
+    // 5. Save and load precompact checkpoint
+    ledger.savePrecompactCheckpoint({
+      id: 'pc-101',
+      runId: 'run-101',
+      summary: 'Completed 2 of 4 subtasks',
+      completedSteps: ['Created schema', 'Implemented route'],
+      pendingSteps: ['Add unit tests', 'Run security audit'],
+      workingHypotheses: ['Check ReBAC policy before returning 200'],
+      filesTouched: ['server.js', 'schema.sql'],
+      activeFailures: ['Missing permission user:drisyon'],
+      tokenUsage: { turns: 12, totalTokens: 18000 }
+    });
+
+    const cp = ledger.getPrecompactCheckpoint('run-101');
+    assert.ok(cp);
+    assert.equal(cp.id, 'pc-101');
+    assert.equal(cp.runId, 'run-101');
+    assert.equal(cp.completedSteps.length, 2);
+    assert.equal(cp.pendingSteps.length, 2);
+    assert.equal(cp.filesTouched.length, 2);
+    assert.equal(cp.activeFailures[0], 'Missing permission user:drisyon');
   } finally {
     ledger.close();
     try {

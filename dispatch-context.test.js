@@ -119,3 +119,23 @@ test('cognitive blackboard facts are injected into dispatch prompt when present'
   assert.match(out, /Cognitive Blackboard \(Live Cross-Agent Signals\):/);
   assert.match(out, /- \[fact_1\] \(hermes\/global\): API v2 live -> tokens required/);
 });
+
+test('precompact state is prepended to dispatch prompt when provided', () => {
+  const mockPreserver = {
+    formatPrecompactPrompt: (state) => `<precompact_state>\n- Run: ${state.runId}\n- Completed: Schema done\n</precompact_state>`
+  };
+
+  const out = buildDispatchPrompt(
+    'Continue building client',
+    [],
+    {
+      precompactPreserver: mockPreserver,
+      precompactState: { runId: 'run-99' }
+    }
+  );
+
+  assert.match(out, /<precompact_state>/);
+  assert.match(out, /Run: run-99/);
+  assert.match(out, /Schema done/);
+  assert.ok(out.startsWith('<precompact_state>'));
+});
