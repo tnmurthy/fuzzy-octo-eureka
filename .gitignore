@@ -49,3 +49,6 @@ __pycache__/
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Rebuilt by vector-cluster-engine on every reload (ids/timestamps churn)
+drisyon-memory-clusters.json
