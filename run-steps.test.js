@@ -40,3 +40,11 @@ test('summary counts reads, edits, commands and errors', () => {
   assert.equal(summary(LOG), '9 steps · 1 read · 1 edits · 1 commands · 1 errors');
   assert.equal(summary(''), '0 steps');
 });
+
+test('hermes (local) logs read the same way', () => {
+  assert.equal(parseLine('12:00:00 == hermes started').text, 'Local agent started');
+  assert.deepEqual(parseLine('12:00:01 🔧 terminal npm test'), { t: '12:00:01', kind: 'run', icon: '▶️', text: 'Running npm test' });
+  assert.equal(parseLine('12:00:02 🔧 read_file src/a.js').text, 'Reading src/a.js');
+  assert.equal(parseLine('12:00:03 🔧 patch src/a.js').kind, 'edit');
+  assert.equal(parseLine('12:00:09 == hermes finished: success · 1200 tokens (local)').text, 'Agent finished');
+});

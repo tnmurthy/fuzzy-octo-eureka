@@ -34,9 +34,28 @@ function stamp(now) {
  * when this is the last one.
  * @returns {{ lines: string[], result?: object }}
  */
-function formatEvent(event, now = new Date()) {
+function formatEvent(event, now = new Date(), agent = 'claude') {
   const t = stamp(now);
   if (!event || typeof event !== 'object') return { lines: [] };
+
+  // Hermes (`hermes chat --format stream-json`): flat events, the session id
+  // arrives with the result. Normalised so the rest of the stack (follow-ups,
+  // questions, the result line) reads it like claude's.
+  if (agent === 'hermes') {
+    if (event.type === 'system' && event.subtype === 'init') return { lines: [`${t} == hermes started${event.model ? ` (model ${event.model})` : ''}`] };
+    if (event.type === 'tool_use') return { lines: [`${t} 🔧 ${toolSummary(event.name, event.input || {})}`] };
+    if (event.type === 'tool_result' && event.is_error) return { lines: [`${t}    ↳ error: ${clip(event.output, MAX_TEXT)}`] };
+    if (event.type === 'text' && String(event.text || '').trim()) return { lines: [`${t} 💬 ${clip(event.text, MAX_TEXT)}`] };
+    if (event.type === 'result') {
+      const ok = Number(event.exit_code || 0) === 0;
+      const tok = event.tokens && event.tokens.total ? ` · ${event.tokens.total} tokens (local)` : '';
+      return {
+        lines: [`${t} == hermes finished: ${ok ? 'success' : 'error'}${tok}`],
+        result: { type: 'result', agent: 'hermes', session_id: event.session_id || null, result: event.text || '', is_error: !ok, duration_ms: event.duration_ms, tokens: event.tokens || null },
+      };
+    }
+    return { lines: [] };
+  }
 
   if (event.type === 'system' && event.subtype === 'init') {
     return { lines: [`${t} == claude started (model ${event.model || '?'})`] };
@@ -71,12 +90,40 @@ function formatEvent(event, now = new Date()) {
   return { lines: [] };
 }
 
-module.exports = { formatEvent, toolSummary };
+/**
+ * Hermes streams its answer a few tokens per `text` event. Join consecutive
+ * text events into one line, flushed by the next non-text event (or the end).
+ * Returns { push(event) -> events to format now, flush() -> events }.
+ */
+function textJoiner() {
+  let pending = '';
+  const take = () => {
+    const t = pending;
+    pending = '';
+    return t.trim() ? [{ type: 'text', text: t }] : [];
+  };
+  return {
+    push(event) {
+      if (event && event.type === 'text') { pending += String(event.text || ''); return []; }
+      return [...take(), event];
+    },
+    flush: take,
+  };
+}
+
+module.exports = { formatEvent, toolSummary, textJoiner };
 
 if (require.main === module) {
   const resultFile = process.argv[2];
+  const agent = process.argv[3] === 'hermes' ? 'hermes' : 'claude';
   let buffer = '';
   let result = null;
+  const joiner = agent === 'hermes' ? textJoiner() : null;
+  const emit = (event) => {
+    const out = formatEvent(event, new Date(), agent);
+    for (const l of out.lines) console.log(l);
+    if (out.result) result = out.result;
+  };
   const handle = (line) => {
     if (!line.trim()) return;
     let event;
@@ -91,9 +138,7 @@ if (require.main === module) {
     if (resultFile && !result && event.type === 'system' && event.subtype === 'init' && event.session_id) {
       try { fs.writeFileSync(resultFile, JSON.stringify({ session_id: event.session_id, partial: true })); } catch (_) { /* best effort */ }
     }
-    const out = formatEvent(event);
-    for (const l of out.lines) console.log(l);
-    if (out.result) result = out.result;
+    for (const e of joiner ? joiner.push(event) : [event]) emit(e);
   };
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (chunk) => {
@@ -106,6 +151,7 @@ if (require.main === module) {
   });
   process.stdin.on('end', () => {
     handle(buffer);
+    if (joiner) for (const e of joiner.flush()) emit(e);
     if (resultFile && result) {
       try { fs.writeFileSync(resultFile, JSON.stringify(result)); } catch (err) { console.error(`stream-log: cannot write ${resultFile}: ${err.message}`); }
     }

@@ -686,7 +686,7 @@ async function startDispatch(payload) {
   if (payload.followUpOf != null) {
     followUp = resolveFollowUp({ runs: readRuns(RUNS_FILE, 5000).runs || [], runId: String(payload.followUpOf), resolveRepo: (name) => resolveRepoPath(name) });
     if (!followUp.ok) return { status: 400, body: { ok: false, error: followUp.error } };
-    payload = { ...payload, agent: 'claude', repo: followUp.repo, branch: followUp.branch, readOnly: false };
+    payload = { ...payload, agent: followUp.agent || 'claude', repo: followUp.repo, branch: followUp.branch, readOnly: false };
   }
   const { repo, branch, task } = payload;
   // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local

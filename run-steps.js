@@ -19,6 +19,9 @@
     Read: 'Reading', Edit: 'Editing', MultiEdit: 'Editing', Write: 'Writing', NotebookEdit: 'Editing',
     Bash: 'Running', Grep: 'Searching for', Glob: 'Looking for files', WebFetch: 'Opening', WebSearch: 'Searching the web for',
     Task: 'Delegating', TodoWrite: 'Updating its plan', LS: 'Listing',
+    // hermes (local) tool names
+    terminal: 'Running', read_file: 'Reading', write_file: 'Writing', patch: 'Editing',
+    search_files: 'Searching for', web_search: 'Searching the web for', web_extract: 'Opening', todo: 'Updating its plan',
   };
   const ICONS = { read: '📖', edit: '✏️', run: '▶️', search: '🔎', say: '💬', error: '⚠️', phase: '•', other: '🔧' };
   const KIND = { Reading: 'read', Listing: 'read', Editing: 'edit', Writing: 'edit', Running: 'run' };
@@ -43,8 +46,8 @@
     }
     if ((x = rest.match(/^💬 (.*)$/))) return { t, kind: 'say', icon: ICONS.say, text: x[1] };
     if ((x = rest.match(/^\s*↳ error: (.*)$/))) return { t, kind: 'error', icon: ICONS.error, text: x[1] };
-    if (/^== claude started/.test(rest)) return { t, kind: 'phase', icon: ICONS.phase, text: 'Agent started' };
-    if ((x = rest.match(/^== claude finished: (\w+)/))) return { t, kind: 'phase', icon: ICONS.phase, text: x[1] === 'success' ? 'Agent finished' : `Agent stopped (${x[1].replace(/_/g, ' ')})` };
+    if (/^== (?:claude|hermes) started/.test(rest)) return { t, kind: 'phase', icon: ICONS.phase, text: rest.includes('hermes') ? 'Local agent started' : 'Agent started' };
+    if ((x = rest.match(/^== (?:claude|hermes) finished: (\w+)/))) return { t, kind: 'phase', icon: ICONS.phase, text: x[1] === 'success' ? 'Agent finished' : `Agent stopped (${x[1].replace(/_/g, ' ')})` };
     return null;
   }
 

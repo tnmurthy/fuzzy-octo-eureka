@@ -216,7 +216,7 @@ run_agent() {
                --print-timeout "${limit}s" --prompt="$prompt") ;;
     mantis) run_mantis "$limit" ;;
     openhands) run_openhands "$limit" ;;
-    hermes) run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt" ;;
+    hermes) run_hermes "$limit" ;;
     noop)   printf '%s\n' "$prompt" ;;
     *)      echo "unknown agent: $who"; return 2 ;;
   esac
@@ -278,6 +278,29 @@ run_claude() {
   rm -f "$mcp_cfg"
   echo "== result"
   node "$(native "$HERE/claude-usage.mjs")" "$(native "$json")" "$(native "$AI_CALLS_FILE")" "$run_id"
+  return "$rc"
+}
+
+# Hermes (local, Ollama) streams its steps the same way: stream-log.js writes
+# the readable log and saves the normalised result (session id, answer) to
+# <run-id>.hermes.json, so follow-ups, questions and the live step view work
+# for local runs too. A follow-up resumes with --resume <local-...>.
+# HERMES_MODEL overrides the model in ~/.hermes/config.yaml for these runs.
+# The bundled hermes-local.js fallback has no chat/stream mode: plain call.
+run_hermes() {
+  local limit="$1" json="$RUNS_DIR/$run_id.hermes.json" rc resume=() model=()
+  if [ "$(basename "$HERMES")" = hermes-local.js ]; then
+    run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt"
+    return $?
+  fi
+  [[ "${AGENT_RESUME_SESSION:-}" =~ ^local-[0-9a-f]{16,128}$ ]] && resume=(--resume "$AGENT_RESUME_SESSION")
+  [ -n "${HERMES_MODEL:-}" ] && model=(-m "$HERMES_MODEL")
+  run_timeout "$limit" "$HERMES" chat -q "$prompt" --oneshot --format stream-json --in "$worktree" \
+      ${model[@]+"${model[@]}"} ${resume[@]+"${resume[@]}"} < /dev/null \
+    | node "$(native "$HERE/stream-log.js")" "$(native "$json")" hermes
+  rc=${PIPESTATUS[0]}
+  echo "== result"
+  node -e 'try { const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(j.result || "(no answer)"); } catch (_) { console.log("(no result: the run ended early)"); }' "$(native "$json")"
   return "$rc"
 }
 

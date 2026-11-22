@@ -22,6 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resultOf } = require('./followup');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
 const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
@@ -52,7 +53,7 @@ function validateTask(input, repos, specialists = null) {
   const repo = String(o.repo || '').trim();
   const title = String(o.title || '').trim();
   const body = String(o.body || '').trim();
-  const agent = String(o.agent || 'claude').trim();
+  const agent = String(o.agent || 'hermes').trim();
   if (!repos.includes(repo)) return { ok: false, error: `repo must be one of: ${repos.join(', ')}` };
   if (!title) return { ok: false, error: 'title is required' };
   if (title.length > MAX_TITLE) return { ok: false, error: `title is longer than ${MAX_TITLE} characters` };
@@ -159,9 +160,9 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   // answered it. Reads <run>.claude.json (result text) only inside the runs dir.
   function openQuestion(run, answered) {
     if (run.status !== 'done' || answered.has(run.id) || !run.log) return null;
-    const file = path.resolve(String(run.log).replace(/\.log$/, '.claude.json'));
-    if (path.dirname(file) !== runsDir) return null;
-    try { return questionOf(JSON.parse(fs.readFileSync(file, 'utf8')).result); } catch (_) { return null; }
+    if (path.dirname(path.resolve(String(run.log))) !== runsDir) return null;
+    const j = resultOf(run);
+    return j ? questionOf(j.result) : null;
   }
 
   async function overview(req) {
@@ -296,10 +297,18 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const ended = await runControl.waitForEnd(runId);
           if (!ended) return sendJson(res, 504, { ok: false, error: 'the agent was told to stop but has not finished yet; try again in a moment' });
           if (!redirect) return sendJson(res, 200, { ok: true, runId, status: ended.status });
-          const r = await dispatchRun({
-            followUpOf: runId, canAsk: true,
-            task: `Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: ${message}`,
-          });
+          const task = `Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: ${message}`;
+          let r = await dispatchRun({ followUpOf: runId, canAsk: true, task });
+          // A local (hermes) run reports its session id only at the end, so one
+          // stopped mid-way cannot be resumed: start the same agent afresh on
+          // the same branch (its worktree and commits are reused).
+          if (r.status === 400 && /no session/.test(String(r.body && r.body.error)) && ended.agent && ended.branch && ended.repo) {
+            r = await dispatchRun({
+              agent: ended.agent, repo: path.basename(String(ended.repo).replace(/[\\/]+$/, '')), branch: ended.branch, canAsk: true,
+              task: `${task}\n\n(Your earlier session on this branch was stopped before it could be resumed; read the code and git log to see where it got to.)`,
+            });
+            return sendJson(res, r.status, { ...r.body, stopped: runId, fresh: true });
+          }
           return sendJson(res, r.status, { ...r.body, stopped: runId });
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
@@ -316,7 +325,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const details = String(b.body || '').trim();
           if (!title) return sendJson(res, 400, { ok: false, error: 'title is required' });
           if (title.length > MAX_TITLE || details.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'task is too long' });
-          const agent = String(b.agent || 'claude');
+          const agent = String(b.agent || 'hermes');
           if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
           const task = details ? `${title}\n\n${details}` : title;
           const r = await dispatchRun({

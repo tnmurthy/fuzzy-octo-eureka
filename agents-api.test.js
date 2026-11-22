@@ -24,9 +24,9 @@ function setup({ runs = [], active = {}, github = null } = {}) {
   return { api, dir };
 }
 
-test('validateTask accepts a good task and defaults the agent to claude', () => {
+test('validateTask accepts a good task and defaults the agent to hermes (local)', () => {
   const v = validateTask({ repo: 'me/app', title: '  Fix it  ' }, REPOS);
-  assert.deepEqual(v, { ok: true, value: { repo: 'me/app', title: 'Fix it', body: '', agent: 'claude', specialist: null } });
+  assert.deepEqual(v, { ok: true, value: { repo: 'me/app', title: 'Fix it', body: '', agent: 'hermes', specialist: null } });
 });
 
 test('validateTask rejects unknown repos, empty or long titles, long bodies and unknown agents', () => {
@@ -194,7 +194,7 @@ test('createTask adds a specialist label after making sure it exists, and reject
   const ok = await api.createTask({ repo: 'me/app', title: 'Review it', specialist: 'engineering-code-reviewer' });
   assert.equal(ok.status, 201);
   assert.deepEqual(made, ['specialist:engineering-code-reviewer']);
-  assert.deepEqual(sent.labels, ['agent:ready', 'agent:claude', 'specialist:engineering-code-reviewer']);
+  assert.deepEqual(sent.labels, ['agent:ready', 'agent:hermes', 'specialist:engineering-code-reviewer']);
   const bad = await api.createTask({ repo: 'me/app', title: 'x', specialist: 'made-up' });
   assert.equal(bad.status, 400);
   const list = await call(api, { method: 'GET', url: '/api/agents/specialists' });
@@ -320,4 +320,21 @@ test('redirect stops, waits, then resumes the session with the new instruction',
   assert.equal(order[2].followUpOf, 'r1');
   assert.equal(order[2].canAsk, true);
   assert.match(order[2].task, /New instruction: Use SQLite instead$/);
+});
+
+test('redirect of a local run stopped before it saved a session starts afresh on the same branch', async () => {
+  const sent = [];
+  const api = controlApi({
+    stop: () => ({ ok: true }),
+    waitForEnd: async () => ({ status: 'stopped', agent: 'hermes', branch: 'agent/run-x', repo: '/Users/me/code/app/' }),
+    dispatchRun: async (p) => {
+      sent.push(p);
+      return p.followUpOf ? { status: 400, body: { ok: false, error: 'this run saved no session to resume' } } : { status: 202, body: { ok: true, runId: 'r3' } };
+    },
+  });
+  const r = await call(api, { url: '/api/agents/redirect', body: { runId: 'r1', message: 'Use SQLite' } });
+  assert.equal(r.status, 202);
+  assert.equal(r.payload.fresh, true);
+  assert.deepEqual([sent[1].agent, sent[1].repo, sent[1].branch], ['hermes', 'app', 'agent/run-x']);
+  assert.match(sent[1].task, /New instruction: Use SQLite/);
 });
