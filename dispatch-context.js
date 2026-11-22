@@ -35,6 +35,9 @@ function findMatchingAntidotes(task, files = [], memoryEngine = null) {
  * @param {object} [options]
  * @param {object} [options.memoryEngine] - Memory engine instance for dynamic lookup
  * @param {Array} [options.antidotes] - Explicit list of matching antidotes
+ * @param {object} [options.directionLayer] - Budgeted direction and intent layer
+ * @param {string} [options.projectId] - Project ID for targeted direction rules
+ * @param {string} [options.userId] - User ID for targeted direction rules
  * @param {string[]} [options.files] - Target files involved in task
  * @param {boolean} [options.tiered] - Whether to use L0/L1 tiered memory presentation
  * @returns {string}
@@ -63,7 +66,18 @@ function buildDispatchPrompt(task, memories, options = {}) {
     }
   }
 
-  // 2. Process Team Context / Memories
+  // 2. Process Direction & Intent Layer (budgeted constraints)
+  if (options.directionLayer && typeof options.directionLayer.formatDirectionPrompt === 'function') {
+    const directionBlock = options.directionLayer.formatDirectionPrompt({
+      projectId: options.projectId,
+      userId: options.userId
+    });
+    if (directionBlock) {
+      result += directionBlock;
+    }
+  }
+
+  // 3. Process Team Context / Memories
   if (!Array.isArray(memories) || !memories.length) {
     return result;
   }

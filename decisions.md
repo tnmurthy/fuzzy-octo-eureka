@@ -55,3 +55,11 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Rule / Decision:** Implements visual and API-driven Decision Cockpit (/cockpit, /api/cockpit/timeline, /api/cockpit/matrix) linking all active agent runs, multi-host federation handoffs, and verification gates directly back to ratified DACI governance decisions and procedural invariants.
 - **Trade-offs:** Provides complete auditable transparency into why agents acted and ensures zero architectural drift.
 ---
+## [DEC-009] Budgeted Direction & Intent Layer with Auditable Invalidation
+- **Date:** 2026-11-22
+- **Driver:** Systems Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Direction constraints are enforced through strict character quotas (Global <= 1200, Project <= 1500, User <= 300, Total <= 3000, Entry <= 400 chars). Rules are validated against prompt injection, zero-width Unicode, and credential leaks. Superseded rules are archived with auditable lineage (`superseded_by: <id>`) and persisted in SQLite WAL.
+- **Trade-offs:** Eliminates prompt bloat and jailbreak vectors while preserving long-term developer intent and architectural constraints across multi-turn agent dispatches.
+---

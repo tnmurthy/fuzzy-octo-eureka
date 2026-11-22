@@ -6,7 +6,6 @@ const os = require('os');
 const path = require('path');
 const {
   createCockpitEngine,
-  parseDecisionsFile,
   computeStageBadge
 } = require('./cockpit-engine');
 

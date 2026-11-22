@@ -67,3 +67,19 @@ test('antidotes are injected into dispatch prompt when matched', () => {
   assert.match(out, /- \[ANT-001\] EADDRINUSE 8787 port conflict -> Use pm2 restart ArunachalaDashboard/);
   assert.match(out, /Team context \(shared memory/);
 });
+
+test('direction layer constraints are injected into dispatch prompt when present', () => {
+  const mockDirectionLayer = {
+    formatDirectionPrompt: ({ projectId }) => `\n\n---\nDirection & Intent Constraints (Budgeted & Verified):\n- [DIR-001] (project): Strict Types -> Always use TypeScript strict mode\n`
+  };
+
+  const out = buildDispatchPrompt(
+    'Implement auth flow',
+    [mem('Auth docs', 'Use JWT')],
+    { directionLayer: mockDirectionLayer, projectId: 'repo-core' }
+  );
+
+  assert.match(out, /Direction & Intent Constraints \(Budgeted & Verified\):/);
+  assert.match(out, /- \[DIR-001\] \(project\): Strict Types -> Always use TypeScript strict mode/);
+  assert.match(out, /Team context \(shared memory/);
+});

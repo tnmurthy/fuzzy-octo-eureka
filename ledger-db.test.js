@@ -52,6 +52,23 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
     assert.equal(decisions.length, 1);
     assert.equal(decisions[0].id, 'DEC-101');
     assert.equal(decisions[0].verdict, 'RATIFIED');
+
+    // 4. Save and load direction rules
+    ledger.saveDirectionRule({
+      id: 'DIR-001',
+      scope: 'global',
+      targetId: null,
+      title: 'Testing Discipline',
+      ruleText: 'Require at least 1 test before merging.',
+      active: true,
+      supersededBy: null
+    });
+
+    const dirRules = ledger.loadDirectionRules();
+    assert.equal(dirRules.length, 1);
+    assert.equal(dirRules[0].id, 'DIR-001');
+    assert.equal(dirRules[0].active, true);
+    assert.equal(dirRules[0].ruleText, 'Require at least 1 test before merging.');
   } finally {
     ledger.close();
     try {

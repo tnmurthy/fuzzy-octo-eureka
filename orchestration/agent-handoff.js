@@ -13,7 +13,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const DEFAULT_HANDOFFS_DIR = path.resolve(__dirname, '../logs/handoffs');

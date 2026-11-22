@@ -66,6 +66,13 @@ const cockpit = createCockpitEngine({
   loadRuns: () => (readRuns(RUNS_FILE, 500).runs || []),
   memoryEngine: memory
 });
+const { createLedgerDB } = require('./ledger-db');
+const ledgerDB = createLedgerDB();
+const { createDirectionLayer } = require('./direction-layer');
+const directionLayer = createDirectionLayer({
+  initialRules: ledgerDB.loadDirectionRules(),
+  ledgerDB
+});
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
@@ -2105,6 +2112,39 @@ function handleRequest(req, res) {
       ok: true,
       matrix: cockpit.getTraceabilityMatrix()
     });
+  }
+
+  // --- Direction & Intent Layer API ---
+  if (req.url.startsWith('/api/direction/rules')) {
+    if (req.method === 'GET') {
+      const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const scope = parsedUrl.searchParams.get('scope');
+      const targetId = parsedUrl.searchParams.get('targetId');
+      const rules = directionLayer.getActiveRules({ scope, targetId });
+      const usage = directionLayer.computeUsage();
+      return sendJson(res, 200, { ok: true, rules, usage, budgets: directionLayer.BUDGETS });
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const rule = directionLayer.addRule(payload);
+          return sendJson(res, 201, { ok: true, rule });
+        } catch (err) {
+          return sendJson(res, 400, { ok: false, error: err.message });
+        }
+      });
+      return;
+    }
+  }
+
+  if (req.url.startsWith('/api/direction/rule/') && req.method === 'DELETE') {
+    const id = req.url.split('/')[4]?.split('?')[0];
+    const success = directionLayer.deactivateRule(id);
+    return sendJson(res, success ? 200 : 404, { ok: success });
   }
 
   return serveStaticFile(req, res);

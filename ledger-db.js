@@ -58,6 +58,18 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       rule_text TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS direction_rules (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      target_id TEXT,
+      title TEXT NOT NULL,
+      rule_text TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      superseded_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Prepared statements
@@ -100,6 +112,21 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
   `);
 
   const selectDecisionsStmt = db.prepare(`SELECT * FROM decision_records ORDER BY created_at DESC`);
+
+  const upsertDirectionRuleStmt = db.prepare(`
+    INSERT INTO direction_rules (id, scope, target_id, title, rule_text, active, superseded_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      scope=excluded.scope,
+      target_id=excluded.target_id,
+      title=excluded.title,
+      rule_text=excluded.rule_text,
+      active=excluded.active,
+      superseded_by=excluded.superseded_by,
+      updated_at=excluded.updated_at
+  `);
+
+  const selectDirectionRulesStmt = db.prepare(`SELECT * FROM direction_rules ORDER BY created_at DESC`);
 
   function logEvent({ type, runId = null, payload = {} }) {
     const id = 'evt_' + crypto.randomBytes(6).toString('hex');
@@ -173,6 +200,43 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     }));
   }
 
+  function saveDirectionRule(rule) {
+    const createdAt = rule.createdAt || new Date().toISOString();
+    const updatedAt = rule.updatedAt || new Date().toISOString();
+    upsertDirectionRuleStmt.run(
+      rule.id,
+      rule.scope || 'global',
+      rule.targetId || null,
+      rule.title,
+      rule.ruleText,
+      rule.active !== false ? 1 : 0,
+      rule.supersededBy || null,
+      createdAt,
+      updatedAt
+    );
+    return rule;
+  }
+
+  function loadDirectionRules(filter = {}) {
+    const rows = selectDirectionRulesStmt.all();
+    return rows.map((row) => ({
+      id: row.id,
+      scope: row.scope,
+      targetId: row.target_id,
+      title: row.title,
+      ruleText: row.rule_text,
+      active: Boolean(row.active),
+      supersededBy: row.superseded_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })).filter((r) => {
+      if (filter.activeOnly && !r.active) return false;
+      if (filter.scope && r.scope !== filter.scope) return false;
+      if (filter.targetId && r.targetId !== filter.targetId) return false;
+      return true;
+    });
+  }
+
   function close() {
     try {
       db.close();
@@ -186,6 +250,8 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     loadTasks,
     saveDecision,
     loadDecisions,
+    saveDirectionRule,
+    loadDirectionRules,
     close
   };
 }
