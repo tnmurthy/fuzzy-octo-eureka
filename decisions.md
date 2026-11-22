@@ -39,3 +39,11 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Rule / Decision:** Integrates L0/L1/L2 hierarchical context zooming, closed-loop Failure Antidotes, PreCompact state preservation, least-privilege tool masking (disallowedTools), TurnEndGuard, and local SQLite WAL ledger.
 - **Trade-offs:** Improves execution resilience and reduces prompt token bloat by 70%. Maintains 100% backward compatibility with existing dispatch and memory callers.
 ---
+## [DEC-007] Multi-Host Agent Federation Protocol (Local Hermes <-> Frontier Claude)
+- **Date:** 2026-11-22
+- **Driver:** Systems Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** When local agents (Hermes on Ollama) encounter test failures or reasoning boundaries, agent-dispatch automatically captures a structured Handoff Packet (.arunachala-handoff.patch, diffstat, failure diagnostics) and injects a Federation Handoff Briefing into the frontier agent prompt, eliminating lossy resets.
+- **Trade-offs:** Reduces frontier model token spend by up to 70% during escalations by building upon local agent work rather than restarting from scratch.
+---

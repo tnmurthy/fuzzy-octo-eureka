@@ -434,11 +434,26 @@ run_auto() {
     fi
     # Stopped from the Agents page: do not escalate to a paid run.
     [ -n "$stopped" ] && { echo "== auto: stopped"; return 143; }
+
+    # Multi-Host Agent Federation: Package handoff packet with diagnostics and patch
+    if [ -f "$HERE/agent-handoff.js" ]; then
+      echo "== auto: packaging multi-host federation handoff ($LOCAL_AGENT -> claude)"
+      handoff_prompt_file="$(node "$HERE/agent-handoff.js" prepare "$run_id" "$(native "$worktree")" "$(native "$prompt_file")" "$tests" "$rc" "$log" 2>/dev/null || echo "")"
+      if [ -n "$handoff_prompt_file" ] && [ -f "$handoff_prompt_file" ]; then
+        prompt="$rules"$'\n'"$(cat "$handoff_prompt_file")"
+      fi
+    fi
+
     # Throw away the local attempt; gitignored files (.env copies) survive.
     git -C "$(native "$worktree")" reset -q --hard "$start_sha"
     git -C "$(native "$worktree")" clean -q -fd
   fi
   run_agent claude "$TIMEOUT_SECONDS"
+  claude_rc=$?
+  if [ -f "$HERE/agent-handoff.js" ]; then
+    node "$HERE/agent-handoff.js" resolve "$run_id" "$([ "$claude_rc" -eq 0 ] && echo RESOLVED || echo FAILED)" 2>/dev/null || true
+  fi
+  return "$claude_rc"
 }
 
 escalated=""

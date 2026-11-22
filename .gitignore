@@ -39,6 +39,7 @@ secrets/
 *.db
 *.db-wal
 *.db-shm
+*.patch
 
 # Python
 .venv/
