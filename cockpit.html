@@ -50,6 +50,22 @@
     .t-body { font-size: 0.84rem; color: #cbd5e1; margin-top: 6px; font-family: 'JetBrains Mono', monospace; background: var(--bg-secondary); padding: 8px 12px; border-radius: 6px; }
 
     .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; }
+
+    .quota-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    @media (max-width: 860px) { .quota-grid { grid-template-columns: repeat(2, 1fr); } }
+    .quota-box { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; }
+    .quota-label { font-size: 0.76rem; color: var(--color-text-muted); display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .quota-bar-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+    .quota-bar-fill { height: 100%; background: var(--status-blue); transition: width 0.3s; }
+    .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .form-control { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--color-text-main); padding: 8px 12px; border-radius: 6px; font-family: inherit; font-size: 0.85rem; }
+    .form-control:focus { outline: none; border-color: var(--status-blue); }
+    .btn { background: var(--status-blue); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: opacity 0.2s; font-size: 0.85rem; }
+    .btn:hover { opacity: 0.9; }
+    .btn-danger { background: rgba(255,82,82,0.15); color: #ff5252; border: 1px solid rgba(255,82,82,0.3); font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+    .msg-feedback { font-size: 0.82rem; margin-top: 8px; }
+    .msg-err { color: #ff5252; }
+    .msg-ok { color: var(--status-green); }
   </style>
 </head>
 <body>
@@ -87,6 +103,7 @@
       <button class="tab" id="tab-timeline" aria-selected="true" onclick="switchView('timeline')">Traceability Timeline</button>
       <button class="tab" id="tab-matrix" aria-selected="false" onclick="switchView('matrix')">Decision Matrix</button>
       <button class="tab" id="tab-handoffs" aria-selected="false" onclick="switchView('handoffs')">Federation Stream</button>
+      <button class="tab" id="tab-direction" aria-selected="false" onclick="switchView('direction')">Direction & Intent</button>
     </div>
 
     <!-- Timeline View -->
@@ -122,6 +139,76 @@
       <h2>Cross-Host Agent Federation (Hermes ⇄ Claude)</h2>
       <div id="handoffs-container">Loading handoffs...</div>
     </div>
+
+    <!-- Direction & Intent View -->
+    <div id="view-direction" class="card" style="display: none;">
+      <h2>Budgeted Direction & Intent Layer <span class="badge b-green">DEC-009</span></h2>
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 16px;">
+        Developer design intent and architectural constraints enforced with strict token/character quotas and zero-width/prompt-injection filters.
+      </p>
+
+      <div class="quota-grid" id="quota-bars">
+        <div class="quota-box">
+          <div class="quota-label"><span>Global Scope</span><span id="q-global-label">0 / 1200</span></div>
+          <div class="quota-bar-bg"><div class="quota-bar-fill" id="q-global-fill" style="width: 0%;"></div></div>
+        </div>
+        <div class="quota-box">
+          <div class="quota-label"><span>Project Scope</span><span id="q-project-label">0 / 1500</span></div>
+          <div class="quota-bar-bg"><div class="quota-bar-fill" id="q-project-fill" style="width: 0%;"></div></div>
+        </div>
+        <div class="quota-box">
+          <div class="quota-label"><span>User Scope</span><span id="q-user-label">0 / 300</span></div>
+          <div class="quota-bar-bg"><div class="quota-bar-fill" id="q-user-fill" style="width: 0%;"></div></div>
+        </div>
+        <div class="quota-box">
+          <div class="quota-label"><span>Total Allocation</span><span id="q-total-label">0 / 3000</span></div>
+          <div class="quota-bar-bg"><div class="quota-bar-fill" id="q-total-fill" style="width: 0%;"></div></div>
+        </div>
+      </div>
+
+      <!-- Add Rule Form -->
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <h3 style="margin: 0 0 12px; font-size: 0.95rem; font-weight: 600;">Add or Supersede Direction Rule</h3>
+        <form id="rule-form" onsubmit="submitDirectionRule(event)">
+          <div class="form-row">
+            <select id="rule-scope" class="form-control" style="width: 130px;" onchange="toggleTargetId()">
+              <option value="global">global</option>
+              <option value="project">project</option>
+              <option value="user">user</option>
+            </select>
+            <input type="text" id="rule-target-id" class="form-control" placeholder="Target ID (e.g. repo-name or user)" style="display: none; width: 200px;">
+            <input type="text" id="rule-title" class="form-control" placeholder="Rule Title (e.g. Testing Discipline)" required style="flex: 1; min-width: 220px;">
+            <input type="text" id="rule-supersedes" class="form-control" placeholder="Supersedes ID (optional)" style="width: 170px;">
+          </div>
+          <div class="form-row">
+            <textarea id="rule-text" class="form-control" placeholder="Rule directive or constraint (max 400 chars, validated against prompt injections)..." maxlength="400" required rows="2" style="width: 100%; resize: vertical;"></textarea>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div id="rule-feedback" class="msg-feedback"></div>
+            <button type="submit" class="btn">Apply Constraint</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Scope</th>
+              <th>Target</th>
+              <th>Title</th>
+              <th>Rule Directive</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="direction-tbody">
+            <tr><td colspan="7">Loading direction rules...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -144,8 +231,127 @@
 
         // Render handoffs
         renderHandoffs(data.handoffs || []);
+
+        // Load Direction & Intent Rules
+        loadDirectionData();
       } catch (err) {
         document.getElementById('timeline-container').innerHTML = `<div class="t-sub">Failed to load cockpit telemetry: ${err.message}</div>`;
+      }
+    }
+
+    async function loadDirectionData() {
+      try {
+        const res = await fetch('/api/direction/rules');
+        const data = await res.json();
+        if (data.ok) {
+          renderDirectionRules(data.rules || [], data.usage || {}, data.budgets || {});
+        }
+      } catch (err) {
+        document.getElementById('direction-tbody').innerHTML = `<tr><td colspan="7">Failed to load direction rules: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderDirectionRules(rules, usage, budgets) {
+      // Update Quotas
+      const updateBar = (scope, maxDefault) => {
+        const used = usage[scope] || 0;
+        const max = budgets[scope] || maxDefault;
+        const pct = Math.min(100, Math.round((used / max) * 100));
+        const lbl = document.getElementById(`q-${scope}-label`);
+        const fill = document.getElementById(`q-${scope}-fill`);
+        if (lbl) lbl.textContent = `${used} / ${max} chars (${pct}%)`;
+        if (fill) {
+          fill.style.width = `${pct}%`;
+          fill.style.backgroundColor = pct > 90 ? '#ff5252' : pct > 75 ? 'var(--status-amber)' : 'var(--status-blue)';
+        }
+      };
+
+      updateBar('global', 1200);
+      updateBar('project', 1500);
+      updateBar('user', 300);
+      updateBar('total', 3000);
+
+      const tbody = document.getElementById('direction-tbody');
+      if (!rules.length) {
+        tbody.innerHTML = '<tr><td colspan="7">No active direction rules established.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rules.map(r => `
+        <tr>
+          <td class="mono"><strong>${escapeHtml(r.id)}</strong></td>
+          <td><span class="badge ${r.scope === 'global' ? 'b-blue' : r.scope === 'project' ? 'b-purple' : 'b-amber'}">${escapeHtml(r.scope)}</span></td>
+          <td class="mono">${escapeHtml(r.targetId || '-')}</td>
+          <td><strong>${escapeHtml(r.title)}</strong></td>
+          <td style="white-space: normal; max-width: 380px; font-size: 0.82rem;">${escapeHtml(r.ruleText)}</td>
+          <td><span class="badge ${r.active ? 'b-green' : 'b-amber'}">${r.active ? 'ACTIVE' : 'SUPERSEDED'}</span></td>
+          <td>
+            <button class="btn-danger" onclick="deactivateRule('${escapeHtml(r.id)}')">Invalidate</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function toggleTargetId() {
+      const scope = document.getElementById('rule-scope').value;
+      const targetInput = document.getElementById('rule-target-id');
+      if (scope === 'project' || scope === 'user') {
+        targetInput.style.display = 'inline-block';
+        targetInput.placeholder = scope === 'project' ? 'Project ID (e.g. repo-name)' : 'User ID';
+      } else {
+        targetInput.style.display = 'none';
+        targetInput.value = '';
+      }
+    }
+
+    async function submitDirectionRule(e) {
+      e.preventDefault();
+      const feedback = document.getElementById('rule-feedback');
+      feedback.textContent = 'Applying...';
+      feedback.className = 'msg-feedback';
+
+      const scope = document.getElementById('rule-scope').value;
+      const targetId = document.getElementById('rule-target-id').value.trim() || null;
+      const title = document.getElementById('rule-title').value.trim();
+      const supersedesId = document.getElementById('rule-supersedes').value.trim() || null;
+      const ruleText = document.getElementById('rule-text').value.trim();
+
+      try {
+        const res = await fetch('/api/direction/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope, targetId, title, ruleText, supersedesId })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          feedback.textContent = `Error: ${data.error}`;
+          feedback.className = 'msg-feedback msg-err';
+          return;
+        }
+
+        feedback.textContent = `Applied rule ${data.rule.id} successfully!`;
+        feedback.className = 'msg-feedback msg-ok';
+        document.getElementById('rule-form').reset();
+        toggleTargetId();
+        loadDirectionData();
+      } catch (err) {
+        feedback.textContent = `Network error: ${err.message}`;
+        feedback.className = 'msg-feedback msg-err';
+      }
+    }
+
+    async function deactivateRule(id) {
+      if (!confirm(`Are you sure you want to invalidate direction rule ${id}?`)) return;
+      try {
+        const res = await fetch(`/api/direction/rule/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) {
+          loadDirectionData();
+        } else {
+          alert(`Failed to invalidate: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Request failed: ${err.message}`);
       }
     }
 
@@ -217,9 +423,11 @@
     }
 
     function switchView(viewName) {
-      ['timeline', 'matrix', 'handoffs'].forEach(v => {
-        document.getElementById(`view-${v}`).style.display = v === viewName ? 'block' : 'none';
-        document.getElementById(`tab-${v}`).setAttribute('aria-selected', v === viewName ? 'true' : 'false');
+      ['timeline', 'matrix', 'handoffs', 'direction'].forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        const tab = document.getElementById(`tab-${v}`);
+        if (el) el.style.display = v === viewName ? 'block' : 'none';
+        if (tab) tab.setAttribute('aria-selected', v === viewName ? 'true' : 'false');
       });
     }
 

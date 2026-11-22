@@ -63,3 +63,19 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Rule / Decision:** Direction constraints are enforced through strict character quotas (Global <= 1200, Project <= 1500, User <= 300, Total <= 3000, Entry <= 400 chars). Rules are validated against prompt injection, zero-width Unicode, and credential leaks. Superseded rules are archived with auditable lineage (`superseded_by: <id>`) and persisted in SQLite WAL.
 - **Trade-offs:** Eliminates prompt bloat and jailbreak vectors while preserving long-term developer intent and architectural constraints across multi-turn agent dispatches.
 ---
+## [DEC-010] Just-In-Time (JIT) Skill Loader & Token-Budgeted Injection
+- **Date:** 2026-11-22
+- **Driver:** Systems Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Discontinue static loading of comprehensive skill catalogs into agent prompts. Implement JIT skill discovery (`skill-loader.js`) that scores tasks and touched files against YAML frontmatter triggers and injects only top matching skills bounded by strict character quotas (max 2 skills, <= 2500 chars).
+- **Trade-offs:** Drastically reduces prompt token consumption and context dilution while delivering focused, high-precision procedural instructions.
+---
+## [DEC-011] Multi-Dimensional Adaptive Quality Gatekeeper & Rubric
+- **Date:** 2026-11-22
+- **Driver:** QA Gatekeeper
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Enforce an automated Maker/Checker quality rubric (`quality-gatekeeper.js`) prior to code landing. Score changes on 4 dimensions: Security & Leak Defense (35%), Governance Invariant Compliance (25%), Verification & Test Rigor (25%), and Blast Radius & Scope Isolation (15%). Passing threshold is >= 80/100 with zero critical invariant or security failures.
+- **Trade-offs:** Prevents silent architectural drift, credential leaks, and zero-evidence pass states (Invariant I-8) across autonomous agent commits.
+---

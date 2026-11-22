@@ -73,6 +73,10 @@ const directionLayer = createDirectionLayer({
   initialRules: ledgerDB.loadDirectionRules(),
   ledgerDB
 });
+const { createSkillLoader } = require('./skill-loader');
+const skillLoader = createSkillLoader();
+const { createQualityGatekeeper } = require('./quality-gatekeeper');
+const qualityGatekeeper = createQualityGatekeeper({ ledgerDB });
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
@@ -2145,6 +2149,62 @@ function handleRequest(req, res) {
     const id = req.url.split('/')[4]?.split('?')[0];
     const success = directionLayer.deactivateRule(id);
     return sendJson(res, success ? 200 : 404, { ok: success });
+  }
+
+  // --- Just-In-Time Skill Discovery API ---
+  if (req.url.startsWith('/api/skills/match')) {
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const task = parsedUrl.searchParams.get('task') || '';
+    const files = (parsedUrl.searchParams.get('files') || '').split(',').map(s => s.trim()).filter(Boolean);
+    const matches = skillLoader.matchSkills(task, files);
+    return sendJson(res, 200, {
+      ok: true,
+      count: matches.length,
+      matches: matches.map(m => ({
+        id: m.skill.id,
+        name: m.skill.name,
+        description: m.skill.description,
+        score: m.score,
+        matchedTriggers: m.matchedTriggers,
+        matchedFiles: m.matchedFiles
+      }))
+    });
+  }
+
+  if (req.url === '/api/skills' || req.url.startsWith('/api/skills?')) {
+    const skills = skillLoader.loadAllSkills();
+    return sendJson(res, 200, {
+      ok: true,
+      count: skills.length,
+      skills: skills.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        triggers: s.triggers,
+        filePatterns: s.filePatterns
+      }))
+    });
+  }
+
+  // --- Adaptive Quality Gatekeeper API ---
+  if (req.url.startsWith('/api/quality/evaluate') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const evaluation = qualityGatekeeper.evaluate(payload);
+        const rubricMarkdown = qualityGatekeeper.formatRubricMarkdown(evaluation);
+        return sendJson(res, 200, {
+          ok: true,
+          evaluation,
+          rubricMarkdown
+        });
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, error: err.message });
+      }
+    });
+    return;
   }
 
   return serveStaticFile(req, res);

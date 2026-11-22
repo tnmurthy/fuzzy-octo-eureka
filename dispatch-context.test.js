@@ -83,3 +83,24 @@ test('direction layer constraints are injected into dispatch prompt when present
   assert.match(out, /- \[DIR-001\] \(project\): Strict Types -> Always use TypeScript strict mode/);
   assert.match(out, /Team context \(shared memory/);
 });
+
+test('just-in-time skills are injected into dispatch prompt when matched', () => {
+  const mockSkillLoader = {
+    matchSkills: () => [
+      {
+        skill: { name: 'sqlite-wal', body: 'Always set PRAGMA journal_mode = WAL;' }
+      }
+    ],
+    formatSkillPrompt: () => '\n\n---\nJust-In-Time Operational Skills (Auto-Discovered):\n### Skill: sqlite-wal\nAlways set PRAGMA journal_mode = WAL;\n'
+  };
+
+  const out = buildDispatchPrompt(
+    'Refactor database to use WAL',
+    [],
+    { skillLoader: mockSkillLoader, files: ['ledger.db'] }
+  );
+
+  assert.match(out, /Just-In-Time Operational Skills \(Auto-Discovered\):/);
+  assert.match(out, /### Skill: sqlite-wal/);
+  assert.match(out, /Always set PRAGMA journal_mode = WAL;/);
+});

@@ -36,6 +36,7 @@ function findMatchingAntidotes(task, files = [], memoryEngine = null) {
  * @param {object} [options.memoryEngine] - Memory engine instance for dynamic lookup
  * @param {Array} [options.antidotes] - Explicit list of matching antidotes
  * @param {object} [options.directionLayer] - Budgeted direction and intent layer
+ * @param {object} [options.skillLoader] - Just-In-Time skill loader instance
  * @param {string} [options.projectId] - Project ID for targeted direction rules
  * @param {string} [options.userId] - User ID for targeted direction rules
  * @param {string[]} [options.files] - Target files involved in task
@@ -77,7 +78,18 @@ function buildDispatchPrompt(task, memories, options = {}) {
     }
   }
 
-  // 3. Process Team Context / Memories
+  // 3. Process Just-In-Time Operational Skills (Auto-Discovered)
+  if (options.skillLoader && typeof options.skillLoader.matchSkills === 'function') {
+    const matched = options.skillLoader.matchSkills(task, options.files || []);
+    if (matched.length > 0 && typeof options.skillLoader.formatSkillPrompt === 'function') {
+      const skillBlock = options.skillLoader.formatSkillPrompt(matched);
+      if (skillBlock) {
+        result += skillBlock;
+      }
+    }
+  }
+
+  // 4. Process Team Context / Memories
   if (!Array.isArray(memories) || !memories.length) {
     return result;
   }
