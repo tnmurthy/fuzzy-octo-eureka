@@ -249,8 +249,75 @@ test('run now builds the task, picks a fresh branch and goes through dispatch', 
   const { api } = workspaceApi({ dispatchRun: async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: 'r1', branch: p.branch } }; } });
   const r = await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'claude', title: 'Add tests', body: 'for utils', specialist: 'testing-api-tester' } });
   assert.equal(r.status, 202);
-  assert.deepEqual(sent[0], { agent: 'claude', repo: 'app', task: 'Add tests\n\nfor utils', specialist: 'testing-api-tester', branch: `agent/run-${(1_700_000_000_000).toString(36)}` });
+  assert.deepEqual(sent[0], { agent: 'claude', repo: 'app', task: 'Add tests\n\nfor utils', specialist: 'testing-api-tester', branch: `agent/run-${(1_700_000_000_000).toString(36)}`, canAsk: true });
   assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: '' } })).status, 400);
   assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x', agent: 'rm' } })).status, 400);
   assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x' }, headers: { 'content-type': 'text/plain' } })).status, 403);
+});
+
+// ---- questions, stop and redirect (2026-11-22) -------------------------------
+const { questionOf } = require('./agents-api');
+
+test('questionOf reads a trailing QUESTION: line only', () => {
+  assert.equal(questionOf('Did the refactor.\n\nQUESTION: Keep the old API for a release?'), 'Keep the old API for a release?');
+  assert.equal(questionOf('**QUESTION:** Which DB?**'), 'Which DB?');
+  assert.equal(questionOf('QUESTION: early\nline\nline\nline\nline\nline\nend'), null);
+  assert.equal(questionOf('All done.'), null);
+  assert.equal(questionOf(null), null);
+});
+
+test('overview shows an open question until a follow-up answers it', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-q-'));
+  const log = (id) => path.join(dir, `${id}.log`);
+  fs.writeFileSync(path.join(dir, 'q1.claude.json'), JSON.stringify({ result: 'Made a plan.\nQUESTION: Postgres or SQLite?' }));
+  fs.writeFileSync(path.join(dir, 'q2.claude.json'), JSON.stringify({ result: 'QUESTION: answered already?' }));
+  let runs = [
+    { id: 'q1', status: 'done', log: log('q1') },
+    { id: 'q2', status: 'done', log: log('q2') },
+    { id: 'f1', status: 'done', parent: 'q2', log: log('f1') },
+  ];
+  const api = createAgentsApi({ runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}), repos: REPOS, github: null });
+  const byId = (o) => Object.fromEntries(o.recent.map((r) => [r.id, r.question]));
+  assert.deepEqual(byId(await api.overview({ headers: {} })), { q1: 'Postgres or SQLite?', q2: null, f1: null });
+  runs = [...runs, { id: 'f2', status: 'running', parent: 'q1' }];
+  assert.equal(byId(await api.overview({ headers: {} })).q1, null);
+});
+
+function controlApi({ stop, waitForEnd, dispatchRun }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-ctl-'));
+  return createAgentsApi({
+    runsFile: path.join(dir, 'r.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs: [] }), capNow: () => ({}),
+    repos: REPOS, github: null, runControl: { stop, waitForEnd }, dispatchRun,
+  });
+}
+
+test('stop signals the run and reports how it ended', async () => {
+  const calls = [];
+  const api = controlApi({ stop: (id) => { calls.push(id); return { ok: true }; }, waitForEnd: async () => ({ status: 'stopped' }) });
+  const r = await call(api, { url: '/api/agents/stop', body: { runId: 'r1' } });
+  assert.deepEqual([r.status, r.payload], [200, { ok: true, runId: 'r1', status: 'stopped' }]);
+  assert.deepEqual(calls, ['r1']);
+  assert.equal((await call(api, { url: '/api/agents/stop', body: { runId: 'r1' }, headers: { origin: 'https://evil.example' } })).status, 403);
+  const refused = controlApi({ stop: () => ({ ok: false, status: 409, error: 'the run has already finished' }), waitForEnd: async () => null });
+  assert.equal((await call(refused, { url: '/api/agents/stop', body: { runId: 'r1' } })).status, 409);
+  const slow = controlApi({ stop: () => ({ ok: true }), waitForEnd: async () => null });
+  assert.equal((await call(slow, { url: '/api/agents/stop', body: { runId: 'r1' } })).status, 504);
+});
+
+test('redirect stops, waits, then resumes the session with the new instruction', async () => {
+  const order = [];
+  const api = controlApi({
+    stop: () => { order.push('stop'); return { ok: true }; },
+    waitForEnd: async () => { order.push('wait'); return { status: 'stopped' }; },
+    dispatchRun: async (p) => { order.push(p); return { status: 202, body: { ok: true, runId: 'r2' } }; },
+  });
+  assert.equal((await call(api, { url: '/api/agents/redirect', body: { runId: 'r1', message: '' } })).status, 400);
+  assert.equal(order.length, 0);
+  const r = await call(api, { url: '/api/agents/redirect', body: { runId: 'r1', message: 'Use SQLite instead' } });
+  assert.equal(r.status, 202);
+  assert.deepEqual(r.payload, { ok: true, runId: 'r2', stopped: 'r1' });
+  assert.deepEqual(order.slice(0, 2), ['stop', 'wait']);
+  assert.equal(order[2].followUpOf, 'r1');
+  assert.equal(order[2].canAsk, true);
+  assert.match(order[2].task, /New instruction: Use SQLite instead$/);
 });

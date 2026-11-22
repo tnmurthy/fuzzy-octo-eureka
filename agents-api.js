@@ -14,6 +14,8 @@
 //   POST /api/agents/repos/remove { name } (admin; unregisters, files stay)
 //   POST /api/agents/run        { repo, agent, specialist?, title, body? } -> run now
 //   POST /api/agents/followup   { runId, message } -> resume that claude run's session
+//   POST /api/agents/stop       { runId } -> stop a running agent (run-control.js)
+//   POST /api/agents/redirect   { runId, message } -> stop it, then resume with the message
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -28,6 +30,21 @@ const LOG_TAIL_BYTES = 64 * 1024;
 const MAX_TITLE = 200;
 const MAX_BODY = 8000;
 const RUN_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
+
+const MAX_QUESTION = 600;
+
+/**
+ * The question an agent ended its answer with ("QUESTION: ..." on its own
+ * line, the convention agent-dispatch.sh gives runs started from this page).
+ */
+function questionOf(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 5); i -= 1) {
+    const m = lines[i].match(/^\**QUESTION:\**\s*(.+)$/i);
+    if (m) return m[1].replace(/\*+$/, '').trim().slice(0, MAX_QUESTION) || null;
+  }
+  return null;
+}
 
 /** Validate a "give an agent a task" request. Returns { ok, value } or { ok: false, error }. */
 function validateTask(input, repos, specialists = null) {
@@ -108,7 +125,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -138,8 +155,18 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     return queueCache.value;
   }
 
+  // The agent's open question on a finished run, unless a follow-up already
+  // answered it. Reads <run>.claude.json (result text) only inside the runs dir.
+  function openQuestion(run, answered) {
+    if (run.status !== 'done' || answered.has(run.id) || !run.log) return null;
+    const file = path.resolve(String(run.log).replace(/\.log$/, '.claude.json'));
+    if (path.dirname(file) !== runsDir) return null;
+    try { return questionOf(JSON.parse(fs.readFileSync(file, 'utf8')).result); } catch (_) { return null; }
+  }
+
   async function overview(req) {
     const runs = loadRuns();
+    const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
     const active = loadActive();
     let q;
     try { q = await queue(); } catch (err) { q = { available: false, note: `GitHub queue unavailable (${err.status || 'network'})` }; }
@@ -150,7 +177,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       repos,
       agents: AGENTS,
       running: runs.filter((r) => r.status === 'running').map((r) => slimRun(r, active)),
-      recent: runs.filter((r) => r.status !== 'running').slice(0, 25).map((r) => ({ ...slimRun(r, active), canFollowUp: Boolean(canFollowUp(r)) })),
+      recent: runs.filter((r) => r.status !== 'running').slice(0, 25).map((r) => ({ ...slimRun(r, active), canFollowUp: Boolean(canFollowUp(r)), question: openQuestion(r, answered) })),
       queue: q,
     };
   }
@@ -244,9 +271,36 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
           // The level is capped at the parent run's by startDispatch (approval-levels.js).
           const r = await dispatchRun({
-            followUpOf: String(b.runId || ''), task: `Follow-up: ${message}`, ...(b.level ? { level: String(b.level) } : {}),
+            followUpOf: String(b.runId || ''), task: `Follow-up: ${message}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
           });
           return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if ((url.pathname === '/api/agents/stop' || url.pathname === '/api/agents/redirect') && req.method === 'POST') {
+      // Stop a running agent; redirect = stop, wait for its end line, then
+      // resume its session with the new instruction (a paid follow-up).
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!runControl) { sendJson(res, 503, { ok: false, error: 'stopping runs is not available' }); return true; }
+      const redirect = url.pathname.endsWith('/redirect');
+      readJsonBody(req, 16 * 1024)
+        .then(async (b) => {
+          const runId = String(b.runId || '');
+          const message = String(b.message || '').trim();
+          if (redirect && !message) return sendJson(res, 400, { ok: false, error: 'tell the agent what to do instead' });
+          if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
+          if (redirect && !dispatchRun) return sendJson(res, 503, { ok: false, error: 'follow-ups are not available' });
+          const st = runControl.stop(runId);
+          if (!st.ok) return sendJson(res, st.status || 409, { ok: false, error: st.error });
+          const ended = await runControl.waitForEnd(runId);
+          if (!ended) return sendJson(res, 504, { ok: false, error: 'the agent was told to stop but has not finished yet; try again in a moment' });
+          if (!redirect) return sendJson(res, 200, { ok: true, runId, status: ended.status });
+          const r = await dispatchRun({
+            followUpOf: runId, canAsk: true,
+            task: `Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: ${message}`,
+          });
+          return sendJson(res, r.status, { ...r.body, stopped: runId });
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
@@ -267,7 +321,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const task = details ? `${title}\n\n${details}` : title;
           const r = await dispatchRun({
             agent, repo: String(b.repo || ''), task, specialist: b.specialist || null,
-            branch: `agent/run-${now().toString(36)}`, ...(b.level ? { level: String(b.level) } : {}),
+            branch: `agent/run-${now().toString(36)}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
           });
           if (r.status < 300 && recommender) recommender.invalidate();
           return sendJson(res, r.status, r.body);
@@ -337,4 +391,4 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   return { handle, overview, log, createTask };
 }
 
-module.exports = { createAgentsApi, validateTask, linkOf, isSameSiteJson, AGENTS };
+module.exports = { createAgentsApi, validateTask, linkOf, isSameSiteJson, questionOf, AGENTS };

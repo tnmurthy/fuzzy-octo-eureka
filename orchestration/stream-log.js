@@ -86,6 +86,11 @@ if (require.main === module) {
       console.log(line); // not stream-json: a login error, a crash - keep it visible
       return;
     }
+    // Save the session id as soon as claude reports it, so a run stopped from
+    // the Agents page (no result event) can still be followed up.
+    if (resultFile && !result && event.type === 'system' && event.subtype === 'init' && event.session_id) {
+      try { fs.writeFileSync(resultFile, JSON.stringify({ session_id: event.session_id, partial: true })); } catch (_) { /* best effort */ }
+    }
     const out = formatEvent(event);
     for (const l of out.lines) console.log(l);
     if (out.result) result = out.result;

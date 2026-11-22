@@ -634,8 +634,48 @@
     return `${r.agent} · ${s ? `${s.emoji || ''} ${s.name}`.trim() : r.specialist}`;
   }
 
+  // ---- live steps: what each running agent is doing, from its log ----------
+  // Polls the existing /api/agents/log for the running runs (at most 3) every
+  // 3 s while the tab is visible; the 5 s re-render repaints from the cache.
+  const stepCache = new Map(); // run id -> { steps, summary }
+  let runningIds = [];
+
+  function paintSteps(box, id) {
+    const c = stepCache.get(id);
+    if (!c || !c.steps.length) {
+      box.replaceChildren(el('div', { className: 'step-item active' }, el('span', { className: 'pulse' }), 'Starting up…'));
+      return;
+    }
+    const items = c.steps.map((st, i) => {
+      const last = i === c.steps.length - 1;
+      return el('div', { className: `live-step live-${st.kind}${last ? ' live-current' : ''}` },
+        el('span', { className: 'live-t mono', textContent: st.t }),
+        el('span', { className: 'live-ic', textContent: st.icon }),
+        el('span', { className: 'live-x', textContent: st.text }));
+    });
+    box.replaceChildren(el('div', { className: 'live-sum muted', textContent: c.summary }), ...items);
+  }
+
+  async function pollSteps() {
+    if (document.hidden || !window.RunSteps) return;
+    for (const id of runningIds.slice(0, 3)) {
+      try {
+        const res = await fetch(`/api/agents/log?id=${encodeURIComponent(id)}`);
+        if (!res.ok) continue;
+        const b = await res.json();
+        stepCache.set(id, { steps: window.RunSteps.parseSteps(b.text, 8), summary: window.RunSteps.summary(b.text) });
+        document.querySelectorAll(`[data-steps="${CSS.escape(id)}"]`).forEach((box) => paintSteps(box, id));
+      } catch (_) { /* next tick */ }
+    }
+    for (const id of [...stepCache.keys()]) if (!runningIds.includes(id)) stepCache.delete(id);
+  }
+  setInterval(pollSteps, 3000);
+
   // Render active running tasks with friendly checklist & pro controls
   function renderRunning(runs) {
+    const fresh = runs.map((r) => r.id).filter((id) => !runningIds.includes(id));
+    runningIds = runs.map((r) => r.id);
+    if (fresh.length) setTimeout(pollSteps, 0);
     const box = $('running');
     box.replaceChildren();
     if (!runs.length) {
@@ -650,14 +690,10 @@
     for (const r of runs) {
       const elapsedStr = ago(now - Date.parse(r.started_at));
 
-      // Friendly Progress Checklist
-      const checklist = el('div', { className: 'steps-checklist' },
-        el('div', { className: 'step-item done' }, '✓ Task received & safe sandbox worktree created'),
-        el('div', { className: 'step-item active' },
-          el('span', { className: 'pulse' }),
-          `Agent currently implementing changes (${elapsedStr} elapsed)...`),
-        el('div', { className: 'step-item pending' }, '○ Automated testing & peer verification')
-      );
+      // Live steps from the run log (run-steps.js), filled by pollSteps().
+      const checklist = el('div', { className: 'live-steps' });
+      checklist.dataset.steps = r.id;
+      paintSteps(checklist, r.id);
 
       const header = el('div', { className: 'run-header-friendly' },
         el('div', { className: 'run-agent-badge' },
@@ -822,7 +858,8 @@
       const isDone = r.status === 'done';
       const isFailed = r.status === 'failed';
       const stClass = isDone ? 'st-done' : isFailed ? 'st-failed' : 'st-other';
-      const stLabel = isDone ? '✅ Completed' : isFailed ? '❌ Failed' : '⚡ In progress';
+      const stLabel = isDone ? (r.question ? '❓ Has a question' : '✅ Completed') : isFailed ? '❌ Failed'
+        : r.status === 'stopped' ? '■ Stopped' : r.status === 'timed_out' ? '⏱ Timed out' : '⚡ In progress';
 
       // --- 1. Thread Card View ---
       if (threadBox) {

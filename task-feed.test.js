@@ -70,3 +70,19 @@ test('myTasks shows queued issues first among non-urgent tasks', () => {
   assert.deepEqual(list.map((x) => x.stage.key), ['queued', 'done']);
   assert.equal(list[0].issue.number, 7);
 });
+
+test('a run that ended with a question needs the person', () => {
+  const st = stageOf(run('a', { question: 'Postgres or SQLite?' }));
+  assert.equal(st.key, 'needs-you');
+  assert.equal(st.question, 'Postgres or SQLite?');
+  assert.match(st.next, /Agent asks: Postgres or SQLite\?/);
+  assert.equal(stageOf(run('a', { status: 'stopped' })).key, 'stopped');
+  assert.equal(stageOf(run('a', { status: 'timed_out' })).key, 'failed');
+});
+
+test('diffEvents: question alerts, stopped runs stay quiet', () => {
+  const ev = diffEvents({ running: ['a', 'b'], approvals: [] }, {
+    running: [], recent: [run('a', { question: 'Which DB?' }), run('b', { status: 'stopped' })],
+  });
+  assert.deepEqual(ev.map((e) => [e.kind, e.title, e.body]), [['question', 'Agent has a question', 'Which DB?']]);
+});

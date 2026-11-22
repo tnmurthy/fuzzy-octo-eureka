@@ -122,6 +122,75 @@
     return el('div', { className: 'mt-hint' }, b, ' Get told when a task finishes or an agent needs your OK, even in another tab.');
   }
 
+  // ---- talking to an agent: reply to its question, or change its course ------
+  // One composer open at a time; drafts survive re-renders (every few s).
+  let open = null;            // { runId, mode: 'reply' | 'redirect' }
+  const drafts = {};
+  let held = false;           // a render skipped while someone was typing
+
+  async function postJson(url, body) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let b = {};
+    try { b = await res.json(); } catch (_) {}
+    if (!res.ok || !b.ok) throw new Error(b.error || `HTTP ${res.status}`);
+    return b;
+  }
+
+  function composer(r, mode) {
+    const key = `${mode}:${r.id}`;
+    const ta = el('textarea', {
+      className: 'f mt-input', rows: 2, maxLength: 8000, value: drafts[key] || '',
+      placeholder: mode === 'reply' ? 'Your answer… (Enter to send, Shift+Enter for a new line)' : 'What should the agent do instead? (Enter to send)',
+    });
+    ta.dataset.key = key;
+    const msg = el('span', { className: 'mt-msg muted' });
+    const bar = el('div', { className: 'mt-compose-bar' });
+    const close = () => { open = null; delete drafts[key]; held = false; render(); };
+    const busy = (on, text) => { bar.querySelectorAll('button').forEach((b) => { b.disabled = on; }); ta.disabled = on; msg.textContent = text || ''; };
+    const done = (text) => {
+      close();
+      toast({ kind: 'done', title: text, body: TF.clip(r.task, 120) }, () => {});
+      if (page().refresh) page().refresh();
+    };
+    const fail = (err) => { busy(false); msg.className = 'mt-msg err'; msg.textContent = err.message; };
+
+    const send = async () => {
+      const text = ta.value.trim();
+      if (!text) { ta.focus(); return; }
+      if (mode === 'reply') {
+        busy(true, 'Sending your answer…');
+        try { await postJson('/api/agents/followup', { runId: r.id, message: text }); done('Answer sent; the agent is back on it'); } catch (e) { fail(e); }
+      } else {
+        busy(true, 'Stopping the agent, then restarting it with your instruction… (up to 20 s)');
+        try { await postJson('/api/agents/redirect', { runId: r.id, message: text }); done('Agent redirected'); } catch (e) { fail(e); }
+      }
+    };
+    ta.addEventListener('input', () => { drafts[key] = ta.value; });
+    ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } if (e.key === 'Escape') close(); });
+    ta.addEventListener('blur', () => { if (held) setTimeout(() => { if (!box.contains(document.activeElement)) render(); }, 150); });
+
+    const mk = (label, fn, cls) => { const b = el('button', { type: 'button', className: `btn-sm ${cls || ''}`, textContent: label }); b.addEventListener('click', fn); bar.append(b); };
+    mk(mode === 'reply' ? '↵ Send answer' : '↪ Stop & redirect', send, 'mt-primary');
+    if (mode === 'redirect') {
+      mk('■ Just stop', async () => {
+        if (!window.confirm('Stop this agent now? Work it has committed stays on its branch; you can follow up later.')) return;
+        busy(true, 'Stopping…');
+        try { await postJson('/api/agents/stop', { runId: r.id }); done('Agent stopped'); } catch (e) { fail(e); }
+      }, 'mt-danger');
+    }
+    mk('Cancel', close);
+    bar.append(msg);
+    if (mode === 'reply') {
+      const chips = el('div', { className: 'mt-chips' }, ...['Yes, go ahead', 'No, keep it as it is', 'Your call; pick the simplest option'].map((c) => {
+        const b = el('button', { type: 'button', className: 'chip', textContent: c });
+        b.addEventListener('click', () => { ta.value = c; drafts[key] = c; ta.focus(); });
+        return b;
+      }));
+      return el('div', { className: 'mt-compose' }, chips, ta, bar);
+    }
+    return el('div', { className: 'mt-compose' }, ta, bar);
+  }
+
   function row(t) {
     const r = t.run;
     const actions = el('div', { className: 'mt-actions' });
@@ -130,28 +199,48 @@
       b.addEventListener('click', fn);
       actions.append(b);
     };
+    const toggle = (mode) => () => {
+      open = open && open.runId === r.id && open.mode === mode ? null : { runId: r.id, mode };
+      render();
+      const ta = box.querySelector('.mt-input');
+      if (ta) ta.focus();
+    };
     if (t.issue) {
       actions.append(el('a', { className: 'btn-sm', href: t.issue.url, target: '_blank', rel: 'noopener', textContent: `Issue #${t.issue.number}` }));
+    } else if (t.stage.question) {
+      if (r.canFollowUp) btn('Reply', toggle('reply'), 'mt-primary');
+      if (r.hasLog) btn('See result', () => page().openDeliverable(r));
     } else if (t.stage.key === 'needs-you') {
       btn('Answer now', () => openFor({ kind: 'approval' }), 'mt-primary');
     } else if (t.stage.key === 'working') {
+      btn('Change course', toggle('redirect'));
       if (r.hasLog) btn('Watch', () => page().openLog(r.id));
     } else {
       if (r.hasLog) btn(t.stage.key === 'failed' ? 'See why' : 'See result', () => page().openDeliverable(r), 'mt-primary');
       if (r.canFollowUp) btn('Follow up', () => page().openFollowUp && page().openFollowUp(r));
     }
-    return el('div', { className: `mt-row mt-${t.stage.key}` },
+    const main = el('div', { className: 'mt-main' },
+      el('div', { className: 'mt-task', title: r.task || '' },
+        r.parent ? el('span', { className: 'muted', textContent: '↳ follow-up: ' }) : null,
+        TF.clip(r.task, 140)),
+      el('div', { className: `mt-next ${t.stage.question ? 'mt-question' : 'muted'}`, textContent: t.stage.next }));
+    const rowEl = el('div', { className: `mt-row mt-${t.stage.key}` },
       el('span', { className: `mt-pill mt-tone-${t.stage.tone}`, textContent: t.stage.label }),
-      el('div', { className: 'mt-main' },
-        el('div', { className: 'mt-task', title: r.task || '' },
-          r.parent ? el('span', { className: 'muted', textContent: '↳ follow-up: ' }) : null,
-          TF.clip(r.task, 140)),
-        el('div', { className: 'mt-next muted', textContent: t.stage.next })),
+      main,
       actions);
+    const fits = open && open.runId === r.id
+      && ((open.mode === 'reply' && t.stage.question) || (open.mode === 'redirect' && t.stage.key === 'working'));
+    if (fits) rowEl.append(composer(r, open.mode));
+    return rowEl;
   }
 
   function render() {
+    // Never rebuild under someone's fingers: wait until they leave the box.
+    const typing = document.activeElement && document.activeElement.classList.contains('mt-input') && box.contains(document.activeElement);
+    if (typing) { held = true; return; }
+    held = false;
     const tasks = TF.myTasks(latest);
+    if (open && !tasks.some((t) => t.run.id === open.runId)) open = null;
     const needs = tasks.filter((t) => t.stage.key === 'needs-you').length;
     const head = el('div', { className: 'mt-head' },
       el('h2', { className: 'card-title', textContent: 'My tasks' }),

@@ -8,7 +8,7 @@ const path = require('path');
 const AGENTS = new Set(['claude', 'codex', 'agy', 'hermes', 'noop', 'auto']);
 // Dispatcher wording -> the table's allowed statuses. 'stale' is the reader's
 // own label for a run that lost its end line; the row stays 'running'.
-const STATUS = { running: 'running', stale: 'running', done: 'done', failed: 'failed', timed_out: 'timeout' };
+const STATUS = { running: 'running', stale: 'running', done: 'done', failed: 'failed', timed_out: 'timeout', stopped: 'failed' };
 
 // Repo name only: the local folder layout and log paths stay on this machine.
 function toRow(run, teamId) {

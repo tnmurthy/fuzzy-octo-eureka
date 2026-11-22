@@ -20,6 +20,7 @@
     review: { label: 'Ready for review', tone: 'green', order: 3 },
     done: { label: 'Done', tone: 'green', order: 4 },
     failed: { label: 'Failed', tone: 'red', order: 5 },
+    stopped: { label: 'Stopped', tone: 'muted', order: 6 },
   };
 
   const clip = (s, n) => {
@@ -37,8 +38,10 @@
     if (run.status === 'running' && asks.length) {
       return { key: 'needs-you', ...STAGES['needs-you'], next: `Agent is waiting for your Allow/Deny on ${asks[0].tool}. Unanswered requests are denied.` };
     }
+    if (run.question) return { key: 'needs-you', ...STAGES['needs-you'], question: run.question, next: `Agent asks: ${clip(run.question, 200)}` };
     if (run.status === 'running') return { key: 'working', ...STAGES.working, next: 'Agent is working. You will get an alert when it finishes.' };
-    if (run.status === 'failed') return { key: 'failed', ...STAGES.failed, next: 'Open the log to see why, then follow up or retry.' };
+    if (run.status === 'stopped') return { key: 'stopped', ...STAGES.stopped, next: run.canFollowUp ? 'You stopped this task. Follow up to continue it.' : 'You stopped this task.' };
+    if (run.status === 'failed' || run.status === 'timed_out' || run.status === 'stale') return { key: 'failed', ...STAGES.failed, next: 'Open the log to see why, then follow up or retry.' };
     if (run.commits_ahead > 0) return { key: 'review', ...STAGES.review, next: `${run.commits_ahead} change(s) on a draft branch. Review the deliverable, then push & open a PR or follow up.` };
     return { key: 'done', ...STAGES.done, next: run.canFollowUp ? 'Finished with no code changes. Read the answer, or follow up to continue.' : 'Finished with no code changes. Read the answer.' };
   }
@@ -85,10 +88,11 @@
       if (runningNow.has(id)) continue;
       const r = recent.find((x) => x.id === id);
       if (!r) continue; // not in the recent list yet: wait for the next poll
-      const failed = r.status === 'failed';
-      const kind = failed ? 'failed' : r.parent ? 'followup-done' : 'done';
-      const title = failed ? 'Task failed' : r.parent ? 'Follow-up finished' : 'Task finished';
-      const body = `${clip(r.task, 120)}${!failed && r.commits_ahead ? ` (${r.commits_ahead} change(s) ready to review)` : ''}`;
+      if (r.status === 'stopped') continue; // the person did this; no news
+      const failed = r.status !== 'done';
+      const kind = r.question ? 'question' : failed ? 'failed' : r.parent ? 'followup-done' : 'done';
+      const title = r.question ? 'Agent has a question' : failed ? 'Task failed' : r.parent ? 'Follow-up finished' : 'Task finished';
+      const body = r.question ? clip(r.question, 140) : `${clip(r.task, 120)}${!failed && r.commits_ahead ? ` (${r.commits_ahead} change(s) ready to review)` : ''}`;
       events.push({ kind, runId: id, title, body });
     }
     const askedBefore = new Set(prev.approvals || []);

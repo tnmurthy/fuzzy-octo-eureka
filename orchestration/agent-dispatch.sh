@@ -153,6 +153,12 @@ You are working in $worktree on branch $branch. Rules:
 Task:
 EOF
 prompt="$rules"$'\n'"$(cat "$prompt_file")"
+# Runs started from the Agents page (AGENT_CAN_ASK=1) may stop and ask the
+# person one question; the page shows it as "Needs you" with a reply box,
+# and the reply resumes this session (agents-api.js questionOf).
+if [ "${AGENT_CAN_ASK:-}" = 1 ]; then
+  prompt="$prompt"$'\n\n'"If you cannot continue without a decision only the person can make (a choice between approaches, missing access, unclear scope), do what you safely can, commit it, then end your final message with one line: QUESTION: <your question>. Ask at most one question, and only when it matters."
+fi
 
 # --- run ------------------------------------------------------------------------
 mkdir -p "$RUNS_DIR"
@@ -170,6 +176,15 @@ node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$r
   ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} ${AGENT_PARENT_RUN:+"parent=$AGENT_PARENT_RUN"} \
   ${AGENT_LEVEL:+"level=$AGENT_LEVEL"} started_at="$(iso_date)"
 
+# Stop (Agents page -> run-control.js): the dashboard signals this script and
+# every process under it. The trap lets the script outlive the signal and
+# still write the end line, as status=stopped; the session id stream-log.js
+# saved at start lets a follow-up resume where the agent was cut off.
+pidfile="$RUNS_DIR/$run_id.pid"
+echo "$$" > "$pidfile"
+stopped=""
+trap 'stopped=1' TERM
+
 # A review reads the change from a file instead of running `git diff` (its
 # level allows no shell). The file is excluded from git, so it never shows as
 # a change on the PR branch.
@@ -186,6 +201,7 @@ export AGENT_NAME="$agent"
 # One agent, one attempt, in the worktree; output to stdout.
 run_agent() {
   local who="$1" limit="$2"
+  [ -n "$stopped" ] && return 143
   case "$who" in
     claude) run_claude "$limit" ;;
     codex)  run_timeout "$limit" codex exec -C "$worktree" -s workspace-write \
@@ -291,6 +307,8 @@ run_auto() {
     else
       echo "== auto: $LOCAL_AGENT failed (exit $rc) - escalating to claude"
     fi
+    # Stopped from the Agents page: do not escalate to a paid run.
+    [ -n "$stopped" ] && { echo "== auto: stopped"; return 143; }
     # Throw away the local attempt; gitignored files (.env copies) survive.
     git -C "$(native "$worktree")" reset -q --hard "$start_sha"
     git -C "$(native "$worktree")" clean -q -fd
@@ -312,6 +330,8 @@ commits="$(git -C "$(native "$worktree")" rev-list --count "$base..HEAD" 2>/dev/
 status=done
 [ "$exit_code" -eq 0 ] || status=failed
 [ "$exit_code" -eq 124 ] && status=timed_out
+[ -n "$stopped" ] && status=stopped
+rm -f "$pidfile"
 
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" status="$status" \
   exit_code:="$exit_code" duration_s:="$(( $(date +%s) - started ))" \
