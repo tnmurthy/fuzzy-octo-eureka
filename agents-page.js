@@ -136,7 +136,10 @@
       });
       const data = await res.json();
       if (!data.ok) {
-        alert(data.error || 'Failed to push branch');
+        const where = Array.isArray(data.findings) && data.findings.length
+          ? `\n\n${data.findings.map((f) => `• ${f.file}${f.line ? `:${f.line}` : ''}: ${f.rule}`).join('\n')}`
+          : '';
+        alert(`${data.error || 'Failed to push branch'}${where}`);
         if (btn) {
           btn.disabled = false;
           btn.textContent = '❌ Push Failed (Retry)';

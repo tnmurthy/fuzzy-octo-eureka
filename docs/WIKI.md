@@ -12,7 +12,7 @@ The stack runs two concurrent isolated dashboard instances under PM2 on the host
 
 | Portal | Local URL | Public URL (Cloudflare) | Username | Password | Designated Purpose |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Team Arunachala** | `http://localhost:8787` | `https://team.mytestbed.tech` | `sriad` | `arunachala2026!` | **Operator Control**: Primary workstation for strategy, agent dispatch, and team task tracking. |
+| **Team Arunachala** | `http://localhost:8787` | `https://team.mytestbed.tech` | `sriad` | `AUTH_PASSWORD` (secrets file) | **Operator Control**: Primary workstation for strategy, agent dispatch, and team task tracking. |
 | **Drisyon AI** | `http://localhost:8788` | `https://drisyon.mytestbed.tech` | `drisyon` | `drisyon2026!` | **Autonomous Agency**: Multi-tenant client workspace, isolated memory boundaries, zero-credential IaC. |
 
 > **💡 Multi-Hop Security:**  

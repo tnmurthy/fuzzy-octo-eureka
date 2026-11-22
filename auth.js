@@ -6,10 +6,23 @@ const crypto = require('crypto');
 
 const COOKIE_NAME = 'arunachala_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const DEFAULT_SECRET = 'arunachala-secret-key-studio-mac-2026';
+// No built-in secret or password (2026-11-22): both used to have defaults
+// committed to this public repo, so a missing setting meant forgeable
+// cookies and a known password. Now a missing AUTH_SESSION_SECRET gets a
+// random per-process secret (sessions end on restart) and a missing
+// AUTH_PASSWORD disables password login.
+const MIN_SECRET = 16;
+let processSecret = null;
+let warned = false;
 
 function getSessionSecret() {
-  return process.env.AUTH_SESSION_SECRET || DEFAULT_SECRET;
+  const s = process.env.AUTH_SESSION_SECRET;
+  if (s && s.length >= MIN_SECRET) return s;
+  if (!processSecret) {
+    processSecret = crypto.randomBytes(32).toString('hex');
+    console.warn('auth: AUTH_SESSION_SECRET is not set (or under 16 chars); using a random secret, so sessions end when this process restarts.');
+  }
+  return processSecret;
 }
 
 function parseCookies(cookieHeader) {
@@ -58,13 +71,18 @@ function verifyToken(token) {
 
 function getExpectedCredentials() {
   const username = (process.env.AUTH_USERNAME || 'sriad').trim();
-  const password = process.env.AUTH_PASSWORD || 'arunachala2026!';
+  const password = process.env.AUTH_PASSWORD || '';
+  if (!password && !warned) {
+    warned = true;
+    console.warn('auth: AUTH_PASSWORD is not set; password login is disabled.');
+  }
   return { username, password };
 }
 
 function verifyCredentials(username, password) {
   if (!username || !password) return false;
   const expected = getExpectedCredentials();
+  if (!expected.password) return false;
 
   const userMatch = username.trim().toLowerCase() === expected.username.toLowerCase();
   
