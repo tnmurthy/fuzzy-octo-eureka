@@ -330,19 +330,23 @@
         msg.textContent = 'Opening GitHub issue…';
         const b = await post('/api/agents/task', { ...payload, repo: r.github });
         msg.className = 'msg ok';
-        msg.replaceChildren('Queued as ', el('a', { href: b.url, target: '_blank', rel: 'noopener', textContent: `issue #${b.number}` }), '. Your agent will begin within a minute.');
+        msg.replaceChildren('Queued as ', el('a', { href: b.url, target: '_blank', rel: 'noopener', textContent: `issue #${b.number}` }), '. An agent starts within a minute; follow it under My tasks. You will get an alert when the agent finishes.');
       } else {
         msg.textContent = 'Starting agent in safe draft sandbox…';
         const b = await post('/api/agents/run', { ...payload, repo: r.name });
         msg.className = 'msg ok';
         const watch = el('button', { className: 'btn-sm', style: 'margin-left:8px;', type: 'button', textContent: '👁️ Watch Live Progress' });
         watch.addEventListener('click', () => openLog(b.runId));
-        msg.replaceChildren(`Started work on ${r.name} (draft branch: ${b.branch}). `, watch);
+        msg.replaceChildren(`Started on ${r.name}. Follow it under My tasks; you will get an alert when it finishes or needs your OK. `, watch);
       }
       $('title').value = '';
       $('body').value = '';
       $('suggest').hidden = true;
       refresh();
+      const AP = window.AgentsPage;
+      if (AP.switchTab) AP.switchTab('tab-btn-live');
+      const mt = $('my-tasks');
+      if (mt) mt.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       msg.className = 'msg err';
       msg.textContent = err.message;

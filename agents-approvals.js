@@ -63,6 +63,7 @@
       b = await res.json();
     } catch (_) { return; }
     if (!b || !b.ok) return;
+    window.dispatchEvent(new CustomEvent('agents:approvals', { detail: b.pending }));
     if (!b.pending.length) { box.replaceChildren(); return; }
     box.replaceChildren(
       el('h3', { className: 'approvals-title', textContent: `Waiting for you (${b.pending.length})` }),
