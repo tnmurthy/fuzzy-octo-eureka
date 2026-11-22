@@ -2476,6 +2476,24 @@ function handleRequest(req, res) {
     return sendJson(res, 200, openclawCache);
   }
   // ── Drisyon Brain & Multi-Tenant Memory API ──
+  if (req.url.startsWith('/api/memory/clusters') && req.method === 'GET') {
+    const parsedUrl = new URL(req.url, 'http://localhost:8787');
+    const tenant = parsedUrl.searchParams.get('tenant') || null;
+    const clusters = memory.getClusters(tenant);
+    return sendJson(res, 200, { ok: true, count: clusters.length, clusters });
+  }
+  if (req.url.startsWith('/api/memory/cluster-search') && req.method === 'POST') {
+    readJsonBody(req, 16 * 1024)
+      .then((b) => {
+        const query = String(b.query || '').trim();
+        const tenantId = b.tenantId || 'tenant:drisyon_core';
+        const topK = Number(b.topK) || 5;
+        const resSearch = memory.clusterSearch(query, { tenantId, topK });
+        return sendJson(res, 200, { ok: true, ...resSearch });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    return;
+  }
   if (req.url.startsWith('/api/memory/invariants')) {
     return sendJson(res, 200, { ok: true, invariants: memory.proceduralInvariants });
   }

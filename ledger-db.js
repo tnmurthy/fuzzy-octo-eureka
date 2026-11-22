@@ -97,6 +97,16 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       details TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS vector_clusters (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      centroid TEXT NOT NULL,
+      memory_count INTEGER NOT NULL,
+      memory_ids TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Prepared statements
@@ -183,6 +193,26 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
 
   const selectBenchmarksStmt = db.prepare(`
     SELECT * FROM eval_benchmarks ORDER BY created_at DESC LIMIT ?
+  `);
+
+  const upsertClusterStmt = db.prepare(`
+    INSERT INTO vector_clusters (id, tenant_id, label, centroid, memory_count, memory_ids, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      tenant_id=excluded.tenant_id,
+      label=excluded.label,
+      centroid=excluded.centroid,
+      memory_count=excluded.memory_count,
+      memory_ids=excluded.memory_ids,
+      updated_at=excluded.updated_at
+  `);
+
+  const selectClustersStmt = db.prepare(`
+    SELECT * FROM vector_clusters ORDER BY tenant_id, updated_at DESC
+  `);
+
+  const deleteClusterStmt = db.prepare(`
+    DELETE FROM vector_clusters WHERE id = ?
   `);
 
   function logEvent({ type, runId = null, payload = {} }) {
@@ -369,6 +399,43 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     return rows;
   }
 
+  function saveCluster(cluster) {
+    const id = cluster.id || 'cluster_' + crypto.randomBytes(4).toString('hex');
+    const updatedAt = cluster.updatedAt || new Date().toISOString();
+    const memIds = cluster.memoryIds || [];
+    upsertClusterStmt.run(
+      id,
+      cluster.tenantId || 'tenant:default',
+      cluster.label || 'General Cluster',
+      JSON.stringify(cluster.centroid || []),
+      Number(cluster.memoryCount || memIds.length),
+      JSON.stringify(memIds),
+      updatedAt
+    );
+    return { ...cluster, id, updatedAt };
+  }
+
+  function getClusters(tenantId = null) {
+    let rows = selectClustersStmt.all().map((r) => ({
+      id: r.id,
+      tenantId: r.tenant_id,
+      label: r.label,
+      centroid: JSON.parse(r.centroid || '[]'),
+      memoryCount: r.memory_count,
+      memoryIds: JSON.parse(r.memory_ids || '[]'),
+      updatedAt: r.updated_at,
+    }));
+    if (tenantId && tenantId !== '*') {
+      rows = rows.filter((r) => r.tenantId === tenantId || r.tenantId === 'global');
+    }
+    return rows;
+  }
+
+  function deleteCluster(id) {
+    deleteClusterStmt.run(id);
+    return { ok: true, deleted: id };
+  }
+
   function close() {
     try {
       db.close();
@@ -388,6 +455,9 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     getPrecompactCheckpoint,
     saveBenchmarkResult,
     getBenchmarkResults,
+    saveCluster,
+    getClusters,
+    deleteCluster,
     close,
   };
 }
