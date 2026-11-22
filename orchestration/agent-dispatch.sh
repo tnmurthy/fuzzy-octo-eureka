@@ -325,8 +325,12 @@ commit_sandbox_changes() {
   fi
   title="$(if [ -n "${AGENT_TASK_TITLE:-}" ]; then printf '%s' "$AGENT_TASK_TITLE"; else head -c 72 "$prompt_file"; fi | tr '\r\n' '  ' | head -c 72)"
   msg="agent(hermes): ${title:-local agent changes}"
+  # Committer: this machine's git identity; the agent's own when none is set.
+  local ident=()
+  git -C "$(native "$worktree")" config user.email >/dev/null 2>&1 \
+    || ident=(-c user.name="Hermes local agent" -c user.email=hermes@localhost)
   git -C "$(native "$worktree")" -c core.hooksPath=/dev/null add -A \
-    && git -C "$(native "$worktree")" -c core.hooksPath=/dev/null commit -q --no-verify \
+    && git -C "$(native "$worktree")" -c core.hooksPath=/dev/null ${ident[@]+"${ident[@]}"} commit -q --no-verify \
          --author "Hermes local agent <hermes@localhost>" -m "$msg" -m "Run $run_id (sandboxed; committed by agent-dispatch.sh)" \
     && echo "== sandbox: committed the agent's changes ($(git -C "$(native "$worktree")" rev-parse --short HEAD))" \
     || echo "== sandbox: could not commit the agent's changes; they are left in the worktree"
