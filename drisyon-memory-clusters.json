@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-11-22T12:35:13.894Z",
+  "updatedAt": "2026-11-22T12:52:12.821Z",
   "clusterCount": 23,
   "clusters": [
     {
-      "id": "cluster_tenant_drisyon_core_baa6f8",
+      "id": "cluster_tenant_drisyon_core_5700e8",
       "tenantId": "tenant:drisyon_core",
       "label": "seats / across / drisyon",
       "centroid": [
@@ -140,10 +140,10 @@
       "memoryIds": [
         "mem_4777b4e89c73"
       ],
-      "updatedAt": "2026-11-22T12:35:13.886Z"
+      "updatedAt": "2026-11-22T12:52:12.812Z"
     },
     {
-      "id": "cluster_global_ec4e9c",
+      "id": "cluster_global_a22560",
       "tenantId": "global",
       "label": "modular-neuroclips: / overview / system",
       "centroid": [
@@ -280,10 +280,10 @@
       "memoryIds": [
         "mem_83c7aa52355d"
       ],
-      "updatedAt": "2026-11-22T12:35:13.887Z"
+      "updatedAt": "2026-11-22T12:52:12.813Z"
     },
     {
-      "id": "cluster_global_c4af17",
+      "id": "cluster_global_6657e6",
       "tenantId": "global",
       "label": "never / always / guardrails",
       "centroid": [
@@ -420,10 +420,10 @@
       "memoryIds": [
         "mem_ac31d8743c70"
       ],
-      "updatedAt": "2026-11-22T12:35:13.887Z"
+      "updatedAt": "2026-11-22T12:52:12.813Z"
     },
     {
-      "id": "cluster_global_2eb5b6",
+      "id": "cluster_global_e7c756",
       "tenantId": "global",
       "label": "with / architecture / stack",
       "centroid": [
@@ -560,10 +560,10 @@
       "memoryIds": [
         "mem_afe4b918fbec"
       ],
-      "updatedAt": "2026-11-22T12:35:13.888Z"
+      "updatedAt": "2026-11-22T12:52:12.813Z"
     },
     {
-      "id": "cluster_global_3bf0e5",
+      "id": "cluster_global_6c471a",
       "tenantId": "global",
       "label": "autonomous / arunachala / operations",
       "centroid": [
@@ -700,10 +700,10 @@
       "memoryIds": [
         "mem_34478e843a01"
       ],
-      "updatedAt": "2026-11-22T12:35:13.888Z"
+      "updatedAt": "2026-11-22T12:52:12.814Z"
     },
     {
-      "id": "cluster_tenant_default_7eec8a",
+      "id": "cluster_tenant_default_6af951",
       "tenantId": "tenant:default",
       "label": "8788 / drisyon / port",
       "centroid": [
@@ -840,10 +840,10 @@
       "memoryIds": [
         "mem_8999395c7072"
       ],
-      "updatedAt": "2026-11-22T12:35:13.888Z"
+      "updatedAt": "2026-11-22T12:52:12.814Z"
     },
     {
-      "id": "cluster_global_7e09ab",
+      "id": "cluster_global_05c767",
       "tenantId": "global",
       "label": "always / test / before",
       "centroid": [
@@ -980,10 +980,10 @@
       "memoryIds": [
         "mem_35912c1d291e"
       ],
-      "updatedAt": "2026-11-22T12:35:13.888Z"
+      "updatedAt": "2026-11-22T12:52:12.814Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_6b1d51",
+      "id": "cluster_tenant_drisyon_core_cb161c",
       "tenantId": "tenant:drisyon_core",
       "label": "mantis / automated / security",
       "centroid": [
@@ -1135,10 +1135,10 @@
         "mem_d429647e487b",
         "mem_1da71806d533"
       ],
-      "updatedAt": "2026-11-22T12:35:13.891Z"
+      "updatedAt": "2026-11-22T12:52:12.818Z"
     },
     {
-      "id": "cluster_tenant_default_a0ca99",
+      "id": "cluster_tenant_default_ca0b21",
       "tenantId": "tenant:default",
       "label": "plan / help / enrolling",
       "centroid": [
@@ -1277,10 +1277,10 @@
         "mem_09257ca3b444",
         "mem_1ca4db4ddc86"
       ],
-      "updatedAt": "2026-11-22T12:35:13.891Z"
+      "updatedAt": "2026-11-22T12:52:12.818Z"
     },
     {
-      "id": "cluster_tenant_default_3656fd",
+      "id": "cluster_tenant_default_2bafc5",
       "tenantId": "tenant:default",
       "label": "security / endpoints / check",
       "centroid": [
@@ -1417,10 +1417,10 @@
       "memoryIds": [
         "mem_08deb3ef94b8"
       ],
-      "updatedAt": "2026-11-22T12:35:13.891Z"
+      "updatedAt": "2026-11-22T12:52:12.818Z"
     },
     {
-      "id": "cluster_tenant_default_528542",
+      "id": "cluster_tenant_default_7c998b",
       "tenantId": "tenant:default",
       "label": "status / check / endpoint",
       "centroid": [
@@ -1557,10 +1557,10 @@
       "memoryIds": [
         "mem_e3e303e1826c"
       ],
-      "updatedAt": "2026-11-22T12:35:13.891Z"
+      "updatedAt": "2026-11-22T12:52:12.818Z"
     },
     {
-      "id": "cluster_tenant_default_bb15db",
+      "id": "cluster_tenant_default_04f86c",
       "tenantId": "tenant:default",
       "label": "mantis / automated / security",
       "centroid": [
@@ -1697,10 +1697,10 @@
       "memoryIds": [
         "mem_62c5e542d27c"
       ],
-      "updatedAt": "2026-11-22T12:35:13.891Z"
+      "updatedAt": "2026-11-22T12:52:12.818Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_da2b82",
+      "id": "cluster_tenant_drisyon_core_0952ba",
       "tenantId": "tenant:drisyon_core",
       "label": "directive / from / operator",
       "centroid": [
@@ -1838,10 +1838,10 @@
         "mem_7566cd1f7594",
         "mem_13fbfde699c8"
       ],
-      "updatedAt": "2026-11-22T12:35:13.892Z"
+      "updatedAt": "2026-11-22T12:52:12.819Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_984198",
+      "id": "cluster_tenant_drisyon_core_3e5a28",
       "tenantId": "tenant:drisyon_core",
       "label": "bd11c441f791cd9c2f390f435986e9c7a66b6d8ba469e22470543e6424080e84 / directive / from",
       "centroid": [
@@ -1978,10 +1978,10 @@
       "memoryIds": [
         "mem_1e92ba8d0f60"
       ],
-      "updatedAt": "2026-11-22T12:35:13.892Z"
+      "updatedAt": "2026-11-22T12:52:12.819Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_643287",
+      "id": "cluster_tenant_drisyon_core_ea6e1e",
       "tenantId": "tenant:drisyon_core",
       "label": "test-pubkey-789 / buzz / directive",
       "centroid": [
@@ -2118,10 +2118,10 @@
       "memoryIds": [
         "mem_8f7a9b6b2e5a"
       ],
-      "updatedAt": "2026-11-22T12:35:13.892Z"
+      "updatedAt": "2026-11-22T12:52:12.819Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_692746",
+      "id": "cluster_tenant_drisyon_core_b937ae",
       "tenantId": "tenant:drisyon_core",
       "label": "buzz / directive / from",
       "centroid": [
@@ -2261,10 +2261,10 @@
         "mem_89d36ae4404e",
         "mem_40ba48aad6c0"
       ],
-      "updatedAt": "2026-11-22T12:35:13.893Z"
+      "updatedAt": "2026-11-22T12:52:12.820Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_916cdb",
+      "id": "cluster_tenant_drisyon_core_2b80d2",
       "tenantId": "tenant:drisyon_core",
       "label": "buzz-user / directive / from",
       "centroid": [
@@ -2401,10 +2401,10 @@
       "memoryIds": [
         "mem_15223072dbca"
       ],
-      "updatedAt": "2026-11-22T12:35:13.892Z"
+      "updatedAt": "2026-11-22T12:52:12.819Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_25fd83",
+      "id": "cluster_tenant_drisyon_core_118de8",
       "tenantId": "tenant:drisyon_core",
       "label": "directive / from / sriad",
       "centroid": [
@@ -2541,10 +2541,10 @@
       "memoryIds": [
         "mem_09fda61b01e9"
       ],
-      "updatedAt": "2026-11-22T12:35:13.893Z"
+      "updatedAt": "2026-11-22T12:52:12.820Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_167c1f",
+      "id": "cluster_tenant_drisyon_core_7b37f1",
       "tenantId": "tenant:drisyon_core",
       "label": "calendar / 2026 / project",
       "centroid": [
@@ -2681,10 +2681,10 @@
       "memoryIds": [
         "mem_0bf0298c76f5"
       ],
-      "updatedAt": "2026-11-22T12:35:13.893Z"
+      "updatedAt": "2026-11-22T12:52:12.820Z"
     },
     {
-      "id": "cluster_tenant_bov_media_e9ad10",
+      "id": "cluster_tenant_bov_media_91e693",
       "tenantId": "tenant:bov_media",
       "label": "video / rendering / remotion",
       "centroid": [
@@ -2821,10 +2821,10 @@
       "memoryIds": [
         "mem_d6866abeb562"
       ],
-      "updatedAt": "2026-11-22T12:35:13.893Z"
+      "updatedAt": "2026-11-22T12:52:12.820Z"
     },
     {
-      "id": "cluster_tenant_client_railways_0dfe53",
+      "id": "cluster_tenant_client_railways_0d2edf",
       "tenantId": "tenant:client_railways",
       "label": "integrated / biometric / breath",
       "centroid": [
@@ -2961,10 +2961,10 @@
       "memoryIds": [
         "mem_0c411f5feb20"
       ],
-      "updatedAt": "2026-11-22T12:35:13.893Z"
+      "updatedAt": "2026-11-22T12:52:12.820Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_5808ed",
+      "id": "cluster_tenant_drisyon_core_56e4fa",
       "tenantId": "tenant:drisyon_core",
       "label": "whatsapp / archetype / reminder",
       "centroid": [
@@ -3101,10 +3101,10 @@
       "memoryIds": [
         "mem_16aca48c2afa"
       ],
-      "updatedAt": "2026-11-22T12:35:13.893Z"
+      "updatedAt": "2026-11-22T12:52:12.820Z"
     },
     {
-      "id": "cluster_tenant_drisyon_core_4a1a80",
+      "id": "cluster_tenant_drisyon_core_a37326",
       "tenantId": "tenant:drisyon_core",
       "label": "drisyon / delivery / engineering",
       "centroid": [
@@ -3241,7 +3241,7 @@
       "memoryIds": [
         "mem_06174e0b6380"
       ],
-      "updatedAt": "2026-11-22T12:35:13.894Z"
+      "updatedAt": "2026-11-22T12:52:12.821Z"
     }
   ]
 }
