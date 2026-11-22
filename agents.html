@@ -1138,6 +1138,48 @@
     .live-x { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .live-error .live-x { color:var(--status-red, #f87171); }
     .live-say .live-x { font-style:italic; white-space:normal; }
+    /* ---- task conversation drawer (agents-thread.js) ---- */
+    .thread-drawer { position:fixed; top:0; right:0; bottom:0; width:min(560px, 100vw); z-index:1500; display:flex; flex-direction:column; gap:10px; padding:16px; background:#0b1220; border-left:1px solid var(--border-color, #334155); box-shadow:-12px 0 30px rgba(0,0,0,0.45); }
+    .thread-drawer[hidden] { display:none; }
+    .td-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+    .td-title { margin:0; font-size:0.95rem; line-height:1.35; }
+    .td-card { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border-color, #334155); border-radius:8px; min-height:44px; }
+    .td-card-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+    .td-clock { font-size:0.75rem; color:var(--status-blue, #38bdf8); }
+    .td-next { font-size:0.76rem; }
+    .td-convo { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
+    .td-msg-row { display:flex; flex-direction:column; gap:3px; max-width:92%; }
+    .td-you { align-self:flex-end; align-items:flex-end; }
+    .td-who { font-size:0.68rem; color:#64748b; }
+    .td-bubble { white-space:pre-wrap; font-size:0.82rem; line-height:1.45; padding:8px 11px; border-radius:10px; background:#111c2e; border:1px solid var(--border-color, #334155); overflow-wrap:anywhere; }
+    .td-you .td-bubble { background:rgba(0,176,255,0.12); border-color:rgba(0,176,255,0.3); }
+    .td-failed .td-bubble { border-color:rgba(255,82,82,0.5); }
+    .td-ask { font-size:0.8rem; padding:6px 10px; border-radius:8px; background:rgba(255,193,7,0.08); }
+    .td-steps { margin:0; padding:6px 10px; border-radius:10px; background:#111c2e; }
+    .td-queue:empty { display:none; }
+    .td-queue { display:flex; flex-direction:column; gap:6px; padding:8px 10px; border:1px dashed var(--border-color, #334155); border-radius:8px; max-height:30vh; overflow-y:auto; }
+    .td-queue-head { font-size:0.76rem; }
+    .td-q-row { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:start; font-size:0.8rem; }
+    .td-q-n { color:#64748b; font-size:0.7rem; padding-top:2px; }
+    .td-q-text { white-space:pre-wrap; overflow-wrap:anywhere; }
+    .td-q-err .td-q-text { color:var(--status-red, #f87171); }
+    .td-q-error { font-size:0.72rem; margin-top:2px; }
+    .td-q-actions { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+    .td-composer { display:flex; flex-direction:column; gap:6px; }
+    .td-input { width:100%; resize:vertical; min-height:56px; }
+    .td-bar { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .td-hint { font-size:0.72rem; }
+    .td-send { font-weight:600; padding:6px 16px; white-space:nowrap; flex-shrink:0; }
+    .td-msg { font-size:0.74rem; min-height:1em; } .td-msg.err { color:var(--status-red, #f87171); }
+    .mt-clickable { cursor:pointer; } .mt-clickable:hover .mt-task { text-decoration:underline; }
+    @media (max-width: 640px) { .thread-drawer { padding:12px; } .td-q-row { grid-template-columns:1fr; } }
+    /* ---- always-allowed rules (agents-approvals.js) ---- */
+    .standing { margin-top:8px; font-size:0.78rem; }
+    .standing summary { cursor:pointer; color:#94a3b8; }
+    .standing-repo { margin:8px 0 4px; font-weight:600; font-size:0.76rem; }
+    .standing-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:3px 0; }
+    .standing-row code { font-size:0.74rem; overflow-wrap:anywhere; }
+    .standing-denied { color:#94a3b8; }
     .toast-stack { position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index:2000; max-width:min(360px, calc(100vw - 32px)); }
     .toast { display:block; position:relative; background:#0f172a; color:#e2e8f0; border:1px solid var(--border-color, #334155); border-left:4px solid var(--status-green, #4ade80); border-radius:8px; padding:10px 30px 10px 12px; font-size:0.8rem; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,0.4); }
     .toast-failed { border-left-color:var(--status-red, #f87171); }
@@ -1686,6 +1728,7 @@
   <script src="agents-page.js"></script>
   <script src="agents-workspace.js"></script>
   <script src="agents-approvals.js"></script>
+  <script src="agents-thread.js"></script>
   <script src="agents-notify.js"></script>
 </body>
 </html>

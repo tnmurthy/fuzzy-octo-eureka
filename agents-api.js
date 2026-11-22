@@ -16,6 +16,10 @@
 //   POST /api/agents/followup   { runId, message } -> resume that claude run's session
 //   POST /api/agents/stop       { runId } -> stop a running agent (run-control.js)
 //   POST /api/agents/redirect   { runId, message } -> stop it, then resume with the message
+//   GET  /api/agents/thread?id=R  the task R belongs to: every run (answer, question) + queue
+//   POST /api/agents/queue      { runId, text } -> send now if the agent is idle, else queue it
+//   POST /api/agents/queue/update { threadId, itemId, text? | move: up|down | remove }
+//   POST /api/agents/queue/steer  { threadId, itemId } -> stop the agent, deliver that message now
 //
 // The GitHub queue is cached for QUEUE_TTL_MS so a page refreshing every few
 // seconds does not burn the token's rate limit. Errors never carry the token.
@@ -23,6 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resultOf } = require('./followup');
+const { createAgentQueue } = require('./agent-queue');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
 const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
@@ -126,9 +131,50 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
+
+  /**
+   * Continue a finished run with a message: resume its session (same agent,
+   * branch, worktree). A run with no session to resume (a local run stopped
+   * before it reported one) gets a fresh run of the same agent on its branch.
+   * Returns dispatchRun's { status, body }.
+   */
+  async function continueWith(run, task) {
+    let r = await dispatchRun({ followUpOf: run.id, canAsk: true, task });
+    if (r.status === 400 && /no session/.test(String(r.body && r.body.error)) && run.agent && run.branch && run.repo) {
+      r = await dispatchRun({
+        agent: run.agent, repo: path.basename(String(run.repo).replace(/[\\/]+$/, '')), branch: run.branch, canAsk: true,
+        task: `${task}\n\n(Your earlier session on this branch could not be resumed; read the code and git log to see where it got to.)`,
+      });
+      r = { ...r, body: { ...r.body, fresh: true } };
+    }
+    return r;
+  }
+
+  // Messages written while an agent works wait here (agent-queue.js).
+  const agentQueue = queueFile && dispatchRun ? createAgentQueue({
+    file: queueFile,
+    loadRuns: () => loadRuns(),
+    continueRun: async (run, text) => {
+      const r = await continueWith(run, `Follow-up: ${text}`);
+      return r.status < 300 ? { ok: true, runId: r.body.runId } : { ok: false, error: (r.body && r.body.error) || `HTTP ${r.status}` };
+    },
+    now,
+    log: (m) => console.log(m),
+  }) : null;
+
+  /** Stop a running agent, wait for its end line, then continue it with `message`. */
+  async function redirectRun(runId, message) {
+    const st = runControl.stop(runId);
+    if (!st.ok) return { status: st.status || 409, body: { ok: false, error: st.error } };
+    const ended = await runControl.waitForEnd(runId);
+    if (!ended) return { status: 504, body: { ok: false, error: 'the agent was told to stop but has not finished yet; try again in a moment' } };
+    const task = `Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: ${message}`;
+    const r = await continueWith({ ...ended, id: runId }, task);
+    return { status: r.status, body: { ...r.body, stopped: runId } };
+  }
 
   const loadRuns = () => readRuns(runsFile, 5000).runs || [];
   const loadActive = () => {
@@ -292,24 +338,79 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           if (redirect && !message) return sendJson(res, 400, { ok: false, error: 'tell the agent what to do instead' });
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
           if (redirect && !dispatchRun) return sendJson(res, 503, { ok: false, error: 'follow-ups are not available' });
-          const st = runControl.stop(runId);
-          if (!st.ok) return sendJson(res, st.status || 409, { ok: false, error: st.error });
-          const ended = await runControl.waitForEnd(runId);
-          if (!ended) return sendJson(res, 504, { ok: false, error: 'the agent was told to stop but has not finished yet; try again in a moment' });
-          if (!redirect) return sendJson(res, 200, { ok: true, runId, status: ended.status });
-          const task = `Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: ${message}`;
-          let r = await dispatchRun({ followUpOf: runId, canAsk: true, task });
-          // A local (hermes) run reports its session id only at the end, so one
-          // stopped mid-way cannot be resumed: start the same agent afresh on
-          // the same branch (its worktree and commits are reused).
-          if (r.status === 400 && /no session/.test(String(r.body && r.body.error)) && ended.agent && ended.branch && ended.repo) {
-            r = await dispatchRun({
-              agent: ended.agent, repo: path.basename(String(ended.repo).replace(/[\\/]+$/, '')), branch: ended.branch, canAsk: true,
-              task: `${task}\n\n(Your earlier session on this branch was stopped before it could be resumed; read the code and git log to see where it got to.)`,
-            });
-            return sendJson(res, r.status, { ...r.body, stopped: runId, fresh: true });
+          if (!redirect) {
+            const st = runControl.stop(runId);
+            if (!st.ok) return sendJson(res, st.status || 409, { ok: false, error: st.error });
+            const ended = await runControl.waitForEnd(runId);
+            if (!ended) return sendJson(res, 504, { ok: false, error: 'the agent was told to stop but has not finished yet; try again in a moment' });
+            return sendJson(res, 200, { ok: true, runId, status: ended.status });
           }
-          return sendJson(res, r.status, { ...r.body, stopped: runId });
+          const r = await redirectRun(runId, message);
+          return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/thread' && req.method === 'GET') {
+      const id = url.searchParams.get('id') || '';
+      if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
+      const runs = loadRuns();
+      const t = agentQueue ? agentQueue.threadOf(id) : null;
+      const chain = t ? t.runs : runs.filter((r) => r.id === id);
+      if (!chain.length) { sendJson(res, 404, { ok: false, error: 'run not found' }); return true; }
+      const active = loadActive();
+      const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
+      const items = chain.map((r) => {
+        const j = r.status === 'running' || path.dirname(path.resolve(String(r.log || ''))) !== runsDir ? null : resultOf(r);
+        return {
+          ...slimRun(r, active),
+          canFollowUp: Boolean(canFollowUp(r)),
+          question: openQuestion(r, answered),
+          answer: j && j.result ? String(j.result).slice(0, 6000) : null,
+        };
+      });
+      const q = agentQueue ? agentQueue.view(id) : null;
+      sendJson(res, 200, { ok: true, threadId: t ? t.threadId : id, runs: items, queue: q ? q.items : [], inflight: q ? q.inflight : null, canQueue: Boolean(agentQueue) });
+      return true;
+    }
+    if (url.pathname.startsWith('/api/agents/queue') && req.method === 'POST') {
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!agentQueue) { sendJson(res, 503, { ok: false, error: 'the message queue is not available' }); return true; }
+      readJsonBody(req, 16 * 1024)
+        .then(async (b) => {
+          if (url.pathname === '/api/agents/queue') {
+            // Idle agent: send now (a follow-up). Working agent: queue it.
+            const t = agentQueue.threadOf(String(b.runId || ''));
+            if (!t) return sendJson(res, 404, { ok: false, error: 'run not found' });
+            const latest = t.runs[t.runs.length - 1];
+            const text = String(b.text || '').trim();
+            if (latest.status !== 'running' && !(agentQueue.view(t.threadId).items.length)) {
+              if (!text) return sendJson(res, 400, { ok: false, error: 'write a message' });
+              if (text.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
+              const r = await continueWith(latest, `Follow-up: ${text}`);
+              return sendJson(res, r.status, { ...r.body, sent: r.status < 300 });
+            }
+            const r = agentQueue.add({ runId: latest.id, text, by: actorOf(req) });
+            return sendJson(res, r.ok ? 201 : r.status, r.ok ? { ok: true, queued: true, threadId: r.threadId, item: r.item } : { ok: false, error: r.error });
+          }
+          if (url.pathname === '/api/agents/queue/update') {
+            const r = agentQueue.update({ threadId: String(b.threadId || ''), itemId: String(b.itemId || ''), text: b.text, move: b.move, remove: b.remove === true });
+            return sendJson(res, r.ok ? 200 : r.status, r.ok ? { ok: true } : { ok: false, error: r.error });
+          }
+          if (url.pathname === '/api/agents/queue/steer') {
+            // Deliver one queued message now: stop the working agent and redirect it.
+            if (!runControl) return sendJson(res, 503, { ok: false, error: 'stopping runs is not available' });
+            const t = agentQueue.threadOf(String(b.threadId || ''));
+            if (!t) return sendJson(res, 404, { ok: false, error: 'task not found' });
+            const latest = t.runs[t.runs.length - 1];
+            if (latest.status !== 'running') return sendJson(res, 409, { ok: false, error: 'the agent is not working; the message will be sent on the next check' });
+            const item = agentQueue.take({ threadId: t.threadId, itemId: String(b.itemId || '') });
+            if (!item) return sendJson(res, 404, { ok: false, error: 'queued message not found' });
+            const r = await redirectRun(latest.id, item.text);
+            if (r.status >= 300) agentQueue.add({ runId: latest.id, text: item.text, by: item.by }); // put it back
+            return sendJson(res, r.status, r.body);
+          }
+          return sendJson(res, 404, { ok: false, error: 'unknown queue action' });
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
@@ -397,7 +498,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     return false;
   }
 
-  return { handle, overview, log, createTask };
+  return { handle, overview, log, createTask, tickQueue: () => (agentQueue ? agentQueue.tick() : Promise.resolve([])) };
 }
 
 module.exports = { createAgentsApi, validateTask, linkOf, isSameSiteJson, questionOf, AGENTS };
