@@ -784,12 +784,18 @@ const dispatchSettings = require('./dispatch-settings').createDispatchSettings({
 let pendingPaidRuns = [];
 
 // Admin = someone at this Mac (local request, no tunnel) or a signed-in user
-// named in ADMIN_USERS (default: the dashboard login, AUTH_USERNAME).
-const ADMIN_USERS = (process.env.ADMIN_USERS || process.env.AUTH_USERNAME || 'sriad')
+// named in ADMIN_USERS (default: the dashboard login, AUTH_USERNAME, or Cloudflare Access allowed emails).
+const ADMIN_USERS = (process.env.ADMIN_USERS || `${process.env.AUTH_USERNAME || 'sriad'},${process.env.ACCESS_ALLOWED_EMAILS || ''}`)
   .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 function isAdmin(req) {
   if (!accessGate.requiresAccess(req)) return true;
-  return Boolean(req.sessionUser) && ADMIN_USERS.includes(String(req.sessionUser).toLowerCase());
+  if (!req.sessionUser) return false;
+  const user = String(req.sessionUser).toLowerCase();
+  if (ADMIN_USERS.includes(user)) return true;
+  const allowedEmails = (process.env.ACCESS_ALLOWED_EMAILS || '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (allowedEmails.includes(user)) return true;
+  return false;
 }
 const actorOf = (req) => req.sessionUser || 'local operator';
 

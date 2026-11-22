@@ -80,6 +80,17 @@
       </nav>
     </div>
 
+    <!-- Pending Approvals Alert Banner (Actionable in Cockpit) -->
+    <div id="cockpit-approvals-box" style="display: none; background: rgba(255, 179, 0, 0.08); border: 1px solid var(--status-amber); border-radius: 10px; padding: 16px 20px; margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <strong style="color: var(--status-amber); font-size: 0.96rem; display: flex; align-items: center; gap: 8px;">
+          <span>⚠️</span> <span>Action Waiting for Your Approval</span>
+        </strong>
+        <span class="badge b-amber" id="cockpit-approvals-count">1 Pending</span>
+      </div>
+      <div id="cockpit-approvals-list"></div>
+    </div>
+
     <div class="tiles">
       <div class="tile">
         <div class="n" id="stat-decisions">-</div>
@@ -268,6 +279,9 @@
         // Load Cognitive Blackboard Feed & SSE stream
         loadBlackboardData();
         initBlackboardStream();
+
+        // Check for pending agent action approvals
+        loadApprovalsData();
       } catch (err) {
         document.getElementById('timeline-container').innerHTML = `<div class="t-sub">Failed to load cockpit telemetry: ${err.message}</div>`;
       }
@@ -563,6 +577,66 @@
     }
 
     loadData();
+    setInterval(loadApprovalsData, 5000);
+
+    async function loadApprovalsData() {
+      try {
+        const res = await fetch('/api/agents/approvals');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.pending) && data.pending.length > 0) {
+          renderCockpitApprovals(data.pending);
+        } else {
+          const box = document.getElementById('cockpit-approvals-box');
+          if (box) box.style.display = 'none';
+        }
+      } catch (_) {
+        const box = document.getElementById('cockpit-approvals-box');
+        if (box) box.style.display = 'none';
+      }
+    }
+
+    function renderCockpitApprovals(pending) {
+      const box = document.getElementById('cockpit-approvals-box');
+      const list = document.getElementById('cockpit-approvals-list');
+      const count = document.getElementById('cockpit-approvals-count');
+      if (!box || !list) return;
+
+      count.textContent = `${pending.length} Pending`;
+      box.style.display = 'block';
+
+      list.innerHTML = pending.map(a => `
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <strong style="color: #fff; font-size: 0.9rem;">${escapeHtml(a.tool)}</strong>
+            <span class="mono" style="font-size: 0.78rem; color: var(--color-text-muted);">${escapeHtml(a.repo || '')} · Run ${escapeHtml(a.runId || '')} · Level: ${escapeHtml(a.level || 'auto')}</span>
+          </div>
+          <pre class="t-body" style="margin: 6px 0 12px; font-size: 0.8rem; overflow-x: auto;">${escapeHtml(a.summary || '')}</pre>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn" style="background: var(--status-green); padding: 5px 12px; font-size: 0.8rem;" onclick="decideCockpitApproval('${escapeHtml(a.id)}', 'allow', false)">✓ Allow once</button>
+            <button class="btn" style="background: var(--status-blue); padding: 5px 12px; font-size: 0.8rem;" onclick="decideCockpitApproval('${escapeHtml(a.id)}', 'allow', true)">★ Always allow this exact action</button>
+            <button class="btn-danger" style="padding: 5px 12px; font-size: 0.8rem;" onclick="decideCockpitApproval('${escapeHtml(a.id)}', 'deny', false)">✕ Deny</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function decideCockpitApproval(id, decision, remember) {
+      try {
+        const res = await fetch('/api/agents/approvals/decide', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, decision, remember })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          loadApprovalsData();
+        } else {
+          alert(`Could not record decision: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Request failed: ${err.message}`);
+      }
+    }
   </script>
 </body>
 </html>
