@@ -730,6 +730,7 @@ async function startDispatch(payload) {
     const result = await spawnAgentDispatch({
       agent, repo, repoPath, branch, task, readOnly, specialist, level, reviewBase,
       ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
+      canAsk: payload.canAsk === true && !readOnly,
     });
     return { status: 202, body: { ok: true, ...result, note: 'started; poll /api/runs for completion' } };
   } catch (err) {
@@ -839,12 +840,16 @@ const agentsApi = require('./agents-api').createAgentsApi({
   repoRegistry,
   dispatchRun: startDispatch,
   canFollowUp: (run) => followUpStatus(run).ok,
+  runControl: require('./run-control').createRunControl({
+    runsDir: path.dirname(RUNS_FILE),
+    loadRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
+  }),
   isAdmin,
   actorOf,
   github: process.env.GITHUB_TOKEN ? require('./orchestration/github-client').createGitHubClient({ token: process.env.GITHUB_TOKEN }) : null,
 });
 
-function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null, resumeSession = null, parentRun = null, level = null, reviewBase = null }) {
+function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOnly = false, specialist = null, resumeSession = null, parentRun = null, level = null, reviewBase = null, canAsk = false }) {
   const safeBranch = (branch && /^[a-zA-Z0-9._/-]+$/.test(branch)) ? branch : `agent/${Date.now()}`;
   const effectiveRunId = runId || `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${agent}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -896,6 +901,8 @@ function spawnAgentDispatch({ agent, repo, repoPath, branch, task, runId, readOn
     // Follow-ups: resume the earlier session; record which run this continues.
     if (resumeSession) dispatchEnv.AGENT_RESUME_SESSION = resumeSession; else delete dispatchEnv.AGENT_RESUME_SESSION;
     if (parentRun) dispatchEnv.AGENT_PARENT_RUN = parentRun; else delete dispatchEnv.AGENT_PARENT_RUN;
+    // Page-started runs may end with "QUESTION: ..." (agent-dispatch.sh).
+    if (canAsk) dispatchEnv.AGENT_CAN_ASK = '1'; else delete dispatchEnv.AGENT_CAN_ASK;
     // Approval level -> claude's flags. Levels that ask get a run token for
     // the approval helper; a review never asks (approval-levels.js).
     const runLevel = level || (readOnly ? 'review' : 'auto');

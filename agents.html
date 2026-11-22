@@ -1122,6 +1122,22 @@
     .mt-actions a.btn-sm { text-decoration:none; }
     .mt-primary { font-weight:600; }
     @media (max-width: 640px) { .mt-row { grid-template-columns:1fr; } .mt-actions { justify-content:flex-start; } }
+    .mt-row > .mt-compose { grid-column: 1 / -1; }
+    .mt-compose { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+    .mt-compose textarea { width:100%; resize:vertical; min-height:52px; }
+    .mt-compose-bar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .mt-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .mt-msg { font-size:0.74rem; } .mt-msg.err { color:var(--status-red, #f87171); }
+    .mt-danger { color:var(--status-red, #f87171); }
+    .mt-question { font-size:0.8rem; color:var(--status-amber, #fbbf24); font-weight:500; white-space:normal; }
+    .live-steps { display:flex; flex-direction:column; gap:3px; margin:8px 0; font-size:0.78rem; }
+    .live-sum { font-size:0.72rem; margin-bottom:2px; }
+    .live-step { display:grid; grid-template-columns:auto auto 1fr; gap:8px; align-items:baseline; opacity:0.75; }
+    .live-step.live-current { opacity:1; font-weight:600; }
+    .live-t { font-size:0.68rem; color:#64748b; }
+    .live-x { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .live-error .live-x { color:var(--status-red, #f87171); }
+    .live-say .live-x { font-style:italic; white-space:normal; }
     .toast-stack { position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index:2000; max-width:min(360px, calc(100vw - 32px)); }
     .toast { display:block; position:relative; background:#0f172a; color:#e2e8f0; border:1px solid var(--border-color, #334155); border-left:4px solid var(--status-green, #4ade80); border-radius:8px; padding:10px 30px 10px 12px; font-size:0.8rem; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,0.4); }
     .toast-failed { border-left-color:var(--status-red, #f87171); }
@@ -1666,6 +1682,7 @@
   </main>
 
   <script src="task-feed.js"></script>
+  <script src="run-steps.js"></script>
   <script src="agents-page.js"></script>
   <script src="agents-workspace.js"></script>
   <script src="agents-approvals.js"></script>
