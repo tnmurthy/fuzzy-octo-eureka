@@ -117,52 +117,7 @@
   window.toggleTaskNotifications = toggleTaskNotifications;
   window.playCompletionChime = playCompletionChime;
 
-  function notifyRunCompletion(run) {
-    if (!getAlertsEnabled()) return;
-    const isSuccess = run.status !== 'failed';
-    playCompletionChime(isSuccess);
-
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        const title = isSuccess ? '🤖 Agent Task Completed' : '⚠️ Agent Task Failed';
-        const body = `${run.task || 'Task'}\n${run.commits_ahead ? `+${run.commits_ahead} commits ahead` : 'Status: ' + (run.status || 'done')}`;
-        const n = new Notification(title, {
-          body,
-          icon: '/favicon.ico',
-          tag: `run-${run.id}`
-        });
-        n.onclick = () => {
-          window.focus();
-          if (run.hasLog) openDeliverable(run);
-        };
-      } catch (_) {}
-    }
-  }
-
-  let trackedRunningRuns = null;
-  function checkRunCompletions(runningList, recentList) {
-    const currentRunningIds = new Set((runningList || []).map(r => r.id));
-
-    if (trackedRunningRuns === null) {
-      trackedRunningRuns = new Map();
-      for (const r of runningList || []) {
-        trackedRunningRuns.set(r.id, r);
-      }
-      return;
-    }
-
-    for (const [id, prevRun] of trackedRunningRuns.entries()) {
-      if (!currentRunningIds.has(id)) {
-        const finished = (recentList || []).find(r => r.id === id) || { ...prevRun, status: 'done' };
-        notifyRunCompletion(finished);
-        trackedRunningRuns.delete(id);
-      }
-    }
-
-    for (const r of runningList || []) {
-      trackedRunningRuns.set(r.id, r);
-    }
-  }
+  // Completion / follow-up / approval alerts live in agents-notify.js.
 
   // ---- 1-Click Push Branch & Create PR -----------------------------------
   async function pushRunAndOpenPr(runId, btn) {
@@ -975,6 +930,16 @@
     });
   }
 
+  let lastRecent = [];
+  // Open the follow-up box for a finished run (used by the My tasks strip).
+  function openFollowUpFor(r) {
+    switchCockpitTab('tab-btn-threads');
+    openFollowUp = r.id;
+    renderRecent(lastRecent);
+    const t = document.getElementById(`fu-${r.id}`);
+    if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.focus(); }
+  }
+
   async function refresh() {
     try {
       const r = await fetch('/api/agents/overview');
@@ -984,8 +949,9 @@
       renderCapAdmin(b.admin, b.capSettings);
       renderRunning(b.running || []);
       renderBoard(b.queue);
-      renderRecent(b.recent || []);
-      checkRunCompletions(b.running || [], b.recent || []);
+      lastRecent = b.recent || [];
+      renderRecent(lastRecent);
+      window.dispatchEvent(new CustomEvent('agents:overview', { detail: b }));
     } catch (_) {
       $('queue-note').textContent = 'Dashboard unreachable; retrying…';
     }
@@ -1368,7 +1334,7 @@
   window.sendAgentsPageChatMessage = sendAgentsPageChatMessage;
 
   // Shared with agents-workspace.js (repos, roles, task submit).
-  window.AgentsPage = { refresh, openLog, openDeliverable, setSpecialist, setRole, el, $ };
+  window.AgentsPage = { refresh, openLog, openDeliverable, setSpecialist, setRole, el, $, switchTab: switchCockpitTab, openFollowUp: openFollowUpFor };
 
   loadSpecialists();
   initVoiceInput();

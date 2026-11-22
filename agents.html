@@ -150,6 +150,7 @@
     .cap.warn .cap-fill { background: var(--status-amber); }
     .cap.full .cap-fill { background: var(--status-red); }
     .cap-form { display: flex; align-items: center; gap: 6px; }
+    .cap-form[hidden] { display: none; }
     .cap-form input {
       width: 60px;
       background: var(--bg-secondary);
@@ -1099,6 +1100,35 @@
     }
   
     /* Approval cards (agents-approvals.js) */
+    /* ---- My tasks strip + toasts (agents-notify.js) ---- */
+    .mytasks { margin-bottom: 12px; }
+    .mt-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px; }
+    .mt-head .card-title { margin:0; }
+    .mt-head .muted { font-size:0.75rem; }
+    .mt-hint { font-size:0.76rem; margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; color:var(--text-muted, #94a3b8); }
+    .mt-list { display:flex; flex-direction:column; gap:6px; }
+    .mt-row { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; padding:8px 10px; border:1px solid var(--border-color); border-radius:8px; }
+    .mt-row.mt-needs-you { border-color:rgba(255,193,7,0.6); background:rgba(255,193,7,0.07); }
+    .mt-pill { font-size:0.7rem; font-weight:600; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+    .mt-tone-amber { background:rgba(255,193,7,0.18); color:var(--status-amber, #fbbf24); }
+    .mt-tone-blue { background:rgba(0,176,255,0.15); color:var(--status-blue, #38bdf8); }
+    .mt-tone-green { background:rgba(0,230,118,0.15); color:var(--status-green, #4ade80); }
+    .mt-tone-red { background:rgba(255,82,82,0.15); color:var(--status-red, #f87171); }
+    .mt-tone-muted { background:rgba(148,163,184,0.15); color:#94a3b8; }
+    .mt-main { min-width:0; }
+    .mt-task { font-size:0.83rem; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mt-next { font-size:0.74rem; margin-top:2px; }
+    .mt-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .mt-actions a.btn-sm { text-decoration:none; }
+    .mt-primary { font-weight:600; }
+    @media (max-width: 640px) { .mt-row { grid-template-columns:1fr; } .mt-actions { justify-content:flex-start; } }
+    .toast-stack { position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index:2000; max-width:min(360px, calc(100vw - 32px)); }
+    .toast { display:block; position:relative; background:#0f172a; color:#e2e8f0; border:1px solid var(--border-color, #334155); border-left:4px solid var(--status-green, #4ade80); border-radius:8px; padding:10px 30px 10px 12px; font-size:0.8rem; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,0.4); }
+    .toast-failed { border-left-color:var(--status-red, #f87171); }
+    .toast-approval { border-left-color:var(--status-amber, #fbbf24); }
+    .toast strong { display:block; }
+    .toast-body { margin-top:2px; color:#94a3b8; }
+    .toast-x { position:absolute; top:6px; right:6px; background:none; border:0; color:#94a3b8; cursor:pointer; }
     .approvals-box:empty { display: none; }
     .approvals-box { margin-bottom: 12px; }
     .approvals-title { font-size: 13px; margin: 0 0 6px; color: #b45309; }
@@ -1365,6 +1395,11 @@
       <!-- RIGHT: Execution Cockpit & Activity Hub -->
       <section class="cockpit-panel">
 
+        <!-- My tasks: every task's stage in plain words + alerts (agents-notify.js) -->
+        <div class="card mytasks" id="my-tasks" aria-live="polite">
+          <div class="empty">Loading your tasks…</div>
+        </div>
+
         <!-- Cockpit Segmented Tab Navigation -->
         <nav class="cockpit-nav">
           <div class="cockpit-tabs" role="tablist">
@@ -1630,8 +1665,10 @@
     </div>
   </main>
 
+  <script src="task-feed.js"></script>
   <script src="agents-page.js"></script>
   <script src="agents-workspace.js"></script>
   <script src="agents-approvals.js"></script>
+  <script src="agents-notify.js"></script>
 </body>
 </html>
