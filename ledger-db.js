@@ -83,6 +83,20 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       token_usage TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS eval_benchmarks (
+      id TEXT PRIMARY KEY,
+      challenge_id TEXT NOT NULL,
+      agent TEXT NOT NULL,
+      passed INTEGER NOT NULL,
+      score REAL NOT NULL,
+      turns INTEGER NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      tokens TEXT,
+      cost_usd REAL NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Prepared statements
@@ -139,7 +153,9 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       updated_at=excluded.updated_at
   `);
 
-  const selectDirectionRulesStmt = db.prepare(`SELECT * FROM direction_rules ORDER BY created_at DESC`);
+  const selectDirectionRulesStmt = db.prepare(
+    `SELECT * FROM direction_rules ORDER BY created_at DESC`
+  );
 
   const upsertPrecompactStmt = db.prepare(`
     INSERT INTO precompact_checkpoints (id, run_id, summary, completed_steps, pending_steps, working_hypotheses, files_touched, active_failures, token_usage, created_at)
@@ -155,7 +171,19 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       created_at=excluded.created_at
   `);
 
-  const selectPrecompactStmt = db.prepare(`SELECT * FROM precompact_checkpoints WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`);
+  const selectPrecompactStmt = db.prepare(
+    `SELECT * FROM precompact_checkpoints WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`
+  );
+
+  const insertBenchmarkStmt = db.prepare(`
+    INSERT INTO eval_benchmarks (
+      id, challenge_id, agent, passed, score, turns, duration_ms, tokens, cost_usd, details, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const selectBenchmarksStmt = db.prepare(`
+    SELECT * FROM eval_benchmarks ORDER BY created_at DESC LIMIT ?
+  `);
 
   function logEvent({ type, runId = null, payload = {} }) {
     const id = 'evt_' + crypto.randomBytes(6).toString('hex');
@@ -168,12 +196,12 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     if (runId) {
       return selectRunEventsStmt.all(runId).map((row) => ({
         ...row,
-        payload: JSON.parse(row.payload || '{}')
+        payload: JSON.parse(row.payload || '{}'),
       }));
     }
     return selectEventsStmt.all(limit).map((row) => ({
       ...row,
-      payload: JSON.parse(row.payload || '{}')
+      payload: JSON.parse(row.payload || '{}'),
     }));
   }
 
@@ -199,7 +227,7 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       assignedTo: row.assigned_to,
       dependencies: JSON.parse(row.dependencies || '[]'),
       metadata: JSON.parse(row.metadata || '{}'),
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     }));
   }
 
@@ -225,7 +253,7 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       approver: row.approver,
       verdict: row.verdict,
       rule: row.rule_text,
-      createdAt: row.created_at
+      createdAt: row.created_at,
     }));
   }
 
@@ -248,26 +276,28 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
 
   function loadDirectionRules(filter = {}) {
     const rows = selectDirectionRulesStmt.all();
-    return rows.map((row) => ({
-      id: row.id,
-      scope: row.scope,
-      targetId: row.target_id,
-      title: row.title,
-      ruleText: row.rule_text,
-      active: Boolean(row.active),
-      supersededBy: row.superseded_by,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    })).filter((r) => {
-      if (filter.activeOnly && !r.active) return false;
-      if (filter.scope && r.scope !== filter.scope) return false;
-      if (filter.targetId && r.targetId !== filter.targetId) return false;
-      return true;
-    });
+    return rows
+      .map((row) => ({
+        id: row.id,
+        scope: row.scope,
+        targetId: row.target_id,
+        title: row.title,
+        ruleText: row.rule_text,
+        active: Boolean(row.active),
+        supersededBy: row.superseded_by,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }))
+      .filter((r) => {
+        if (filter.activeOnly && !r.active) return false;
+        if (filter.scope && r.scope !== filter.scope) return false;
+        if (filter.targetId && r.targetId !== filter.targetId) return false;
+        return true;
+      });
   }
 
   function savePrecompactCheckpoint(checkpoint) {
-    const id = checkpoint.id || ('pc_' + crypto.randomBytes(6).toString('hex'));
+    const id = checkpoint.id || 'pc_' + crypto.randomBytes(6).toString('hex');
     const createdAt = checkpoint.createdAt || new Date().toISOString();
     upsertPrecompactStmt.run(
       id,
@@ -297,8 +327,46 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
       filesTouched: JSON.parse(row.files_touched || '[]'),
       activeFailures: JSON.parse(row.active_failures || '[]'),
       tokenUsage: JSON.parse(row.token_usage || '{}'),
-      createdAt: row.created_at
+      createdAt: row.created_at,
     };
+  }
+
+  function saveBenchmarkResult(result) {
+    const id = result.id || 'bm_' + crypto.randomBytes(6).toString('hex');
+    const createdAt = result.createdAt || new Date().toISOString();
+    insertBenchmarkStmt.run(
+      id,
+      result.challengeId || 'custom',
+      result.agent || 'unknown',
+      result.passed ? 1 : 0,
+      Number(result.score) || 0,
+      Number(result.turns) || 1,
+      Number(result.durationMs) || 0,
+      JSON.stringify(result.tokens || {}),
+      Number(result.costUsd) || 0,
+      JSON.stringify(result.details || {}),
+      createdAt
+    );
+    return { ...result, id, createdAt };
+  }
+
+  function getBenchmarkResults({ limit = 50, challengeId, agent } = {}) {
+    let rows = selectBenchmarksStmt.all(limit).map((r) => ({
+      id: r.id,
+      challengeId: r.challenge_id,
+      agent: r.agent,
+      passed: Boolean(r.passed),
+      score: r.score,
+      turns: r.turns,
+      durationMs: r.duration_ms,
+      tokens: JSON.parse(r.tokens || '{}'),
+      costUsd: r.cost_usd,
+      details: JSON.parse(r.details || '{}'),
+      createdAt: r.created_at,
+    }));
+    if (challengeId) rows = rows.filter((r) => r.challengeId === challengeId);
+    if (agent) rows = rows.filter((r) => r.agent === agent);
+    return rows;
   }
 
   function close() {
@@ -318,11 +386,13 @@ function createLedgerDB({ dbPath = DEFAULT_DB_PATH } = {}) {
     loadDirectionRules,
     savePrecompactCheckpoint,
     getPrecompactCheckpoint,
-    close
+    saveBenchmarkResult,
+    getBenchmarkResults,
+    close,
   };
 }
 
 module.exports = {
   createLedgerDB,
-  DEFAULT_DB_PATH
+  DEFAULT_DB_PATH,
 };

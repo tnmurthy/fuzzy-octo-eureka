@@ -118,6 +118,7 @@
       <button class="tab" id="tab-blackboard" aria-selected="false" onclick="switchView('blackboard')">Blackboard Feed</button>
       <button class="tab" id="tab-router" aria-selected="false" onclick="switchView('router')">Model Router</button>
       <button class="tab" id="tab-antidotes" aria-selected="false" onclick="switchView('antidotes')">Operational Antidotes</button>
+      <button class="tab" id="tab-eval" aria-selected="false" onclick="switchView('eval')">Agent Benchmarks</button>
     </div>
 
     <!-- Timeline View -->
@@ -356,6 +357,55 @@
         </table>
       </div>
     </div>
+
+    <!-- Evaluation & Benchmarks View -->
+    <div id="view-eval" class="card" style="display: none;">
+      <h2>Agent Evaluation &amp; Regression Leaderboard <span class="badge b-purple">DEC-016</span> <span class="badge b-green">Continuous Quality</span></h2>
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 16px;">
+        Standardized benchmark challenges measuring coding accuracy, turn efficiency, speed, and unit economics across local Apple Silicon models (Hermes on Ollama) vs frontier models (Claude 3.5 Sonnet).
+      </p>
+
+      <!-- Leaderboard Table -->
+      <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 10px;">Model Performance Leaderboard</h3>
+      <div class="table-wrap" style="margin-bottom: 24px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Agent Model</th>
+              <th>Total Runs</th>
+              <th>Pass Rate</th>
+              <th>Avg Score</th>
+              <th>Avg Turns</th>
+              <th>Avg Latency</th>
+              <th>Total Spend (USD)</th>
+            </tr>
+          </thead>
+          <tbody id="eval-leaderboard-tbody">
+            <tr><td colspan="7">Loading model leaderboard...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Standard Challenges Catalog -->
+      <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 10px;">Built-in Benchmark Challenges</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Challenge Name</th>
+              <th>Difficulty</th>
+              <th>Target Model</th>
+              <th>Target Turns / Speed</th>
+              <th>Verification Test</th>
+            </tr>
+          </thead>
+          <tbody id="eval-challenges-tbody">
+            <tr><td colspan="6">Loading benchmark challenges...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -388,6 +438,9 @@
 
         // Load Operational Failure Antidotes
         loadAntidotesData();
+
+        // Load Agent Evaluation Benchmarks
+        loadEvalData();
 
         // Check for pending agent action approvals
         loadApprovalsData();
@@ -580,12 +633,60 @@
     }
 
     function switchView(viewName) {
-      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router', 'antidotes'].forEach(v => {
+      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router', 'antidotes', 'eval'].forEach(v => {
         const el = document.getElementById(`view-${v}`);
         const tab = document.getElementById(`tab-${v}`);
         if (el) el.style.display = v === viewName ? 'block' : 'none';
         if (tab) tab.setAttribute('aria-selected', v === viewName ? 'true' : 'false');
       });
+    }
+
+    async function loadEvalData() {
+      try {
+        const [cRes, lRes] = await Promise.all([
+          fetch('/api/eval/challenges'),
+          fetch('/api/eval/leaderboard')
+        ]);
+        const cData = await cRes.json();
+        const lData = await lRes.json();
+
+        // Render Challenges
+        const cTbody = document.getElementById('eval-challenges-tbody');
+        if (cTbody && cData.ok && Array.isArray(cData.challenges)) {
+          cTbody.innerHTML = cData.challenges.map(c => `
+            <tr>
+              <td><span class="badge b-purple mono">${escapeHtml(c.id)}</span></td>
+              <td><strong>${escapeHtml(c.name)}</strong><br><span style="font-size: 0.78rem; color: var(--color-text-muted);">${escapeHtml(c.description)}</span></td>
+              <td><span class="badge ${c.difficulty === 'high' ? 'b-red' : c.difficulty === 'low' ? 'b-green' : 'b-blue'}">${c.difficulty.toUpperCase()}</span></td>
+              <td><span class="mono" style="color: #79c0ff;">${escapeHtml(c.targetAgent)}</span></td>
+              <td>&le; ${c.targetTurns} turns · ${c.targetDurationMs / 1000}s</td>
+              <td><code class="mono" style="font-size: 0.78rem; color: #7ee787;">${escapeHtml(c.testCommand)}</code></td>
+            </tr>
+          `).join('');
+        }
+
+        // Render Leaderboard
+        const lTbody = document.getElementById('eval-leaderboard-tbody');
+        if (lTbody && lData.ok && Array.isArray(lData.agents)) {
+          if (!lData.agents.length) {
+            lTbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No evaluation benchmark runs recorded yet. Standard challenges are ready.</td></tr>';
+          } else {
+            lTbody.innerHTML = lData.agents.map(a => `
+              <tr>
+                <td><strong>${escapeHtml(a.agent)}</strong></td>
+                <td>${a.totalRuns}</td>
+                <td><span class="badge ${a.passRate >= 80 ? 'b-green' : a.passRate >= 50 ? 'b-blue' : 'b-amber'}">${a.passRate}%</span></td>
+                <td><strong>${a.avgScore}</strong> / 100</td>
+                <td>${a.avgTurns}</td>
+                <td>${(a.avgDurationMs / 1000).toFixed(1)}s</td>
+                <td>${a.totalCostUsd === 0 ? '<span class="badge b-green">$0.00 (Local)</span>' : `$${a.totalCostUsd.toFixed(4)}`}</td>
+              </tr>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load eval data:', err);
+      }
     }
 
     async function loadAntidotesData() {

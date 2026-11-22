@@ -15,7 +15,7 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
     const evt = ledger.logEvent({
       type: 'DISPATCH_START',
       runId: 'run-101',
-      payload: { agent: 'claude', branch: 'agent/issue-5' }
+      payload: { agent: 'claude', branch: 'agent/issue-5' },
     });
     assert.equal(evt.type, 'DISPATCH_START');
 
@@ -30,7 +30,7 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
       status: 'in_progress',
       assignedTo: 'worker-a',
       dependencies: ['task-100'],
-      metadata: { priority: 'high' }
+      metadata: { priority: 'high' },
     });
 
     const tasks = ledger.loadTasks();
@@ -45,7 +45,7 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
       driver: 'Systems Architect',
       approver: 'Chairman',
       verdict: 'RATIFIED',
-      rule: 'Local ledger uses node:sqlite with WAL pragma.'
+      rule: 'Local ledger uses node:sqlite with WAL pragma.',
     });
 
     const decisions = ledger.loadDecisions();
@@ -61,7 +61,7 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
       title: 'Testing Discipline',
       ruleText: 'Require at least 1 test before merging.',
       active: true,
-      supersededBy: null
+      supersededBy: null,
     });
 
     const dirRules = ledger.loadDirectionRules();
@@ -80,7 +80,7 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
       workingHypotheses: ['Check ReBAC policy before returning 200'],
       filesTouched: ['server.js', 'schema.sql'],
       activeFailures: ['Missing permission user:drisyon'],
-      tokenUsage: { turns: 12, totalTokens: 18000 }
+      tokenUsage: { turns: 12, totalTokens: 18000 },
     });
 
     const cp = ledger.getPrecompactCheckpoint('run-101');
@@ -91,6 +91,27 @@ test('ledger db records events, tasks, and decisions with SQLite WAL mode', () =
     assert.equal(cp.pendingSteps.length, 2);
     assert.equal(cp.filesTouched.length, 2);
     assert.equal(cp.activeFailures[0], 'Missing permission user:drisyon');
+
+    // 6. Save and load evaluation benchmarks
+    ledger.saveBenchmarkResult({
+      id: 'bm-101',
+      challengeId: 'pure-function-refactor',
+      agent: 'hermes',
+      passed: true,
+      score: 95.5,
+      turns: 2,
+      durationMs: 8500,
+      tokens: { input: 1200, output: 400 },
+      costUsd: 0,
+      details: { testSummary: '10/10 passed' },
+    });
+
+    const bms = ledger.getBenchmarkResults({ challengeId: 'pure-function-refactor' });
+    assert.equal(bms.length, 1);
+    assert.equal(bms[0].id, 'bm-101');
+    assert.equal(bms[0].agent, 'hermes');
+    assert.equal(bms[0].passed, true);
+    assert.equal(bms[0].score, 95.5);
   } finally {
     ledger.close();
     try {
