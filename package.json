@@ -14,7 +14,9 @@
     "agents": "node scripts/agents.js",
     "reload": "pm2 reload ArunachalaDashboard DrisyonDashboard",
     "restart:stack": "pm2 restart ecosystem.config.js",
-    "setup:hooks": "bash scripts/install-git-hooks.sh"
+    "setup:hooks": "bash scripts/install-git-hooks.sh",
+    "health": "bash scripts/healthcheck.sh",
+    "health:json": "bash scripts/healthcheck.sh --json"
   },
   "engines": {
     "node": ">=18"
