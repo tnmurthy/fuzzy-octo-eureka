@@ -33,6 +33,13 @@ const deny = (message) => ({ behavior: 'deny', message });
 
 async function decide(toolName, input) {
   if (!RUN_ID || !TOKEN) return deny('approvals are not set up for this run');
+
+  // Least-privilege role check: fail closed immediately with recovery guidance
+  const disallowed = (process.env.DISALLOWED_TOOLS || '').split(/\s+/).filter(Boolean);
+  if (disallowed.some((d) => toolName === d || toolName.startsWith(`${d}(`) || toolName.startsWith(`${d}:`))) {
+    return deny(`tool "${toolName}" is prohibited for this role by least-privilege policy; choose a read-only alternative or request role escalation`);
+  }
+
   const filed = await fetch(`${BASE}/api/agents/approvals/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

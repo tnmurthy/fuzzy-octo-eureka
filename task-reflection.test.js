@@ -1,7 +1,7 @@
 // node --test task-reflection.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseLogArtifacts, synthesizeReflection, recordRunReflection } = require('./task-reflection');
+const { parseLogArtifacts, synthesizeReflection, recordRunReflection, extractAntidoteFromFailure } = require('./task-reflection');
 
 test('parseLogArtifacts extracts tools, chat messages, and test outcomes', () => {
   const sampleLog = `
@@ -76,4 +76,38 @@ test('recordRunReflection records reflection in memory engine without duplicates
   assert.equal(res2.ok, true);
   assert.equal(res2.already, true);
   assert.equal(stored.length, 1); // Not duplicated
+});
+
+test('extractAntidoteFromFailure identifies EADDRINUSE and stores antidote', () => {
+  const run = {
+    id: 'run-fail-1',
+    repo: 'arunachala-dashboard',
+    task: 'Start background service',
+    status: 'failed'
+  };
+
+  const logText = `
+    Error: listen EADDRINUSE: address already in use :::8787
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+  `;
+
+  const antidote = extractAntidoteFromFailure({ run, logText });
+  assert.ok(antidote);
+  assert.match(antidote.pattern, /Port Conflict/);
+  assert.match(antidote.antidote, /PM2/);
+
+  const antidotesStored = [];
+  const fakeMemory = {
+    episodicMemory: [],
+    storeMemory: (item) => item,
+    storeAntidote: (ant) => {
+      antidotesStored.push(ant);
+      return ant;
+    }
+  };
+
+  const res = recordRunReflection({ run, memory: fakeMemory, logText });
+  assert.equal(res.ok, true);
+  assert.equal(antidotesStored.length, 1);
+  assert.equal(antidotesStored[0].pattern, antidote.pattern);
 });

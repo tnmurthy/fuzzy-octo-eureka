@@ -34,3 +34,17 @@ Thumbs.db
 .env*
 apis.txt
 secrets/
+
+# Local SQLite ledgers
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+.venv/
+campusgtm_signals/.venv/
+__pycache__/
+*.pyc
+
+# Claude Code personal settings
+.claude/settings.local.json

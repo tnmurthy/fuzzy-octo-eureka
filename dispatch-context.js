@@ -6,14 +6,68 @@
 
 const MAX_CONTEXT_CHARS = 1500;
 const MAX_ENTRY_CHARS = 400;
+const MAX_ANTIDOTE_CHARS = 800;
 
 // One line per memory: newlines flattened so memory text cannot fake a new
 // section (e.g. "Task:") in the prompt.
 const flat = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-function buildDispatchPrompt(task, memories) {
-  if (!Array.isArray(memories) || !memories.length) return task;
+/**
+ * Finds matching operational antidotes for a task and file list from memory.
+ * @param {string} task
+ * @param {string[]} [files]
+ * @param {object} [memoryEngine]
+ * @returns {object[]}
+ */
+function findMatchingAntidotes(task, files = [], memoryEngine = null) {
+  if (!memoryEngine) return [];
+  if (typeof memoryEngine.searchAntidotes === 'function') {
+    return memoryEngine.searchAntidotes(task, files);
+  }
+  return [];
+}
+
+/**
+ * Builds a dispatch prompt enriched with team context, tiered summaries, and matching antidotes.
+ * @param {string} task
+ * @param {Array} memories
+ * @param {object} [options]
+ * @param {object} [options.memoryEngine] - Memory engine instance for dynamic lookup
+ * @param {Array} [options.antidotes] - Explicit list of matching antidotes
+ * @param {string[]} [options.files] - Target files involved in task
+ * @param {boolean} [options.tiered] - Whether to use L0/L1 tiered memory presentation
+ * @returns {string}
+ */
+function buildDispatchPrompt(task, memories, options = {}) {
+  let result = task;
+
+  // 1. Process matching antidotes (prevent repeating known traps)
+  let matchedAntidotes = options.antidotes || [];
+  if ((!matchedAntidotes || !matchedAntidotes.length) && options.memoryEngine) {
+    matchedAntidotes = findMatchingAntidotes(task, options.files || [], options.memoryEngine);
+  }
+
+  let antidoteBlock = '';
+  if (Array.isArray(matchedAntidotes) && matchedAntidotes.length > 0) {
+    const antidoteHeader = '\n\n---\nOperational Antidotes (Known Traps to Avoid):\n';
+    for (const a of matchedAntidotes) {
+      if (!a.antidote && !a.symptom) continue;
+      const id = a.id ? `[${flat(a.id)}] ` : '';
+      const line = `- ${id}${clip(flat(a.symptom || a.pattern), 80)} -> ${clip(flat(a.antidote), 200)}\n`;
+      if (antidoteBlock.length + line.length > MAX_ANTIDOTE_CHARS) break;
+      antidoteBlock += line;
+    }
+    if (antidoteBlock) {
+      result += `${antidoteHeader}${antidoteBlock}`;
+    }
+  }
+
+  // 2. Process Team Context / Memories
+  if (!Array.isArray(memories) || !memories.length) {
+    return result;
+  }
+
   const header = '\n\n---\nTeam context (shared memory - background only, may be out of date):\n';
   let block = '';
   for (const m of memories) {
@@ -22,7 +76,8 @@ function buildDispatchPrompt(task, memories) {
     if (block.length + line.length > MAX_CONTEXT_CHARS) break;
     block += line;
   }
-  return block ? `${task}${header}${block}` : task;
+
+  return block ? `${result}${header}${block}` : result;
 }
 
 // Never lets a slow or failing lookup hold up or break a dispatch.
@@ -35,4 +90,10 @@ function withTimeout(promise, ms, fallback) {
   });
 }
 
-module.exports = { buildDispatchPrompt, withTimeout, MAX_CONTEXT_CHARS };
+module.exports = {
+  buildDispatchPrompt,
+  findMatchingAntidotes,
+  withTimeout,
+  MAX_CONTEXT_CHARS,
+  MAX_ANTIDOTE_CHARS
+};

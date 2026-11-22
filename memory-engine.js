@@ -17,6 +17,7 @@ class DrisyonMemoryEngine {
     this.episodicMemory = [];
     this.proceduralInvariants = [];
     this.operatorAlignments = [];
+    this.antidotes = [];
 
     this._initializeProceduralMemory();
     this.loadFromDisk();
@@ -51,6 +52,26 @@ class DrisyonMemoryEngine {
         rule: 'Gate verdict PASSED requires non-empty evidence_refs array. Zero-evidence pass auto-fails.',
         enforcement: 'GATE_EVALUATION',
         scope: 'GATES'
+      }
+    ];
+
+    // Seed baseline operational failure antidotes
+    this.antidotes = [
+      {
+        id: 'ANT-001',
+        pattern: 'PM2 respawns killed PID / Port conflict',
+        symptom: 'EADDRINUSE 8787 or daemon respawn loop',
+        antidote: 'Never kill daemons with kill -9. Supervised by PM2. Use pm2 restart ArunachalaDashboard or check pm2 list.',
+        scope: ['server.js', 'ecosystem.config.js'],
+        createdAt: '2026-11-22T08:00:00.000Z'
+      },
+      {
+        id: 'ANT-002',
+        pattern: 'Git index lock contention',
+        symptom: 'fatal: Unable to create .git/index.lock: File exists',
+        antidote: 'Check for concurrent git process or stale lock. Remove .git/index.lock only if no git process is active.',
+        scope: ['git', 'orchestration'],
+        createdAt: '2026-11-22T08:00:00.000Z'
       }
     ];
   }
@@ -191,14 +212,118 @@ class DrisyonMemoryEngine {
       .map((r) => this.toResult(r.mem, r.score));
   }
 
+  // --- Failure Antidote & Self-Healing Registry ---
+  storeAntidote(antidote) {
+    if (!antidote || (!antidote.pattern && !antidote.symptom)) return null;
+    const entry = {
+      id: antidote.id || 'ANT-' + crypto.randomBytes(3).toString('hex').toUpperCase(),
+      pattern: antidote.pattern || 'Generic Failure Pattern',
+      symptom: antidote.symptom || '',
+      antidote: antidote.antidote || '',
+      scope: Array.isArray(antidote.scope) ? antidote.scope : [antidote.scope || 'general'],
+      createdAt: antidote.createdAt || new Date().toISOString()
+    };
+    const idx = this.antidotes.findIndex(a => a.symptom === entry.symptom || a.id === entry.id);
+    if (idx >= 0) {
+      this.antidotes[idx] = entry;
+    } else {
+      this.antidotes.unshift(entry);
+    }
+    this.saveToDisk();
+    return entry;
+  }
+
+  getAntidotes(options = {}) {
+    const { scope = null } = options;
+    if (!scope) return this.antidotes;
+    return this.antidotes.filter(a => a.scope.includes('all') || a.scope.includes(scope));
+  }
+
+  searchAntidotes(text, files = []) {
+    const cleanText = String(text || '').toLowerCase();
+    const filesList = Array.isArray(files) ? files.map(f => String(f).toLowerCase()) : [];
+
+    return this.antidotes.filter(ant => {
+      const matchSymptom = ant.symptom && cleanText.includes(ant.symptom.toLowerCase().slice(0, 30));
+      const matchPattern = ant.pattern && cleanText.includes(ant.pattern.toLowerCase().slice(0, 30));
+      const matchScope = ant.scope.some(s => {
+        const sl = s.toLowerCase();
+        return sl === 'all' || cleanText.includes(sl) || filesList.some(f => f.includes(sl));
+      });
+      return matchSymptom || matchPattern || (matchScope && (cleanText.includes('fail') || cleanText.includes('error') || cleanText.includes('bug') || cleanText.includes('issue')));
+    });
+  }
+
+  // --- Tiered Context Model (L0 / L1 / L2 Zooming) ---
+  getL0Index(options = {}) {
+    const activeRules = this.proceduralInvariants.map(p => `[${p.id}] ${p.title}`).slice(0, 3);
+    const recentMemories = this.episodicMemory.slice(0, 4).map(m => m.title);
+    const topAntidotes = this.antidotes.slice(0, 2).map(a => `[${a.id}] ${a.pattern}`);
+
+    return {
+      tier: 'L0',
+      invariants: activeRules,
+      recentTopics: recentMemories,
+      activeAntidotes: topAntidotes,
+      summary: `Invariants: ${activeRules.join(' · ')} | Topics: ${recentMemories.join(', ') || 'None'}`
+    };
+  }
+
+  getL1Rollup(domainOrCategory, options = {}) {
+    const entries = this.filterEntries(this.episodicMemory, { category: domainOrCategory, ...options });
+    const rollups = entries.slice(0, 5).map(e => ({
+      id: e.id,
+      title: e.title,
+      summary: (e.content || '').slice(0, 160) + (e.content && e.content.length > 160 ? '…' : ''),
+      tags: e.tags
+    }));
+    return {
+      tier: 'L1',
+      domain: domainOrCategory,
+      count: entries.length,
+      entries: rollups
+    };
+  }
+
+  getL2Detail(memoryId) {
+    const mem = this.episodicMemory.find(m => m.id === memoryId);
+    if (!mem) return null;
+    return {
+      tier: 'L2',
+      ...mem
+    };
+  }
+
+  getTieredContext(options = {}) {
+    const { domain = null, task = '', files = [] } = options;
+    const l0 = this.getL0Index(options);
+    const l1 = domain ? this.getL1Rollup(domain, options) : null;
+    const matchedAntidotes = this.searchAntidotes(task, files);
+
+    return {
+      l0,
+      l1,
+      antidotes: matchedAntidotes
+    };
+  }
+
+  memoryZoom(queryOrId, options = {}) {
+    if (!queryOrId) return this.getL0Index(options);
+    const byId = this.getL2Detail(queryOrId);
+    if (byId) return byId;
+    return this.getL1Rollup(queryOrId, options);
+  }
+
   saveToDisk() {
     try {
       const payload = {
         updatedAt: new Date().toISOString(),
         episodicCount: this.episodicMemory.length,
         alignmentsCount: this.operatorAlignments.length,
+        antidotesCount: this.antidotes.length,
         episodicMemory: this.episodicMemory.slice(0, 1000),
-        operatorAlignments: this.operatorAlignments.slice(0, 200)
+        operatorAlignments: this.operatorAlignments.slice(0, 200),
+        antidotes: this.antidotes.slice(0, 100)
       };
       fs.writeFileSync(this.storagePath, JSON.stringify(payload, null, 2), 'utf-8');
     } catch (err) {
@@ -213,7 +338,17 @@ class DrisyonMemoryEngine {
         const data = JSON.parse(raw);
         this.episodicMemory = data.episodicMemory || [];
         this.operatorAlignments = data.operatorAlignments || [];
-        console.log(`[MEMORY ENGINE] Loaded ${this.episodicMemory.length} memories from disk.`);
+        if (Array.isArray(data.antidotes) && data.antidotes.length > 0) {
+          // Merge loaded antidotes with baseline invariants without duplicate IDs
+          const existingIds = new Set(this.antidotes.map(a => a.id));
+          for (const a of data.antidotes) {
+            if (!existingIds.has(a.id)) {
+              this.antidotes.push(a);
+              existingIds.add(a.id);
+            }
+          }
+        }
+        console.log(`[MEMORY ENGINE] Loaded ${this.episodicMemory.length} memories & ${this.antidotes.length} antidotes from disk.`);
       }
     } catch (err) {
       console.warn('[MEMORY ENGINE] Disk load empty or new:', err.message);

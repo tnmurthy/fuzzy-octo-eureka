@@ -52,22 +52,41 @@ const AUTO_COMMANDS = [
   'Bash(ls:*)', 'Bash(cat:*)',
 ];
 
+// Role-based disallowed tool profiles for least-privilege enforcement
+const ROLE_DISALLOWED_MAP = {
+  researcher: ['Edit', 'Write', 'NotebookEdit', 'Bash'],
+  analyst: ['Edit', 'Write', 'NotebookEdit', 'Bash'],
+  writer: ['Bash'],
+  'product-manager': ['Bash', 'Edit', 'Write', 'NotebookEdit'],
+  reviewer: ['Edit', 'Write', 'NotebookEdit', 'Bash']
+};
+
 // The scripts dir is passed in so db-lock.sh keeps its pre-approval at `auto`.
-function toolsFor(level, { scriptsDir = '' } = {}) {
+function toolsFor(level, { scriptsDir = '', disallowedTools = [], specialistRole = null } = {}) {
+  // Determine full disallowed list from explicit parameter or role profile
+  const roleDisallowed = specialistRole && ROLE_DISALLOWED_MAP[specialistRole.toLowerCase()]
+    ? ROLE_DISALLOWED_MAP[specialistRole.toLowerCase()]
+    : [];
+  const activeDisallowed = Array.from(new Set([...disallowedTools, ...roleDisallowed]));
+
+  let result;
   switch (level) {
     case 'review':
-      return {
+      result = {
         permissionMode: 'default',
         allowed: 'Read Glob Grep',
         denied: `Edit Write NotebookEdit Bash WebFetch WebSearch ${ALWAYS_DENIED}`,
         asks: false,
       };
+      break;
     case 'ask':
-      return { permissionMode: 'default', allowed: 'Read Glob Grep', denied: ALWAYS_DENIED, asks: true };
+      result = { permissionMode: 'default', allowed: 'Read Glob Grep', denied: ALWAYS_DENIED, asks: true };
+      break;
     case 'edits':
-      return { permissionMode: 'acceptEdits', allowed: 'Read Edit Write Glob Grep', denied: ALWAYS_DENIED, asks: true };
+      result = { permissionMode: 'acceptEdits', allowed: 'Read Edit Write Glob Grep', denied: ALWAYS_DENIED, asks: true };
+      break;
     case 'auto':
-      return {
+      result = {
         permissionMode: 'acceptEdits',
         allowed: [
           'Read Edit Write Glob Grep',
@@ -77,9 +96,26 @@ function toolsFor(level, { scriptsDir = '' } = {}) {
         denied: ALWAYS_DENIED,
         asks: true,
       };
+      break;
     default:
       throw new Error(`unknown approval level: ${level}`);
   }
+
+  // If disallowed tools exist, strip them from allowed and append to denied
+  if (activeDisallowed.length > 0) {
+    let allowedTokens = result.allowed.split(/\s+/).filter(Boolean);
+    for (const dis of activeDisallowed) {
+      allowedTokens = allowedTokens.filter(tok => {
+        if (dis === 'Bash' && tok.startsWith('Bash')) return false;
+        return tok !== dis;
+      });
+    }
+    result.allowed = allowedTokens.join(' ');
+    const deniedTokens = new Set([...result.denied.split(/\s+/).filter(Boolean), ...activeDisallowed]);
+    result.denied = Array.from(deniedTokens).join(' ');
+  }
+
+  return result;
 }
 
 /** A level from user input, or null when it is not one. */
@@ -100,4 +136,12 @@ function effectiveLevel({ requested, readOnly = false, parentLevel = null, fallb
   return want;
 }
 
-module.exports = { LEVELS, toolsFor, parseLevel, effectiveLevel, ALWAYS_DENIED, AUTO_COMMANDS };
+module.exports = {
+  LEVELS,
+  toolsFor,
+  parseLevel,
+  effectiveLevel,
+  ALWAYS_DENIED,
+  AUTO_COMMANDS,
+  ROLE_DISALLOWED_MAP
+};

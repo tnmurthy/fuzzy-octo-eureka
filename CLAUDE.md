@@ -15,6 +15,7 @@ The process list is defined in `ecosystem.config.js` (the source of truth -
 | `DrisyonDashboard` | `server.js` (`DASHBOARD_ENV_FILE=.env.drisyon`) | Port 8788 (`https://drisyon.mytestbed.tech`) |
 | `ArunachalaTelemetry` | `telemetry-daemon.js` | Real-time CPU, GPU & TCP telemetry |
 | `IssuePoller` | `orchestration/issue-poller.js` | The agents' work queue: GitHub issues labelled `agent:ready` -> `/api/dispatch/run` on 8787 -> PR. See "Issue queue" below. |
+| `Meilisearch` | `campusgtm_signals/docker-compose.meilisearch.yml` | Port 7700 (Instant search, geosearch & typo tolerance for CampusGTM social/ambassador signals) |
 
 The Buzz chat integration was removed on 2026-11-17 (#29): the bot obeyed an
 operator key that had leaked into git history, and chat is a poor work queue.
@@ -30,8 +31,19 @@ failed / timed out / never recorded -> `agent:failed` with the log path (the
 worktree is kept for inspection).
 
 - Agent: `agent:claude|hermes|codex|noop|auto` label, else
-  `POLLER_DEFAULT_AGENT` (claude). Use `agent:hermes` for docs and drafts; code
-  goes to claude.
+  `POLLER_DEFAULT_AGENT` (hermes since 2026-11-22: **local by default**). Label
+  `agent:claude` for a task that needs the paid model. Hermes is the Nous
+  Hermes Agent CLI on Ollama (`~/.hermes/config.yaml`, gemma4:12b;
+  `HERMES_MODEL` overrides per run). Hermes runs stream like claude
+  (`hermes chat --format stream-json` -> `stream-log.js ... hermes`), save
+  `<run>.hermes.json`, and support follow-ups, questions, live steps and stop
+  (`followup.js` resumes `local-...` sessions with hermes). Hermes reports its
+  session id only at the end, so a redirect of a stopped hermes run starts a
+  fresh hermes run on the same branch instead of resuming. Approval levels do
+  not apply to hermes: it runs commands with its own guardrails
+  (`terminal.backend: local`); the secret scan still gates every push.
+  Reviews default to `off` when the default agent is hermes (they need
+  claude's read-only lock, which is paid).
 - Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run.
 - Text the safety filter refuses needs `agent:confirmed`.
 - `POLLER_MAX_CONCURRENT` (2) runs at once across all repos (reviews count).
@@ -76,6 +88,21 @@ only to ports Docker lists for containers labelled `sandbox_spec_id`
 `DOCKER_SOCKET`). Tests: `canvas-gate.test.js`, `canvas-sandbox.test.js`.
 Caveat: OpenHands publishes sandbox ports on all interfaces (LAN-reachable,
 protected only by each sandbox's session API key).
+
+**Meilisearch (Campus Signals & Discovery):** Docker container
+`campusgtm_meilisearch` from `campusgtm_signals/docker-compose.meilisearch.yml`,
+bound to `127.0.0.1:7700` (Docker runtime: OrbStack) and routed via Cloudflare
+Tunnel at `https://search.mytestbed.tech`. Ingests social, event, and
+ambassador proof signals for CampusGTM with sub-10ms typo tolerance, faceted
+filtering, and `_geoRadius` campus geofencing. Keys are never written in
+docs or code: the master key is `MEILI_MASTER_KEY` in `campusgtm_signals/.env`
+(Mac only, git-ignored; compose refuses to start without it), and the
+read-only search key for frontends is the Vercel env `MEILI_SEARCH_KEY` (get
+it from `GET /keys` with the master key; it changes when the master key
+does). Production mode; port bound to 127.0.0.1 only.
+Healthcheck: `https://search.mytestbed.tech/health` (or `http://localhost:7700/health`).
+Code and test suite: `campusgtm_signals/`. Upstream repository:
+`https://github.com/meilisearch/meilisearch.git`.
 
 **Reboot:** a per-user LaunchAgent, `~/Library/LaunchAgents/pm2.arunachala.plist`
 (installed 2026-11-17, no sudo needed), runs `pm2 resurrect` at login and
@@ -123,6 +150,40 @@ be followed up; the repo must still be known at the same path.
   max 3, 0 = off) caps rounds per PR; each round is one paid fix run plus a
   re-review. Verified live 2026-11-17: a follow-up recalled the file its
   earlier session read ($0.20, the resumed context is re-read).
+
+**Talking to a working agent** (2026-11-22, #41 #42). The top of /agents is
+**My tasks** (`agents-notify.js`, stages from `task-feed.js`): every task of
+the last 24 h as Needs you / Working / Queued / Ready for review / Done /
+Failed / Stopped, one action per row. Alerts (toast always; chime + desktop
+notification when on; `(n)` in the tab title) fire on finished, failed and
+follow-up runs, agent questions and new approval requests; tasks that finished
+while the page was closed are reported on the next visit (localStorage
+snapshot). No extra requests: it listens to the page's existing polls.
+- Questions: runs started from the page and their follow-ups get
+  `AGENT_CAN_ASK=1` (`canAsk` in `startDispatch`); `agent-dispatch.sh` tells
+  them to end with `QUESTION: ...` when only the person can decide. The
+  overview reads it from `<run>.claude.json` (`questionOf`) until a run with
+  that `parent` exists; the row offers an inline reply (= a follow-up). Issue
+  and poller runs never get the rule (nobody would answer).
+- Live steps: running cards show the run log as plain steps (`run-steps.js`),
+  polling `/api/agents/log` every 3 s for up to 3 running runs.
+- Stop / redirect: "Change course" -> `POST /api/agents/stop` {runId} or
+  `/api/agents/redirect` {runId, message}. The dispatch script writes
+  `<run>.pid` and traps SIGTERM so it records `status=stopped` (and an `auto`
+  run never escalates after a stop); `run-control.js` signals it and its whole
+  tree (`timeout` puts claude in its own group) only if that pid is still
+  `agent-dispatch.sh` with that run id. `stream-log.js` saves the session id
+  at claude's init event, so a stopped run can be resumed; redirect waits for
+  the end line (20 s) then resumes with the new instruction (paid follow-up).
+  Runs started before #42 have no pid file and cannot be stopped. A stopped
+  run logs $0 in the AI ledger (no result event). `run-sync` stores
+  `stopped` as `failed`. Verified live 2026-11-22: redirect stopped a claude
+  run in 0.5 s and the follow-up resumed the same session ($0.23).
+
+Static files: `static-policy.js` (#41) allow-lists what `serveStaticFile`
+sends (top-level html/css/js/images/fonts, `docs/*.md`); `.env*`, `logs/`,
+json state and server sources are 404. A new asset type or folder needs a
+line there.
 
 **Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
 header). A form that queues a task (opens a GitHub issue labelled
@@ -200,22 +261,6 @@ API answers 429 and the issue poller labels the issue `agent:failed` with the
 reason. Each agent PR uses two paid runs (work + review). `/api/costs` reports
 `paidRunsToday {used, cap, blocked}`.
 
-### Service Management Commands
-
-```bash
-# Check status of all running daemons
-pm2 ls
-
-# Restart specific services with updated environment variables
-pm2 restart ArunachalaDashboard DrisyonDashboard ArunachalaTelemetry --update-env
-
-# Restart entire stack and persist state
-pm2 restart all --update-env && pm2 save
-
-# View live daemon logs
-pm2 logs ArunachalaDashboard --lines 50
-```
-
 *(Note: Legacy Windows setups used NSSM services `ArunachalaTelemetry`, and `ArunachalaDashboard` under LocalSystem. Cross-platform discovery in `host-specs.js` detects the host automatically).*
 
 ## Per-person config (.env)
@@ -292,25 +337,6 @@ every object is prefixed `arunachala_`.
   broadcasts it any more.
 - Schema checks: `bash supabase/tests/run-local.sh` (Docker).
 
-## API surface (server.js)
-
-All routes are unauthenticated unless noted. `GET` unless marked `POST`.
-
-| Route | Purpose |
-|---|---|
-| `/api/telemetry` | Current snapshot from `telemetry.json` |
-| `/api/history` | Rolling CPU/latency series from `history.json` |
-| `/api/ping` | Live Ollama handshake test. **Only route that calls `rebac.canAccess`.** |
-| `/api/models` | Ollama `/api/tags` passthrough |
-| `/api/openclaw` | Cached OpenClaw session/task/token-usage snapshot (see OpenClaw section) |
-| `/api/tasks` | Parses `../../04_internal/TASKS.md` (**outside this repo**) into backlog/in_progress/done columns for the Task Board tile. No fallback if that path moves - returns an empty-columns stub. |
-| `POST /api/agent/chat` | Routes a message to a local Ollama model (`gemma3:4b`) under one of 5 hardcoded personas (po/tech/qa/infra/doc) |
-| `POST /api/team/dispatch` | Ingests an operator dispatch into Drisyon memory (Tier 4 - see below) |
-| `POST /api/memory/store` | Writes an entry into Drisyon episodic memory |
-| `/api/memory/search` | Cosine-similarity search over episodic memory, `?q=&tenant=&project=` |
-| `/api/memory/invariants` | Returns the hardcoded DEC-001/002/003/005 procedural rules |
-| `/api/rebac/inspect` | Dumps the full ReBAC node/edge graph - no auth gate on the dump itself |
-
 ## Ollama - not a service, kept alive by a watchdog
 
 Every persona (`gemma3:4b`) and Hermes (`qwen2.5-coder:3b`) run on Ollama, so
@@ -347,13 +373,6 @@ Backs the Drisyon brand/branding on the dashboard body and everything under
 (episodic memory capped at last 1000 entries, operator alignments at last 200
 - older entries are silently dropped, not archived).
 
-| Tier | What it is |
-|---|---|
-| 1 - Working | In-memory `Map`, never persisted, not currently read by any route |
-| 2 - Episodic/Semantic | `storeMemory()` entries, partitioned by `tenantId` + `projectId`, ranked by a hand-rolled cosine-similarity/term-frequency search (no embeddings model) |
-| 3 - Procedural Invariants | DEC-001 (client-owned infra, zero prod creds), DEC-002 (run-step idempotency), DEC-003 (parked is a health condition not a state), DEC-005 (evidence over assertion for gates) - hardcoded in `_initializeProceduralMemory()`, not editable via API |
-| 4 - Operator Alignment | `ingestOperatorDispatch()`, fed by `POST /api/team/dispatch` |
-
 **Tenant isolation caveat:** `search()` only filters by `tenantId` when the
 caller passes something other than `tenant:drisyon_core`. Querying as
 `tenant:drisyon_core` (the default when no `tenant` param is given) returns
@@ -386,18 +405,6 @@ pressure, since each CLI call can take 30s-several minutes.
   profile.
 - Token usage is bucketed `local` vs `cloud` by `modelProvider` (`google`,
   `openai`, `anthropic` count as cloud; everything else counts as local).
-
-## ReBAC engine - actual enforcement scope
-
-`rebac-engine.js` is a small in-memory graph (`addNode`/`addEdge`/
-`canAccess`) seeded once at server startup with one path: `user:sriad` ->
-`team:opscore` -> `role:admin` -> `perm:ping` -> `resource:ollama_cluster`.
-
-**It only gates `/api/ping`.** No other route - not `/api/agent/chat`, not
-any `/api/memory/*` route, not `/api/team/dispatch` -
-calls `canAccess()`. Treat the "ReBAC Engine" as authorizing one specific
-action today, not as a general access-control layer for the app; the
-`GET /api/rebac/inspect` route that dumps the whole graph is itself unguarded.
 
 ## Public exposure via Cloudflare Tunnel
 
@@ -434,18 +441,11 @@ gets 403. Tests: `npm test`.
 
 Before 2026-10-20 `server.js` had **no authentication of any kind** - the lone
 `rebac.canAccess('user:sriad', ...)` asserts the caller is you, and only gates
-`/api/ping` (see ReBAC section above). While it was tunnelled,
+`/api/ping`. While it was tunnelled,
 `POST /api/agent/chat`, `POST /api/team/dispatch` and `POST /api/memory/store`
 were callable by anyone on the internet, and `GET /api/telemetry` served the
 `app.log` tail. Do not re-add that ingress rule until Cloudflare Access (or
 equivalent auth) is in front of it.
-
-Since that note was written, the API surface grew - all of it equally
-unauthenticated. Anything re-exposed needs to also cover: `GET
-/api/memory/search` and `/api/memory/invariants` (read out Drisyon memory
-contents and the hardcoded governance rules), and `GET /api/rebac/inspect`
-(dumps the full authorization graph). See "API surface" table above for the
-complete route list.
 
 ## CI - `.github/workflows/ci.yml`
 

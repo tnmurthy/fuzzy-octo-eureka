@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: campusgtm_meilisearch
+    ports:
+      # Localhost only: the tunnel reaches it here; the LAN does not.
+      - "127.0.0.1:7700:7700"
+    environment:
+      # From campusgtm_signals/.env (git-ignored). No default: compose stops
+      # with this message instead of starting with a guessable key.
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY in campusgtm_signals/.env (openssl rand -hex 32)}
+      - MEILI_ENV=production
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7700/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  meili_data:
+    driver: local

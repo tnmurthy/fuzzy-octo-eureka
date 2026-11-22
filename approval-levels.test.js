@@ -84,3 +84,27 @@ test('auto no longer pre-allows ways to run anything or reach outside', () => {
 test('npm publish is denied at every level', () => {
   for (const l of ['ask', 'edits', 'auto']) assert.ok(toolsFor(l).denied.includes('Bash(npm publish:*)'), l);
 });
+
+test('disallowedTools and specialistRole enforce least-privilege tool masking', () => {
+  // Explicit disallowed tools
+  const masked = toolsFor('auto', { disallowedTools: ['Bash', 'Edit'] });
+  assert.ok(!masked.allowed.includes('Edit'));
+  assert.ok(!masked.allowed.includes('Bash('));
+  assert.ok(masked.denied.includes('Bash'));
+  assert.ok(masked.denied.includes('Edit'));
+
+  // Role-based profile: researcher is strictly read-only (no Bash, no Edit, no Write)
+  const researcher = toolsFor('auto', { specialistRole: 'researcher' });
+  assert.ok(!researcher.allowed.includes('Edit'));
+  assert.ok(!researcher.allowed.includes('Write'));
+  assert.ok(!researcher.allowed.includes('Bash('));
+  assert.ok(researcher.denied.includes('Bash'));
+  assert.ok(researcher.denied.includes('Edit'));
+  assert.ok(researcher.allowed.includes('Read'));
+  assert.ok(researcher.allowed.includes('Glob'));
+
+  // Engineering role: defaults remain intact
+  const standard = toolsFor('auto');
+  assert.ok(standard.allowed.includes('Edit'));
+  assert.ok(standard.allowed.includes('Write'));
+});

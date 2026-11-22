@@ -44,3 +44,26 @@ test('a memory with no content is skipped, not listed as an empty line', () => {
   assert.match(out, /- Real: Use INR\./);
   assert.equal(buildDispatchPrompt('T', [mem('Empty', '')]), 'T');
 });
+
+test('antidotes are injected into dispatch prompt when matched', () => {
+  const mockMemory = {
+    searchAntidotes: (task, files) => [
+      {
+        id: 'ANT-001',
+        pattern: 'PM2 respawns killed PID',
+        symptom: 'EADDRINUSE 8787 port conflict',
+        antidote: 'Use pm2 restart ArunachalaDashboard instead of kill -9.'
+      }
+    ]
+  };
+
+  const out = buildDispatchPrompt(
+    'Fix port binding issue in server.js',
+    [mem('Server rules', 'Runs on 8787')],
+    { memoryEngine: mockMemory, files: ['server.js'] }
+  );
+
+  assert.match(out, /Operational Antidotes \(Known Traps to Avoid\):/);
+  assert.match(out, /- \[ANT-001\] EADDRINUSE 8787 port conflict -> Use pm2 restart ArunachalaDashboard/);
+  assert.match(out, /Team context \(shared memory/);
+});
