@@ -47,3 +47,11 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Rule / Decision:** When local agents (Hermes on Ollama) encounter test failures or reasoning boundaries, agent-dispatch automatically captures a structured Handoff Packet (.arunachala-handoff.patch, diffstat, failure diagnostics) and injects a Federation Handoff Briefing into the frontier agent prompt, eliminating lossy resets.
 - **Trade-offs:** Reduces frontier model token spend by up to 70% during escalations by building upon local agent work rather than restarting from scratch.
 ---
+## [DEC-008] Decision Cockpit & Traceability Timeline Engine
+- **Date:** 2026-11-22
+- **Driver:** Product Engineer
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Implements visual and API-driven Decision Cockpit (/cockpit, /api/cockpit/timeline, /api/cockpit/matrix) linking all active agent runs, multi-host federation handoffs, and verification gates directly back to ratified DACI governance decisions and procedural invariants.
+- **Trade-offs:** Provides complete auditable transparency into why agents acted and ensures zero architectural drift.
+---

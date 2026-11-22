@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decision Cockpit & Traceability - Arunachala</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    body { background: var(--bg-primary); color: var(--color-text-main); font-family: 'Outfit', sans-serif; margin: 0; }
+    .page { max-width: 1280px; margin: 0 auto; padding: 28px 16px 60px; }
+    .head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .head h1 { font-size: 1.6rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 10px; }
+    .nav a { color: var(--status-blue); text-decoration: none; font-size: 0.85rem; margin-left: 16px; transition: color 0.2s; }
+    .nav a:hover { color: #fff; }
+    .nav a.active { color: #fff; font-weight: 600; border-bottom: 2px solid var(--status-blue); padding-bottom: 4px; }
+    
+    .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 24px; }
+    @media (max-width: 860px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .tile { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 18px; }
+    .tile .n { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .tile .l { font-size: 0.78rem; color: var(--color-text-muted); margin-top: 4px; }
+
+    .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .card h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 16px; display: flex; justify-content: space-between; align-items: center; }
+
+    .tabs { display: inline-flex; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; gap: 4px; margin-bottom: 16px; }
+    .tab { background: transparent; border: 0; color: var(--color-text-muted); font: inherit; font-size: 0.85rem; padding: 6px 16px; border-radius: 6px; cursor: pointer; }
+    .tab[aria-selected="true"] { background: var(--bg-card-hover); color: var(--color-text-main); font-weight: 500; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th { text-align: left; font-weight: 500; color: var(--color-text-muted); font-size: 0.74rem; padding: 8px 12px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+    td { padding: 12px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    
+    .badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-color); display: inline-block; font-weight: 500; }
+    .b-green { color: var(--status-green); border-color: rgba(0,230,118,.4); background: rgba(0,230,118,.08); }
+    .b-blue { color: var(--status-blue); border-color: rgba(0,176,255,.4); background: rgba(0,176,255,.08); }
+    .b-amber { color: var(--status-amber); border-color: rgba(255,179,0,.4); background: rgba(255,179,0,.08); }
+    .b-purple { color: #c4a7ff; border-color: rgba(179,136,255,.45); background: rgba(179,136,255,.08); }
+
+    .timeline-item { border-left: 2px solid var(--border-color); padding: 0 0 20px 16px; position: relative; }
+    .timeline-item::before { content: ''; position: absolute; left: -6px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--status-blue); }
+    .timeline-item.handoff::before { background: #c4a7ff; }
+    .timeline-item.decision::before { background: var(--status-green); }
+    .t-title { font-weight: 600; font-size: 0.92rem; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .t-sub { font-size: 0.8rem; color: var(--color-text-muted); }
+    .t-body { font-size: 0.84rem; color: #cbd5e1; margin-top: 6px; font-family: 'JetBrains Mono', monospace; background: var(--bg-secondary); padding: 8px 12px; border-radius: 6px; }
+
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="head">
+      <h1>🎛️ Decision Cockpit & Traceability</h1>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="/agents">Agents</a>
+        <a href="/context">Context</a>
+        <a href="/cockpit" class="active">Cockpit</a>
+      </nav>
+    </div>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="n" id="stat-decisions">-</div>
+        <div class="l">Ratified Decisions (DACI)</div>
+      </div>
+      <div class="tile">
+        <div class="n" id="stat-handoffs">-</div>
+        <div class="l">Multi-Host Federation Handoffs</div>
+      </div>
+      <div class="tile">
+        <div class="n" id="stat-tasks">-</div>
+        <div class="l">Task Wall Items</div>
+      </div>
+      <div class="tile">
+        <div class="n" id="stat-antidotes">-</div>
+        <div class="l">Known Failure Antidotes</div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-timeline" aria-selected="true" onclick="switchView('timeline')">Traceability Timeline</button>
+      <button class="tab" id="tab-matrix" aria-selected="false" onclick="switchView('matrix')">Decision Matrix</button>
+      <button class="tab" id="tab-handoffs" aria-selected="false" onclick="switchView('handoffs')">Federation Stream</button>
+    </div>
+
+    <!-- Timeline View -->
+    <div id="view-timeline" class="card">
+      <h2>Traceability Stream <span class="badge b-blue" id="timeline-count">Live</span></h2>
+      <div id="timeline-container">Loading timeline...</div>
+    </div>
+
+    <!-- Matrix View -->
+    <div id="view-matrix" class="card" style="display: none;">
+      <h2>Decision Governance & Enforcement Matrix</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Decision Title</th>
+              <th>Driver / Approver</th>
+              <th>Status</th>
+              <th>Rule Summary</th>
+              <th>Linked Runs</th>
+            </tr>
+          </thead>
+          <tbody id="matrix-tbody">
+            <tr><td colspan="6">Loading matrix...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Handoffs View -->
+    <div id="view-handoffs" class="card" style="display: none;">
+      <h2>Cross-Host Agent Federation (Hermes ⇄ Claude)</h2>
+      <div id="handoffs-container">Loading handoffs...</div>
+    </div>
+  </div>
+
+  <script>
+    let cockpitData = null;
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/cockpit/timeline');
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+
+        cockpitData = data;
+        renderKPIs(data.metrics);
+        renderTimeline(data.events);
+
+        // Fetch matrix
+        const mRes = await fetch('/api/cockpit/matrix');
+        const mData = await mRes.json();
+        if (mData.ok) renderMatrix(mData.matrix);
+
+        // Render handoffs
+        renderHandoffs(data.handoffs || []);
+      } catch (err) {
+        document.getElementById('timeline-container').innerHTML = `<div class="t-sub">Failed to load cockpit telemetry: ${err.message}</div>`;
+      }
+    }
+
+    function renderKPIs(metrics) {
+      if (!metrics) return;
+      document.getElementById('stat-decisions').textContent = metrics.decisionsCount ?? 0;
+      document.getElementById('stat-handoffs').textContent = metrics.handoffsCount ?? 0;
+      document.getElementById('stat-tasks').textContent = metrics.tasksCount ?? 0;
+      document.getElementById('stat-antidotes').textContent = metrics.antidotesCount ?? 0;
+    }
+
+    function renderTimeline(events) {
+      const container = document.getElementById('timeline-container');
+      if (!events || !events.length) {
+        container.innerHTML = '<div class="t-sub">No recent timeline events recorded.</div>';
+        return;
+      }
+
+      container.innerHTML = events.map(e => `
+        <div class="timeline-item ${e.kind.toLowerCase()}">
+          <div class="t-title">
+            <span>${escapeHtml(e.title)}</span>
+            <span class="badge b-${e.badge?.color || 'blue'}">${escapeHtml(e.badge?.label || e.badge?.stage || e.kind)}</span>
+          </div>
+          <div class="t-sub">${escapeHtml(e.subtitle)} · ${new Date(e.timestamp).toLocaleString()}</div>
+          ${e.details ? `<div class="t-body">${escapeHtml(e.details)}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function renderMatrix(matrix) {
+      const tbody = document.getElementById('matrix-tbody');
+      if (!matrix || !matrix.length) {
+        tbody.innerHTML = '<tr><td colspan="6">No ratified decisions found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = matrix.map(m => `
+        <tr>
+          <td class="mono"><strong>${escapeHtml(m.decision.id)}</strong></td>
+          <td><strong>${escapeHtml(m.decision.title)}</strong></td>
+          <td>${escapeHtml(m.decision.driver)} / ${escapeHtml(m.decision.approver)}</td>
+          <td><span class="badge b-green">${escapeHtml(m.compliance)}</span></td>
+          <td style="white-space: normal; max-width: 420px; font-size: 0.82rem; color: #cbd5e1;">${escapeHtml(m.decision.rule)}</td>
+          <td><span class="badge b-purple">${m.linkedRunsCount} run(s)</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderHandoffs(handoffs) {
+      const container = document.getElementById('handoffs-container');
+      if (!handoffs || !handoffs.length) {
+        container.innerHTML = '<div class="t-sub">No multi-host agent handoffs recorded yet.</div>';
+        return;
+      }
+
+      container.innerHTML = handoffs.map(h => `
+        <div class="timeline-item handoff" style="margin-bottom: 16px;">
+          <div class="t-title">
+            <span>${escapeHtml(h.source?.agent || 'Hermes')} → ${escapeHtml(h.target?.agent || 'Claude')}</span>
+            <span class="badge b-purple">${escapeHtml(h.status)}</span>
+            <span class="badge b-amber">${escapeHtml(h.reason)}</span>
+          </div>
+          <div class="t-sub">Run: <span class="mono">${escapeHtml(h.runId)}</span> · ${new Date(h.timestamp).toLocaleString()}</div>
+          ${h.diagnostics?.testCommand ? `<div style="font-size: 0.8rem; margin-top: 6px;">Test: <span class="mono">${escapeHtml(h.diagnostics.testCommand)}</span> (exit ${h.diagnostics.exitCode})</div>` : ''}
+          ${h.diagnostics?.testOutputSlice ? `<div class="t-body">${escapeHtml(h.diagnostics.testOutputSlice)}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function switchView(viewName) {
+      ['timeline', 'matrix', 'handoffs'].forEach(v => {
+        document.getElementById(`view-${v}`).style.display = v === viewName ? 'block' : 'none';
+        document.getElementById(`tab-${v}`).setAttribute('aria-selected', v === viewName ? 'true' : 'false');
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

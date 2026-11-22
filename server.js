@@ -61,6 +61,11 @@ const DrisyonMemoryEngine = require('./memory-engine');
 const memory = new DrisyonMemoryEngine({
   storagePath: path.join(DASHBOARD_DIR, 'drisyon-memory.json')
 });
+const { createCockpitEngine } = require('./cockpit-engine');
+const cockpit = createCockpitEngine({
+  loadRuns: () => (readRuns(RUNS_FILE, 500).runs || []),
+  memoryEngine: memory
+});
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
@@ -281,6 +286,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
   if (urlPath === '/agents') urlPath = '/agents.html';
   if (urlPath === '/context') urlPath = '/context.html';
+  if (urlPath === '/cockpit') urlPath = '/cockpit.html';
   if (urlPath === '/onboarding' || urlPath === '/welcome') urlPath = '/onboarding.html';
 
   let decoded;
@@ -2082,6 +2088,22 @@ function handleRequest(req, res) {
       daemon: daemonState,
       latestMantisRun: latestMantis,
       timestamp: new Date().toISOString()
+    });
+  }
+
+  // --- Decision Cockpit & Traceability Timeline API ---
+  if (req.url.startsWith('/api/cockpit/timeline')) {
+    return sendJson(res, 200, {
+      ok: true,
+      ...cockpit.getTimeline(),
+      handoffs: cockpit.getHandoffs()
+    });
+  }
+
+  if (req.url.startsWith('/api/cockpit/matrix')) {
+    return sendJson(res, 200, {
+      ok: true,
+      matrix: cockpit.getTraceabilityMatrix()
     });
   }
 
