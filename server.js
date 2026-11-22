@@ -226,6 +226,8 @@ function getReqUserNode(req) {
   return 'user:sriad';
 }
 
+const { isServable } = require('./static-policy');
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -280,9 +282,15 @@ function serveStaticFile(req, res) {
   if (urlPath === '/context') urlPath = '/context.html';
   if (urlPath === '/onboarding' || urlPath === '/welcome') urlPath = '/onboarding.html';
 
-  const filePath = path.join(DASHBOARD_DIR, urlPath);
+  let decoded;
+  try { decoded = decodeURIComponent(urlPath); } catch (_) { decoded = null; }
+  if (!decoded || !isServable(decoded)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    return res.end('Not found');
+  }
+  const filePath = path.join(DASHBOARD_DIR, decoded);
 
-  if (!filePath.startsWith(DASHBOARD_DIR)) {
+  if (!filePath.startsWith(DASHBOARD_DIR + path.sep)) {
     res.writeHead(403);
     return res.end('Forbidden');
   }
