@@ -375,6 +375,41 @@ test_command() {
   fi
 }
 
+# The repo's tests after a local attempt run code the local agent just wrote,
+# so with the sandbox on they run in the same kind of container as the agent
+# (image from hermes-agent-config.yaml, worktree only, no capabilities, host
+# uid). AGENT_TEST_SANDBOX=off runs them on the host as before (e.g. tests
+# that need host-only services such as a local database on 127.0.0.1).
+# Afterwards the worktree's .git pointer is checked again: host git commands
+# (reset, clean, rev-list) must never follow a pointer the tests rewrote.
+sandbox_image() { sed -n 's/^  docker_image: *//p' "$HERE/hermes-agent-config.yaml" | head -1; }
+
+run_repo_tests() {
+  local tests="$1" rc gitfile name
+  if ! hermes_sandbox_on || [ "${AGENT_TEST_SANDBOX:-on}" = off ]; then
+    (cd "$worktree" && run_timeout "$TEST_TIMEOUT_SECONDS" bash -c "$tests")
+    return $?
+  fi
+  ensure_docker || return 3
+  gitfile="$(cat "$worktree/.git" 2>/dev/null)"
+  name="arunachala-test-$run_id"
+  echo "== auto: running the tests in the sandbox ($(sandbox_image))"
+  run_timeout "$TEST_TIMEOUT_SECONDS" docker run --rm --init --name "$name" \
+    --cap-drop ALL --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+    --memory 8g --cpus 4 --pids-limit 1024 \
+    --tmpfs /tmp:rw,size=512m --tmpfs /home/agent:rw,exec,size=1g -e HOME=/home/agent \
+    -v "$worktree:/workspace" -w /workspace --label "arunachala-run=$run_id" \
+    "$(sandbox_image)" bash -c "$tests"
+  rc=$?
+  docker rm -f "$name" >/dev/null 2>&1 || true   # timed out or stopped: do not leave it running
+  if [ -n "$gitfile" ] && { [ ! -f "$worktree/.git" ] || [ "$(cat "$worktree/.git" 2>/dev/null)" != "$gitfile" ]; }; then
+    echo "== auto: the tests changed the worktree's .git pointer - restored it"
+    rm -rf "$worktree/.git"
+    printf '%s\n' "$gitfile" > "$worktree/.git"
+  fi
+  return "$rc"
+}
+
 run_auto() {
   local start_sha tests rc
   start_sha="$(git -C "$(native "$worktree")" rev-parse HEAD)"
@@ -387,7 +422,7 @@ run_auto() {
     run_agent "$LOCAL_AGENT" "$LOCAL_TIMEOUT_SECONDS"; rc=$?
     if [ "$rc" -eq 0 ]; then
       echo "== auto: $LOCAL_AGENT finished - running tests"
-      (cd "$worktree" && run_timeout "$TEST_TIMEOUT_SECONDS" bash -c "$tests"); rc=$?
+      run_repo_tests "$tests"; rc=$?
       if [ "$rc" -eq 0 ]; then
         echo "== auto: tests pass - no escalation"
         escalated=false

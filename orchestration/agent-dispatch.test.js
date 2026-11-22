@@ -239,6 +239,7 @@ wt=""; prompt=""; while [ $# -gt 0 ]; do case "$1" in --in) wt="$2"; shift ;; -q
 printf '%s\\n' "$HERMES_HOME" > "$STUB_SEEN_HOME"
 printf '%s\\n' "$prompt" > "$STUB_SEEN_PROMPT"
 echo boxed-change > "$wt/boxed.txt"
+[ -n "$STUB_FIX" ] && echo fixed > "$wt/fixed"
 [ -n "$SANDBOX_EVIL" ] && printf 'gitdir: /tmp/evil\\n' > "$wt/.git"
 echo '{"type":"system","subtype":"init","model":"","session_id":""}'
 echo '{"type":"tool_use","name":"write_file","input":{"path":"boxed.txt"}}'
@@ -309,4 +310,64 @@ test('sandboxed hermes: no Docker means no run, never an unboxed one', () => {
   assert.match(r.log, /Docker is not reachable, so the local agent was not started/);
   assert.equal(r.seenHome, null, 'hermes never started');
   assert.equal(r.end.status, 'failed');
+});
+
+// A fake docker: records its arguments; `run` executes the command in the
+// folder mounted at /workspace, like the real container would.
+const FAKE_DOCKER = `#!/usr/bin/env bash
+echo "$*" >> "$DOCKER_LOG"
+case "$1" in
+  info|rm) exit 0 ;;
+  run) src=""; prev=""; for a in "$@"; do [ "$prev" = -v ] && src="\${a%%:/workspace}"; prev="$a"; done
+       cmd="\${@: -1}"; cd "$src" || exit 9
+       [ -n "$DOCKER_TAMPER" ] && printf 'gitdir: /tmp/evil\\n' > .git   # test code rewriting the pointer
+       bash -c "$cmd"; exit $? ;;
+esac
+`;
+
+function autoBoxed(t, { tamper = false } = {}) {
+  fs.writeFileSync(path.join(t.bin, 'hermes-stub'), BOXED_HERMES, { mode: 0o755 });
+  fs.writeFileSync(path.join(t.bin, 'docker'), FAKE_DOCKER, { mode: 0o755 });
+  const dockerLog = path.join(t.dir, 'docker.log');
+  const mark = path.join(t.dir, 'claude-ran');
+  const res = spawnSync(BASH, [posix(SCRIPT), 'auto', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${t.bin}${path.delimiter}${process.env.PATH}`,
+      AGENT_RUNS_DIR: posix(t.runs),
+      HERMES_BIN: posix(path.join(t.bin, 'hermes-stub')),
+      AGENT_HERMES_HOME: posix(path.join(t.dir, 'agent-home')),
+      STUB_SEEN_HOME: posix(path.join(t.dir, 'seen-home')),
+      STUB_SEEN_PROMPT: posix(path.join(t.dir, 'seen-prompt')),
+      STUB_FIX: '1',
+      DOCKER_TAMPER: tamper ? '1' : '',
+      DOCKER_LOG: posix(dockerLog),
+      CLAUDE_MARK: posix(mark),
+      AI_CALLS_FILE: posix(path.join(t.dir, 'ai.jsonl')),
+    },
+  });
+  return {
+    res, claudeRan: fs.existsSync(mark), wt: path.join(t.dir, 'repo--task-x'),
+    docker: fs.existsSync(dockerLog) ? fs.readFileSync(dockerLog, 'utf8') : '',
+    log: fs.readFileSync(path.join(t.runs, 'run-1.log'), 'utf8'),
+  };
+}
+
+test('auto with the sandbox: the repo tests run in a locked-down container, not on the host', () => {
+  const r = autoBoxed(setup({ withTests: true }));
+  assert.equal(r.res.status, 0, r.log);
+  assert.match(r.log, /running the tests in the sandbox \(nikolaik\/python-nodejs:/);
+  assert.match(r.log, /tests pass - no escalation/);
+  assert.equal(r.claudeRan, false);
+  const run = r.docker.split('\n').find((l) => l.startsWith('run '));
+  for (const flag of ['--cap-drop ALL', '--security-opt no-new-privileges', '-w /workspace', '--rm', 'test -f fixed']) assert.ok(run.includes(flag), flag);
+  assert.ok(run.includes(`${posix(r.wt)}:/workspace`));
+  assert.ok(/(^|\n)rm -f arunachala-test-run-1/.test(r.docker), 'container removed afterwards');
+});
+
+test('auto with the sandbox: a .git pointer rewritten by the tests is restored before host git runs', () => {
+  const r = autoBoxed(setup({ withTests: true }), { tamper: true });
+  assert.match(r.log, /the tests changed the worktree's .git pointer - restored it/);
+  assert.doesNotMatch(fs.readFileSync(path.join(r.wt, '.git'), 'utf8'), /evil/);
 });
