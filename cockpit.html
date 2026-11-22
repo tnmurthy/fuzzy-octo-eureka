@@ -116,6 +116,7 @@
       <button class="tab" id="tab-handoffs" aria-selected="false" onclick="switchView('handoffs')">Federation Stream</button>
       <button class="tab" id="tab-direction" aria-selected="false" onclick="switchView('direction')">Direction & Intent</button>
       <button class="tab" id="tab-blackboard" aria-selected="false" onclick="switchView('blackboard')">Blackboard Feed</button>
+      <button class="tab" id="tab-router" aria-selected="false" onclick="switchView('router')">Model Router</button>
     </div>
 
     <!-- Timeline View -->
@@ -249,6 +250,58 @@
       </div>
 
       <div id="blackboard-feed">Loading blackboard signals...</div>
+    </div>
+
+    <!-- Model Router View -->
+    <div id="view-router" class="card" style="display: none;">
+      <h2>Dynamic Task Difficulty Router <span class="badge b-green">DEC-013</span> <span class="badge b-purple">Unit Economic Optimizer</span></h2>
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 16px;">
+        Evaluates task complexity, security blast radius, and file sensitivity to dynamically route tasks to 0-cost local Apple Silicon models (Hermes on Ollama) or frontier models (Claude 3.5 Sonnet).
+      </p>
+
+      <!-- Interactive Tester Form -->
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <h3 style="margin: 0 0 12px; font-size: 0.95rem; font-weight: 600;">Live Difficulty &amp; Routing Classifier</h3>
+        <form id="router-form" onsubmit="testModelRoute(event)">
+          <div class="form-row">
+            <input type="text" id="route-files" class="form-control" placeholder="Target files (comma-separated, e.g. server.js, auth.js or README.md)" style="flex: 1;">
+          </div>
+          <div class="form-row">
+            <textarea id="route-task" class="form-control" placeholder="Enter task specification or prompt to classify..." required rows="3" style="width: 100%; resize: vertical;"></textarea>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div id="route-feedback" class="msg-feedback"></div>
+            <button type="submit" class="btn">Classify &amp; Route Task</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Decision Card Result -->
+      <div id="route-result-card" style="display: none; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <span id="route-badge-difficulty" class="badge">DIFFICULTY</span>
+            <span id="route-badge-tier" class="badge">TIER</span>
+          </div>
+          <div style="font-size: 0.85rem; color: var(--color-text-muted);">
+            Complexity Score: <strong id="route-score-val" style="color: #fff;">0</strong> / 100
+          </div>
+        </div>
+        <div class="quota-bar-bg" style="margin-bottom: 14px;">
+          <div id="route-score-fill" class="quota-bar-fill" style="width: 0%;"></div>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>Recommended Agent:</strong> <span id="route-agent-val" class="mono" style="color: #79c0ff; font-weight: 600;">-</span>
+          <span id="route-skip-val" class="badge b-amber" style="margin-left: 8px; display: none;">Skips Local Trial</span>
+        </div>
+        <div style="margin-bottom: 10px; font-size: 0.85rem;" id="route-reason-val"></div>
+        <div style="margin-bottom: 12px; font-size: 0.8rem; color: var(--color-text-muted);">
+          <strong>Detected Factors:</strong> <span id="route-factors-val">-</span>
+        </div>
+        <div id="route-savings-box" style="padding: 10px 14px; background: rgba(56, 139, 253, 0.1); border: 1px solid rgba(56, 139, 253, 0.25); border-radius: 6px; font-size: 0.82rem; color: #79c0ff;">
+          <span id="route-savings-text"></span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -471,12 +524,74 @@
     }
 
     function switchView(viewName) {
-      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard'].forEach(v => {
+      ['timeline', 'matrix', 'handoffs', 'direction', 'blackboard', 'router'].forEach(v => {
         const el = document.getElementById(`view-${v}`);
         const tab = document.getElementById(`tab-${v}`);
         if (el) el.style.display = v === viewName ? 'block' : 'none';
         if (tab) tab.setAttribute('aria-selected', v === viewName ? 'true' : 'false');
       });
+    }
+
+    async function testModelRoute(event) {
+      event.preventDefault();
+      const fb = document.getElementById('route-feedback');
+      const card = document.getElementById('route-result-card');
+      const task = document.getElementById('route-task').value.trim();
+      const filesRaw = document.getElementById('route-files').value.trim();
+      const files = filesRaw ? filesRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      fb.className = 'msg-feedback';
+      fb.textContent = 'Classifying difficulty...';
+
+      try {
+        const res = await fetch('/api/agents/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task, files })
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Failed to classify route');
+
+        fb.textContent = '';
+        card.style.display = 'block';
+
+        // Badges
+        const bDiff = document.getElementById('route-badge-difficulty');
+        bDiff.textContent = data.difficulty.toUpperCase();
+        bDiff.className = `badge ${data.difficulty === 'high' ? 'b-red' : data.difficulty === 'low' ? 'b-green' : 'b-blue'}`;
+
+        const bTier = document.getElementById('route-badge-tier');
+        bTier.textContent = data.tier.toUpperCase() + ' TIER';
+        bTier.className = `badge ${data.tier === 'frontier' ? 'b-purple' : 'b-green'}`;
+
+        // Score
+        document.getElementById('route-score-val').textContent = data.score;
+        const fill = document.getElementById('route-score-fill');
+        fill.style.width = `${data.score}%`;
+        fill.style.backgroundColor = data.score >= 65 ? '#ff5252' : data.score < 40 ? '#2ea44f' : '#388bfd';
+
+        // Recommended agent
+        document.getElementById('route-agent-val').textContent = data.agent;
+        document.getElementById('route-skip-val').style.display = data.shouldSkipLocal ? 'inline-block' : 'none';
+
+        // Reason & factors
+        document.getElementById('route-reason-val').textContent = data.reason;
+        document.getElementById('route-factors-val').textContent = (data.factors && data.factors.length > 0) ? data.factors.join(', ') : 'baseline evaluation';
+
+        // Savings
+        const sBox = document.getElementById('route-savings-box');
+        const sText = document.getElementById('route-savings-text');
+        if (data.tier === 'local') {
+          sBox.style.display = 'block';
+          sText.textContent = `★ Local Execution: 0 token cost! Potential savings vs frontier model: ~$${data.costPrediction.potentialSavingsUsd} USD.`;
+        } else {
+          sBox.style.display = 'block';
+          sText.textContent = `⚡ Frontier Execution: High-difficulty task requires advanced frontier reasoning (~${data.costPrediction.estimatedTokens} tokens, ~$${data.costPrediction.estimatedCostUsd} USD). Direct dispatch avoids failed local attempts.`;
+        }
+      } catch (err) {
+        fb.className = 'msg-feedback msg-error';
+        fb.textContent = err.message;
+      }
     }
 
     let blackboardFacts = [];

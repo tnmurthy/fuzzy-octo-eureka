@@ -411,10 +411,29 @@ run_repo_tests() {
 }
 
 run_auto() {
-  local start_sha tests rc
+  local start_sha tests rc router_out router_tier router_reason router_score
   start_sha="$(git -C "$(native "$worktree")" rev-parse HEAD)"
   tests="$(test_command)"
   escalated=true
+
+  # Dynamic Task Difficulty Routing (skips local trial on high complexity/security tasks)
+  if [ -f "$HERE/model-router.js" ] && [ "${AGENT_ROUTER:-on}" != "off" ]; then
+    router_out="$(node "$HERE/model-router.js" classify "$prompt_file" "$worktree" --json 2>/dev/null || echo "")"
+    if [ -n "$router_out" ]; then
+      router_tier="$(echo "$router_out" | node -e 'try { const d = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(d.tier || "local"); } catch(e) { console.log("local"); }')"
+      router_reason="$(echo "$router_out" | node -e 'try { const d = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(d.reason || ""); } catch(e) { console.log(""); }')"
+      router_score="$(echo "$router_out" | node -e 'try { const d = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(d.score || 0); } catch(e) { console.log(0); }')"
+      if [ "$router_tier" = "frontier" ]; then
+        echo "== auto: dynamic difficulty classification: HIGH ($router_score/100) -> $router_reason"
+        echo "== auto: skipping local attempt to avoid wasted compute and 5-10m delay on high-difficulty task"
+        run_agent claude "$TIMEOUT_SECONDS"
+        return $?
+      else
+        echo "== auto: dynamic difficulty classification: $router_tier ($router_score/100) -> $router_reason"
+      fi
+    fi
+  fi
+
   if [ -z "$tests" ]; then
     echo "== auto: no tests to check a local attempt with - going straight to claude"
   else

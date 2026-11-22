@@ -87,3 +87,15 @@ Governed by least-privilege principles and AI workforce invariants.
 - **Rule / Decision:** Real-time agent collaboration is organized via a dual-tier cognitive blackboard (`blackboard.js`). Local agents publish and subscribe to facts, contracts, and schema mutations with sub-millisecond latency (<1ms) via native EventEmitter and SSE (`/api/blackboard/stream`). Simultaneously, all blackboard entries are stored in `memory-engine.js` (`category: blackboard`) and replicated every 30 seconds into Supabase `arunachala_memory`, unifying local Apple Silicon execution with cross-machine multi-agent federation.
 - **Trade-offs:** Delivers sub-millisecond responsiveness for local processes while ensuring 100% cloud persistent context sharing across all agents and team members without creating duplicate database infrastructure.
 ---
+
+## [DEC-013] Dynamic Task Difficulty Routing & Unit Economic Optimization
+- **Date:** 2026-11-22
+- **Driver:** Cost Engineer & Systems Architect
+- **Approver:** Arunachala (Human Chairman)
+- **Verdict:** RATIFIED
+- **Rule / Decision:** Discontinue static agent assignment or blind local-first attempts for high-difficulty tasks. Implement the Dynamic Task Difficulty Router (`orchestration/model-router.js`) to evaluate task complexity, file impact, security blast radius, and sensitive path involvement.
+  - **Low / Routine tasks (score < 40):** Routed to 0-cost local Apple Silicon models (Hermes on Ollama) saving frontier token expenditures.
+  - **Medium tasks (score 40-64):** Attempted local-first with automated test verification and structured multi-host federation handoff.
+  - **High / Complex tasks (score >= 65):** Security audits, ReBAC/Auth boundaries, cryptography, AST transformations, and database migrations are routed directly to frontier models (Claude 3.5 Sonnet), skipping local attempts to eliminate wasted compute and 5-10 minute turn delays.
+- **Trade-offs:** Optimizes unit economics by saving up to 80% of token costs on routine maintenance while eliminating developer latency on high-complexity refactors.
+---

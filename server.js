@@ -105,6 +105,7 @@ const {
   clearTranscripts,
   exportTranscriptsMarkdown
 } = require('./chat-transcripts');
+const { classifyTaskDifficulty, routeTask } = require('./orchestration/model-router');
 
 // Ollama connection details (can be local or remote, e.g. a Mac Studio on LAN/VPN)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
@@ -746,13 +747,25 @@ async function startDispatch(payload) {
   if (specialist !== null && !specialists.get(specialist)) {
     return { status: 400, body: { ok: false, error: 'unknown specialist (see /api/agents/specialists)' } };
   }
+  let routing = null;
+  if (agent === 'auto' || payload.autoRoute === true) {
+    routing = classifyTaskDifficulty(task, { files: payload.files, worktree: repoPath });
+  }
   try {
     const result = await spawnAgentDispatch({
       agent, repo, repoPath, branch, task, readOnly, specialist, level, reviewBase,
       ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
       canAsk: payload.canAsk === true && !readOnly,
     });
-    return { status: 202, body: { ok: true, ...result, note: 'started; poll /api/runs for completion' } };
+    return {
+      status: 202,
+      body: {
+        ok: true,
+        ...result,
+        ...(routing ? { routing: { tier: routing.tier, agent: routing.agent, score: routing.score, reason: routing.reason } } : {}),
+        note: 'started; poll /api/runs for completion'
+      }
+    };
   } catch (err) {
     return { status: err.status || 500, body: { ok: false, error: err.status ? err.message : `dispatch failed: ${err.message}` } };
   }
@@ -1447,6 +1460,24 @@ function handleRequest(req, res) {
 
     const auditResult = auditDiff(diffText);
     return sendJson(res, 200, { ok: true, runId: run.id, ...auditResult });
+  }
+  if (req.url === '/api/agents/route' && req.method === 'POST') {
+    readJsonBody(req, 64 * 1024)
+      .then((b) => {
+        const task = String(b.task || '').trim();
+        let worktree = '';
+        if (b.repo) {
+          worktree = resolveRepoPath(b.repo) || '';
+        }
+        const result = classifyTaskDifficulty(task, {
+          files: b.files,
+          worktree,
+          context: b.context
+        });
+        return sendJson(res, 200, { ok: true, ...result });
+      })
+      .catch((err) => sendJson(res, 400, { ok: false, error: `bad request: ${err.message}` }));
+    return;
   }
   if (req.url.startsWith('/api/agents/')) {
     if (approvalsApi.handle(req, res, { sendJson, readJsonBody })) return;
