@@ -1,0 +1,46 @@
+# Hermes config for agent runs dispatched by agent-dispatch.sh.
+#
+# Copied to $AGENT_HERMES_HOME/config.yaml (default ~/.hermes-agents) before
+# every hermes run, with HERMES_HOME pointing there, so dispatched runs never
+# use (or change) the personal ~/.hermes setup. Edit this file, not the copy.
+#
+# What it locks down (2026-11-22):
+# - Commands AND file edits run in a Docker container (OrbStack) that sees
+#   only the run's worktree (mounted at /workspace): no home folder, SSH
+#   keys, secrets folder or other repos. No git inside: the dispatch script
+#   commits the agent's changes on the host, hooks off.
+# - Tools are chosen per run (-t terminal,file,todo): no web, browser,
+#   memory, cron, delegation or code execution.
+# - No usage metrics leave the machine; no self-update checks.
+model:
+  provider: custom
+  base_url: http://127.0.0.1:11434/v1
+  default: gemma4:12b
+terminal:
+  backend: docker
+  # Python + Node only (Hermes's legacy default). The current default,
+  # hermes-sandbox:desktop, ships a whole desktop: slower pulls, more surface.
+  docker_image: nikolaik/python-nodejs:python3.14-nodejs22
+  docker_image_pinned: true
+  cwd: .
+  docker_mount_cwd_to_workspace: true
+  docker_run_as_host_user: true
+  # npm/pip installs need the network; the container still cannot see the host.
+  docker_network: true
+  docker_volumes: []
+  docker_forward_env: []
+  docker_env: {}
+  container_persistent: false
+  docker_persist_across_processes: false
+  container_cpu: 4
+  container_memory: 8192
+  timeout: 300
+toolsets:
+  - terminal
+  - file
+  - todo
+shared_metrics:
+  enabled: false
+  send: false
+updates:
+  check: false

@@ -287,18 +287,79 @@ run_claude() {
 # for local runs too. A follow-up resumes with --resume <local-...>.
 # HERMES_MODEL overrides the model in ~/.hermes/config.yaml for these runs.
 # The bundled hermes-local.js fallback has no chat/stream mode: plain call.
+# Sandbox (default; AGENT_HERMES_SANDBOX=off to disable): the run uses its own
+# HERMES_HOME (AGENT_HERMES_HOME, default ~/.hermes-agents) with the config in
+# hermes-agent-config.yaml, so its commands and file edits happen in a Docker
+# container that sees only the worktree, with tools limited to
+# HERMES_TOOLSETS (terminal,file,todo: no web, browser, memory). There is no
+# git inside, so the agent's changes are committed here on the host, hooks
+# off, after checking the worktree's .git pointer was not tampered with.
+# Docker (OrbStack) down: one `orb start` attempt, then the run fails rather
+# than running unboxed.
+hermes_sandbox_on() { [ "${AGENT_HERMES_SANDBOX:-on}" != off ]; }
+
+ensure_docker() {
+  docker info >/dev/null 2>&1 && return 0
+  if command -v orb >/dev/null 2>&1; then
+    echo "== sandbox: Docker is not running - starting OrbStack"
+    orb start >/dev/null 2>&1 || true
+    local i
+    for i in $(seq 1 30); do docker info >/dev/null 2>&1 && return 0; sleep 2; done
+  fi
+  echo "== sandbox: Docker is not reachable, so the local agent was not started (start OrbStack, or set AGENT_HERMES_SANDBOX=off)"
+  return 1
+}
+
+# Commit what the sandboxed agent changed, on the host. Returns 0 always;
+# prints what it did.
+commit_sandbox_changes() {
+  local gitfile_before="$1" title msg
+  if [ ! -f "$worktree/.git" ] || [ "$(cat "$worktree/.git" 2>/dev/null)" != "$gitfile_before" ]; then
+    echo "== sandbox: the agent changed the worktree's .git pointer - restored it"
+    rm -rf "$worktree/.git"
+    printf '%s\n' "$gitfile_before" > "$worktree/.git"
+  fi
+  if [ -z "$(git -C "$(native "$worktree")" -c core.hooksPath=/dev/null status --porcelain 2>/dev/null)" ]; then
+    echo "== sandbox: no file changes to commit"
+    return 0
+  fi
+  title="$(if [ -n "${AGENT_TASK_TITLE:-}" ]; then printf '%s' "$AGENT_TASK_TITLE"; else head -c 72 "$prompt_file"; fi | tr '\r\n' '  ' | head -c 72)"
+  msg="agent(hermes): ${title:-local agent changes}"
+  # Committer: this machine's git identity; the agent's own when none is set.
+  local ident=()
+  git -C "$(native "$worktree")" config user.email >/dev/null 2>&1 \
+    || ident=(-c user.name="Hermes local agent" -c user.email=hermes@localhost)
+  git -C "$(native "$worktree")" -c core.hooksPath=/dev/null add -A \
+    && git -C "$(native "$worktree")" -c core.hooksPath=/dev/null ${ident[@]+"${ident[@]}"} commit -q --no-verify \
+         --author "Hermes local agent <hermes@localhost>" -m "$msg" -m "Run $run_id (sandboxed; committed by agent-dispatch.sh)" \
+    && echo "== sandbox: committed the agent's changes ($(git -C "$(native "$worktree")" rev-parse --short HEAD))" \
+    || echo "== sandbox: could not commit the agent's changes; they are left in the worktree"
+  return 0
+}
+
 run_hermes() {
-  local limit="$1" json="$RUNS_DIR/$run_id.hermes.json" rc resume=() model=()
+  local limit="$1" json="$RUNS_DIR/$run_id.hermes.json" rc resume=() model=() boxed=() run_prompt="$prompt" gitfile=""
   if [ "$(basename "$HERMES")" = hermes-local.js ]; then
     run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt"
     return $?
   fi
   [[ "${AGENT_RESUME_SESSION:-}" =~ ^local-[0-9a-f]{16,128}$ ]] && resume=(--resume "$AGENT_RESUME_SESSION")
   [ -n "${HERMES_MODEL:-}" ] && model=(-m "$HERMES_MODEL")
-  run_timeout "$limit" "$HERMES" chat -q "$prompt" --oneshot --format stream-json --in "$worktree" \
-      ${model[@]+"${model[@]}"} ${resume[@]+"${resume[@]}"} < /dev/null \
+  if hermes_sandbox_on; then
+    ensure_docker || return 3
+    local home="${AGENT_HERMES_HOME:-$HOME/.hermes-agents}"
+    mkdir -p "$home" && cp "$HERE/hermes-agent-config.yaml" "$home/config.yaml" || return 3
+    export HERMES_HOME="$home"
+    boxed=(-t "${HERMES_TOOLSETS:-terminal,file,todo}")
+    gitfile="$(cat "$worktree/.git" 2>/dev/null)"
+    run_prompt="$prompt"$'\n\n'"Sandbox: you work inside a container. The repository is at /workspace (that is the directory named above). git is not available there: do not run git and do not try to commit. When you finish, your file changes are committed for you."
+    echo "== sandbox: hermes in Docker, workspace only, tools ${HERMES_TOOLSETS:-terminal,file,todo}"
+  fi
+  (cd "$worktree" && run_timeout "$limit" "$HERMES" chat -q "$run_prompt" --oneshot --format stream-json --in "$worktree" \
+      ${model[@]+"${model[@]}"} ${boxed[@]+"${boxed[@]}"} ${resume[@]+"${resume[@]}"} < /dev/null 2>&1) \
     | node "$(native "$HERE/stream-log.js")" "$(native "$json")" hermes
   rc=${PIPESTATUS[0]}
+  if hermes_sandbox_on && [ -n "$gitfile" ]; then commit_sandbox_changes "$gitfile"; fi
   echo "== result"
   node -e 'try { const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(j.result || "(no answer)"); } catch (_) { console.log("(no result: the run ended early)"); }' "$(native "$json")"
   return "$rc"
