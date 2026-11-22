@@ -49,3 +49,38 @@ test('unknown or missing levels fall back to auto (today\'s behaviour)', () => {
   assert.equal(effectiveLevel({}), 'auto');
   assert.equal(effectiveLevel({ requested: undefined, fallback: 'ask' }), 'ask');
 });
+
+// ---- auto names subcommands, never a whole CLI (2026-11-22) -----------------
+const { AUTO_COMMANDS } = require('./approval-levels');
+
+// Does Claude Code's prefix rule `Bash(<prefix>:*)` / exact `Bash(<cmd>)` allow cmd?
+function preAllowed(cmd, allowed) {
+  return (allowed.match(/Bash\([^)]*\)/g) || []).some((rule) => {
+    const body = rule.slice(5, -1);
+    if (body.endsWith(':*')) { const pre = body.slice(0, -2); return cmd === pre || cmd.startsWith(`${pre} `); }
+    return cmd === body;
+  });
+}
+
+test('auto pre-allows the everyday dev commands', () => {
+  const { allowed } = toolsFor('auto', { scriptsDir: '/x' });
+  for (const cmd of ['git status', 'git add -A', 'git commit -m "x"', 'git diff HEAD~1', 'npm test', 'npm run lint', 'npm ci', 'npm install',
+    'node --test a.test.js', 'npx eslint .', 'npx tsc --noEmit', 'npx playwright test', 'supabase db reset', 'ls -la', 'cat README.md', '/x/db-lock.sh npm test']) {
+    assert.ok(preAllowed(cmd, allowed), cmd);
+  }
+});
+
+test('auto no longer pre-allows ways to run anything or reach outside', () => {
+  const { allowed } = toolsFor('auto', { scriptsDir: '/x' });
+  for (const cmd of ['node -e "require(\'child_process\')"', 'node evil.js', 'npx some-package', 'npx -y cowsay', 'git -C . push origin main',
+    'git -c core.sshCommand=sh push', 'git config core.hooksPath /tmp/h', 'git remote add x url', 'git push', 'npm publish', 'npm exec foo',
+    'npm install left-pad', 'supabase link --project-ref abc', 'supabase db push', 'supabase functions deploy x', 'curl http://x']) {
+    assert.ok(!preAllowed(cmd, allowed), cmd);
+  }
+  assert.ok(!/Bash\((git|npm|npx|node|supabase):\*\)/.test(allowed), 'no whole-CLI wildcard');
+  assert.ok(AUTO_COMMANDS.length > 20);
+});
+
+test('npm publish is denied at every level', () => {
+  for (const l of ['ask', 'edits', 'auto']) assert.ok(toolsFor(l).denied.includes('Bash(npm publish:*)'), l);
+});

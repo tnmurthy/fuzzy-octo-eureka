@@ -33,8 +33,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # narrow allow-list: edit files, git, the package and database tools, and the
 # lock. Pushing is denied outright -- a dispatched agent commits, a person
 # merges. Override with CLAUDE_ALLOWED_TOOLS for a different task shape.
-CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-Read Edit Write Glob Grep Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(supabase:*) Bash(node:*) Bash(ls:*) Bash(cat:*) Bash($HERE/db-lock.sh:*)}"
-CLAUDE_DENIED_TOOLS="${CLAUDE_DENIED_TOOLS:-Bash(git push:*) Bash(gh:*)}"
+# Defaults (when not started by the dashboard): the `auto` level from
+# approval-levels.js, so this script never grants more than the dashboard does.
+if [ -z "${CLAUDE_ALLOWED_TOOLS:-}" ] || [ -z "${CLAUDE_DENIED_TOOLS:-}" ]; then
+  _auto_tools="$(node -e 'const t = require(process.argv[1]).toolsFor("auto", { scriptsDir: process.argv[2] }); console.log(t.allowed); console.log(t.denied);' \
+    "$HERE/../approval-levels.js" "$HERE")" || { echo "cannot read approval-levels.js" >&2; exit 2; }
+  CLAUDE_ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-$(printf '%s\n' "$_auto_tools" | sed -n 1p)}"
+  CLAUDE_DENIED_TOOLS="${CLAUDE_DENIED_TOOLS:-$(printf '%s\n' "$_auto_tools" | sed -n 2p)}"
+fi
 # The dashboard sets these from the run's approval level (approval-levels.js).
 CLAUDE_PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
 # Model for dispatched claude runs: routine tasks do not need the account's
