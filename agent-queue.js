@@ -149,7 +149,7 @@ function createAgentQueue({ file, loadRuns, continueRun, now = Date.now, log = (
         const latest = chain[chain.length - 1];
         if (latest.status === 'running') continue;
         let res;
-        try { res = await continueRun(latest, head.text); } catch (err) { res = { ok: false, error: err.message }; }
+        try { res = await continueRun(latest, head.text, head); } catch (err) { res = { ok: false, error: err.message }; }
         if (res && res.ok) {
           t.items.shift();
           t.inflight = { runId: res.runId, at: now() };

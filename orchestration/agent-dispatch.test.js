@@ -139,6 +139,18 @@ test('the run log records the task title and specialist, not the appended guidan
   assert.equal(start.specialist, 'engineering-code-reviewer');
 });
 
+test('the run log records who asked and on which portal', () => {
+  const t = setup({ withTests: false });
+  const res = spawnSync(BASH, [posix(SCRIPT), 'noop', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
+    encoding: 'utf8',
+    env: { ...process.env, AGENT_RUNS_DIR: posix(t.runs), AGENT_BY: 'asha@example.com', AGENT_PORTAL: 'drisyon' },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal(start.by, 'asha@example.com');
+  assert.equal(start.portal, 'drisyon');
+});
+
 test('without a specialist the run log has no specialist field', () => {
   const t = setup({ withTests: false });
   const env = { ...process.env, AGENT_RUNS_DIR: posix(t.runs) };

@@ -250,7 +250,7 @@ test('run now builds the task, picks a fresh branch and goes through dispatch', 
   const r = await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'claude', title: 'Add tests', body: 'for utils', specialist: 'testing-api-tester' } });
   assert.equal(r.status, 202);
   assert.deepEqual(sent[0], { agent: 'claude', repo: 'app', task: 'Add tests\n\nfor utils', specialist: 'testing-api-tester', branch: `agent/run-${(1_700_000_000_000).toString(36)}`, canAsk: true });
-  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: '' } })).status, 400);
+  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: '', by: 'spoof' } })).status, 400);
   assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x', agent: 'rm' } })).status, 400);
   assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x' }, headers: { 'content-type': 'text/plain' } })).status, 403);
 });
@@ -410,4 +410,12 @@ test('queue: edit and remove; steer stops the agent and delivers that message no
   const second = (await call(t.api, { url: '/api/agents/queue', body: { runId: 'b', text: 'two' } })).payload.item;
   assert.equal((await call(t.api, { url: '/api/agents/queue/update', body: { threadId, itemId: second.id, remove: true } })).status, 200);
   assert.equal((await call(t.api, { method: 'GET', url: '/api/agents/thread?id=a' })).payload.queue.length, 0);
+});
+
+test('run now records the signed-in person from the server, not from the body', async () => {
+  const ctxs = [];
+  const { api } = workspaceApi({ dispatchRun: async (p, ctx) => { ctxs.push({ p, ctx }); return { status: 202, body: { ok: true, runId: 'r1', branch: p.branch } }; } });
+  await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'hermes', title: 'Explain', by: 'someone-else' } });
+  assert.deepEqual(ctxs[0].ctx, { by: 'sriad' });
+  assert.equal('by' in ctxs[0].p, false);
 });

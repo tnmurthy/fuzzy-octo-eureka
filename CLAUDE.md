@@ -202,7 +202,17 @@ Admins see **Change** next to the paid-runs meter: `POST /api/agents/settings`
 {dailyPaidRuns 0-1000} saves `logs/dispatch-settings.json` (who + when), which
 wins over `.env` from the next dispatch on, no restart (both dashboards re-read
 it on change). Delete the file to fall back to `.env`. Admin = a local request
-at this Mac, or a signed-in user in `ADMIN_USERS` (default `AUTH_USERNAME`).
+at this Mac, or a person in `ADMIN_USERS` (no default: unset = only this Mac).
+
+**Identity (2026-11-23, `identity.js`):** a verified Cloudflare Access email
+names the person and wins over the portal's shared password session, so
+`req.sessionUser` / `actorOf` is the teammate's email on an Access-protected
+host; the password session is the fallback where a portal has no Access app.
+The shared logins (`sriad`, `drisyon`) and Access's allow-list are not admin.
+The ReBAC actor is the portal's tenant (`user:drisyon` on 8788, `user:sriad`
+on 8787), never derived from the name; `x-rebac-actor` is honoured only for
+requests at this Mac. Runs record `by` (server-set, never from the request
+body) and `portal` (`team` | `drisyon`) on their start line.
 
 **Context page:** `http://127.0.0.1:8787/context` (🧠 Context on the
 dashboard header). Team members table (role, shared memories, agent runs, last
