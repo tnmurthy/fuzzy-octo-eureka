@@ -38,6 +38,22 @@ const accessGate = createAccessGate({
   publicHostnames: (process.env.PUBLIC_HOSTNAMES || 'team.mytestbed.tech').split(','),
   allowedEmails: (process.env.ACCESS_ALLOWED_EMAILS || '').split(',').filter(Boolean),
 });
+
+// P0.2: the Drisyon portal (8788) has no Access app of its own yet, so agents
+// stay off there for tunnelled requests until ACCESS_AUD is set for it.
+const agentsGate = require('./agents-gate');
+const IS_DRISYON_PORTAL = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
+const PORTAL_HAS_ACCESS = !IS_DRISYON_PORTAL || Boolean(process.env.ACCESS_AUD);
+
+// P0.3-P0.5: one identity per person (identity.js).
+const identity = require('./identity');
+const PORTAL = identity.portalName(IS_DRISYON_PORTAL);
+const tenantActorOf = (req) =>
+  identity.tenantActor({
+    local: !accessGate.requiresAccess(req),
+    headerActor: req.headers && req.headers['x-rebac-actor'],
+    isDrisyonPortal: IS_DRISYON_PORTAL,
+  });
 const auth = require('./auth');
 const { getHostSpecs } = require('./host-specs');
 const DASHBOARD_DIR = __dirname;
@@ -254,18 +270,10 @@ rebac.addEdge('perm:memory_store', 'APPLIES_TO', 'resource:memory_engine');
 rebac.addEdge('perm:memory_read', 'APPLIES_TO', 'resource:memory_engine');
 rebac.addEdge('team:opscore', 'OWNER_OF', 'resource:telemetry_feed');
 
+// The ReBAC actor is the portal's tenant (identity.js): a person's name or a
+// remote x-rebac-actor header can no longer pick another tenant.
 function getReqUserNode(req) {
-  if (req.headers && req.headers['x-rebac-actor']) {
-    return String(req.headers['x-rebac-actor']).trim();
-  }
-  const user = req.sessionUser || auth.getSessionUser(req);
-  if (user) {
-    const clean = String(user).toLowerCase().trim();
-    if (clean === 'drisyon' || clean.includes('drisyon')) return 'user:drisyon';
-    if (clean === 'sriad' || clean.includes('sriad')) return 'user:sriad';
-    return `user:${clean}`;
-  }
-  return 'user:sriad';
+  return tenantActorOf(req);
 }
 
 const { isServable } = require('./static-policy');
@@ -674,9 +682,7 @@ function handleTasks(req, res) {
   }
 
   const actor =
-    req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')
-      ? 'user:drisyon'
-      : 'user:sriad';
+    tenantActorOf(req);
 
   if (req.method === 'POST' && !id) {
     readJsonBody(req, MAX_TASK_BODY_BYTES)
@@ -846,7 +852,8 @@ function listAvailableRepos() {
 // Validate a dispatch request and start it. Shared by /api/dispatch/run (the
 // issue poller, scripts) and the Agents page's "Run now"; resolves to
 // { status, body } for the caller to send.
-async function startDispatch(payload) {
+// ctx.by is set by the server from the signed-in person, never from the body.
+async function startDispatch(payload, ctx = {}) {
   payload = payload || {};
   // followUpOf: continue a finished claude run (followup.js) - same repo and
   // branch, its session resumed. The repo/branch/agent come from that run.
@@ -954,6 +961,7 @@ async function startDispatch(payload) {
       reviewBase,
       ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
       canAsk: payload.canAsk === true && !readOnly,
+      by: ctx.by || null,
     });
     return {
       status: 202,
@@ -1008,24 +1016,16 @@ let pendingPaidRuns = [];
 
 // Admin = someone at this Mac (local request, no tunnel) or a signed-in user
 // named in ADMIN_USERS (default: the dashboard login, AUTH_USERNAME, or Cloudflare Access allowed emails).
-const ADMIN_USERS = (
-  process.env.ADMIN_USERS ||
-  `${process.env.AUTH_USERNAME || 'sriad'},${process.env.ACCESS_ALLOWED_EMAILS || ''}`
-)
-  .split(',')
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
+// No fallback to the shared login or Access's allow-list (identity.js); with
+// ADMIN_USERS unset, only requests at this Mac are admin.
+const ADMIN_USERS = identity.parseAdminUsers(process.env.ADMIN_USERS);
+if (!ADMIN_USERS.length) console.warn('ADMIN_USERS is not set: only requests at this Mac are admin.');
 function isAdmin(req) {
-  if (!accessGate.requiresAccess(req)) return true;
-  if (!req.sessionUser) return false;
-  const user = String(req.sessionUser).toLowerCase();
-  if (ADMIN_USERS.includes(user)) return true;
-  const allowedEmails = (process.env.ACCESS_ALLOWED_EMAILS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (allowedEmails.includes(user)) return true;
-  return false;
+  return identity.isAdminUser({
+    local: !accessGate.requiresAccess(req),
+    user: req.sessionUser,
+    adminUsers: ADMIN_USERS,
+  });
 }
 const actorOf = (req) => req.sessionUser || 'local operator';
 
@@ -1160,6 +1160,7 @@ function spawnAgentDispatch({
   level = null,
   reviewBase = null,
   canAsk = false,
+  by = null,
 }) {
   const safeBranch = branch && /^[a-zA-Z0-9._/-]+$/.test(branch) ? branch : `agent/${Date.now()}`;
   const effectiveRunId =
@@ -1250,6 +1251,9 @@ function spawnAgentDispatch({
       // Page-started runs may end with "QUESTION: ..." (agent-dispatch.sh).
       if (canAsk) dispatchEnv.AGENT_CAN_ASK = '1';
       else delete dispatchEnv.AGENT_CAN_ASK;
+      // Who asked and on which portal: recorded on the run's start line.
+      dispatchEnv.AGENT_BY = identity.runAuthor(by);
+      dispatchEnv.AGENT_PORTAL = PORTAL;
       // Approval level -> claude's flags. Levels that ask get a run token for
       // the approval helper; a review never asks (approval-levels.js).
       const runLevel = level || (readOnly ? 'review' : 'auto');
@@ -2050,9 +2054,7 @@ function handleRequest(req, res) {
   }
   if (req.url.startsWith('/api/rebac/inspect')) {
     const actor =
-      req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')
-        ? 'user:drisyon'
-        : 'user:sriad';
+      tenantActorOf(req);
     const authVerdict = rebac.canAccess(actor, 'ping:execute', 'resource:ollama_cluster');
     if (!authVerdict.authorized) {
       return sendJson(res, 403, { ok: false, error: 'ReBAC authorization denied' });
@@ -2251,6 +2253,7 @@ function handleRequest(req, res) {
                 repoPath: targetRepoPath,
                 branch,
                 task: taskInfo.task,
+                by: actorOf(req),
               })
                 .then((dispatchRes) => {
                   // Record in episodic memory
@@ -2727,9 +2730,7 @@ function handleRequest(req, res) {
       }
       // ReBAC authorization check
       const actor =
-        req.sessionUser && String(req.sessionUser).toLowerCase().includes('drisyon')
-          ? 'user:drisyon'
-          : 'user:sriad';
+        tenantActorOf(req);
       const dispatchAuth = rebac.canAccess(actor, 'dispatch:run', 'resource:agent_runner');
       if (!dispatchAuth.authorized) {
         return sendJson(res, 403, {
@@ -2738,7 +2739,7 @@ function handleRequest(req, res) {
           path: dispatchAuth.path,
         });
       }
-      const r = await startDispatch(payload);
+      const r = await startDispatch(payload, { by: actorOf(req) });
       return sendJson(res, r.status, r.body);
     });
     return;
@@ -2759,7 +2760,7 @@ function handleRequest(req, res) {
     const task =
       'Automated security sweep: audit API authorization, verify ReBAC boundaries, and check tenant memory isolation.';
     const branch = `patrol/mantis-${Date.now()}`;
-    spawnAgentDispatch({ agent: 'mantis', repo, repoPath, branch, task })
+    spawnAgentDispatch({ agent: 'mantis', repo, repoPath, branch, task, by: actorOf(req) })
       .then((result) => {
         // Record in episodic memory
         try {
@@ -2994,6 +2995,15 @@ function handleRequest(req, res) {
 
 const server = http.createServer(async (req, res) => {
   const urlPath = req.url.split('?')[0];
+  if (
+    agentsGate.agentsBlocked({
+      portalHasAccess: PORTAL_HAS_ACCESS,
+      viaTunnel: accessGate.requiresAccess(req),
+      url: req.url,
+    })
+  ) {
+    return sendJson(res, 403, { ok: false, error: agentsGate.BLOCK_MESSAGE });
+  }
   const isPublicAuth =
     urlPath === '/login' ||
     urlPath === '/logout' ||
@@ -3011,17 +3021,14 @@ const server = http.createServer(async (req, res) => {
     return handleRequest(req, res);
   }
 
-  // 3. Valid session cookie authentication
-  const sessionUser = auth.getSessionUser(req);
-  if (sessionUser) {
-    req.sessionUser = sessionUser;
-    return handleRequest(req, res);
-  }
-
-  // 4. Cloudflare Access assertion token (if used)
+  // 3. Who is it? A verified Cloudflare Access email names the person and
+  // wins over the shared password session (identity.js); the session alone
+  // still works where a portal has no Access app yet.
   const cfVerdict = await accessGate.verifyRequest(req);
-  if (cfVerdict && cfVerdict.ok) {
-    req.sessionUser = cfVerdict.email || 'cf-user';
+  const who = identity.resolveUser({ accessVerdict: cfVerdict, sessionUser: auth.getSessionUser(req) });
+  if (who) {
+    req.sessionUser = who.user;
+    req.authVia = who.via;
     return handleRequest(req, res);
   }
 
