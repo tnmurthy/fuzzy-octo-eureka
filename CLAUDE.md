@@ -215,7 +215,13 @@ read-only for everyone (Hermes `AGENT_HERMES_MODE=readonly`, Claude at the
 a free read-only `plan` by Hermes; "Go ahead" (`POST
 /api/agents/plan/approve`, latest finished plan only) starts the `change` run
 on the same branch with the picked helper, the request and the plan in its
-task. Follow-ups keep their thread's kind. Agent runs never inherit
+task. Follow-ups keep their thread's kind; to act on an answer or document,
+"Make these changes" (`POST /api/agents/make-changes` {runId, agent, focus})
+starts a new Change request (plan first) carrying that reply. Long
+conversations: `ask-nav.js` folds all but the last two turns, clips long
+replies behind "Show all", and adds a sticky toolbar (New chat, Collapse /
+Expand all, Go to turn, Top, Latest; Alt+N / Alt+Up / Alt+Down) and floating
+top / latest buttons. Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
 

@@ -1,7 +1,8 @@
 // ask.js - the Ask page (/agents): ask a helper, follow your requests.
 // Everything the agents write is shown with textContent, never innerHTML.
 // APIs: GET /api/agents/mine, /api/agents/repos, /api/agents/thread,
-// /api/agents/log; POST /api/agents/run, /api/agents/queue, /api/agents/stop.
+// /api/agents/log; POST /api/agents/run, /api/agents/queue, /api/agents/stop,
+// /api/agents/plan/approve, /api/agents/make-changes. Navigation: ask-nav.js.
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -152,6 +153,7 @@
     $('view-new').hidden = false;
     if (location.hash) history.replaceState(null, '', location.pathname);
     renderThreads();
+    window.scrollTo(0, 0);
     $('request').focus();
   }
 
@@ -248,6 +250,37 @@
     return el('div', { className: 'ask-actions' }, go, edit);
   }
 
+  // "Make these changes": the way from read-only findings to edits. Starts a
+  // new Change request (a plan first, then Go ahead) carrying this reply.
+  function makeActions(run) {
+    if (!state.admin && (state.mode === 'readonly' || state.mode === 'off')) return null;
+    const focus = el('input', { className: 'ask-field', type: 'text', maxLength: 2000, placeholder: 'Which ones? e.g. fixes 1-5 (optional)' });
+    const helper = el('select', { className: 'ask-field', title: 'Who makes the changes' },
+      el('option', { value: 'claude', textContent: 'Expert helper' }),
+      el('option', { value: 'hermes', textContent: 'Free helper' }));
+    if (!state.admin && state.mode === 'claude') helper.disabled = true;
+    const go = el('button', { type: 'button', className: 'ask-btn go', textContent: '🔧 Make these changes' });
+    const msg = el('div', { className: 'ask-msg', role: 'status' });
+    go.addEventListener('click', async () => {
+      if (!confirm('Start a change request from this reply? The helper first sends a plan; nothing changes until you click Go ahead.')) return;
+      go.disabled = true;
+      msg.className = 'ask-msg';
+      msg.textContent = 'Starting…';
+      try {
+        const r = await api('/api/agents/make-changes', { runId: run.id, agent: helper.value, focus: focus.value.trim() });
+        await loadMine();
+        openThread(r.runId);
+      } catch (err) {
+        go.disabled = false;
+        msg.className = 'ask-msg err';
+        msg.textContent = `Could not start: ${err.message}`;
+      }
+    });
+    return el('div', { className: 'ask-make' },
+      el('div', { className: 'ask-muted', textContent: 'Want the helper to act on this? It starts a new change request: a plan first, then changes on a draft copy after you say Go ahead.' }),
+      el('div', { className: 'ask-make-row' }, focus, helper, go), msg);
+  }
+
   function helperBubble(run, steps, { latest = false, title = '' } = {}) {
     const box = el('div', { className: 'ask-bubble helper' },
       el('div', { className: 'ask-who' },
@@ -261,12 +294,13 @@
       return box;
     }
     if (run.answer && run.kind === 'document' && run.status === 'done') {
-      box.append(el('div', { className: 'ask-doc' }, el('pre', { className: 'ask-answer', textContent: run.answer })), docActions(run, title));
+      box.append(el('div', { className: 'ask-doc' }, window.AskNav.reply(run.answer, run.id)), docActions(run, title));
     } else if (run.answer) {
-      box.append(el('pre', { className: 'ask-answer', textContent: run.answer }));
+      box.append(window.AskNav.reply(run.answer, run.id, { open: latest && run.answer.length < 6000 }));
     }
     if (!run.answer && run.status === 'done') box.append(el('div', { className: 'ask-muted', textContent: 'Finished without a written answer.' }));
     if (run.kind === 'plan' && run.status === 'done' && run.answer && latest) box.append(planActions(run));
+    if (['answer', 'document'].includes(run.kind) && run.status === 'done' && run.answer && latest) box.append(makeActions(run) || '');
     if (run.question) {
       box.append(el('div', { className: 'ask-callout tone-amber', textContent: `The helper asks: ${run.question} Reply below.` }));
     }
@@ -312,14 +346,23 @@
     $('t-stage').className = `ask-pill tone-${stage ? TONES[stage.key] || 'muted' : 'muted'}`;
 
     const items = [];
+    const sums = [];
     const title = stripPrefix(runs[0] && runs[0].task);
     for (const [i, run] of runs.entries()) {
       const approved = run.kind === 'change' && /^Go ahead with the plan\./.test(String(run.task || ''));
-      items.push(el('div', { className: 'ask-bubble you' },
+      const said = approved ? '✓ Go ahead with the plan.' : stripPrefix(run.task);
+      const you = el('div', { className: 'ask-bubble you' },
         el('div', { className: 'ask-who', textContent: 'You' }),
-        el('pre', { className: 'ask-answer', textContent: approved ? '✓ Go ahead with the plan.' : stripPrefix(run.task) })));
+        window.AskNav.reply(said, `you-${run.id}`));
       const isLatest = i === runs.length - 1 && !(t.queue || []).length;
-      items.push(helperBubble(run, await stepsOf(run), { latest: isLatest, title }));
+      const helper = helperBubble(run, await stepsOf(run), { latest: isLatest, title });
+      const summary = said.replace(/\s+/g, ' ').trim();
+      sums.push(summary);
+      items.push(window.AskNav.turn({
+        runId: run.id, index: i, total: runs.length, summary,
+        meta: [run.kind, run.status === 'running' ? 'working' : run.status, run.started_at ? ago(run.started_at) : null].filter(Boolean).join(' · '),
+        body: [you, helper],
+      }));
     }
     for (const q of t.queue || []) {
       items.push(el('div', { className: 'ask-bubble you queued' },
@@ -330,6 +373,7 @@
     const convo = $('convo');
     const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
     convo.replaceChildren(...items);
+    window.AskNav.setJump(sums);
     if (nearBottom) window.scrollTo(0, document.body.scrollHeight);
     $('stop-btn').hidden = !(latest && latest.status === 'running');
     $('stop-btn').dataset.runId = latest ? latest.id : '';
@@ -341,12 +385,14 @@
   function openThread(runId) {
     state.openId = runId;
     stepsCache = {};
+    window.AskNav.reset();
     $('view-new').hidden = true;
     $('view-thread').hidden = false;
     $('convo').replaceChildren(el('div', { className: 'ask-empty', textContent: 'Loading…' }));
     $('reply-msg').textContent = '';
     history.replaceState(null, '', `#t=${encodeURIComponent(runId)}`);
-    renderThread().then(renderThreads);
+    // Land on the latest reply; older turns start folded (ask-nav.js).
+    renderThread().then(() => { window.scrollTo(0, document.body.scrollHeight); renderThreads(); });
   }
 
   $('reply-form').addEventListener('submit', async (e) => {
@@ -389,6 +435,7 @@
   });
 
   $('new-btn').addEventListener('click', showNew);
+  window.AskNav.init({ onNew: showNew });
   setKind('answer', false);
 
   // ---- start ---------------------------------------------------------------------
