@@ -230,6 +230,16 @@ teammate-mode, repos and agent-queue. Drisyon offers no built-in repos and no
 issue queue: only repos an admin adds on its Ops console
 (`127.0.0.1:8788/agents/ops`) can run there.
 
+**Who sees a request (2026-11-23, `agents-mine.js` `mayOpen`):** a run
+belongs to whoever started its thread (the root run's `by`; none = "local
+operator"). Thread, log, follow-up, stop, redirect, plan approval and the
+message queue answer 404 for anyone else's run unless the caller is an admin,
+and the Ops overview lists only the caller's runs for non-admins. On a
+password-only portal everyone shares one name, so they share threads too.
+The Ops console's Preview tab and its `/api/agents/repo/preview` and
+`/api/agents/repo/file` endpoints were removed: `repo` was unvalidated
+(`repo=../../..` read files under home) and they had no admin check.
+
 **Agents page / Ops console:** `http://127.0.0.1:8787/agents/ops` (the full
 page). Styles in `agents.css` + `agents-cockpit.css`; one plain-English voice
 (the Friendly/Developer toggle was removed 2026-11-23). A form that queues a task (opens a GitHub issue labelled
