@@ -20,6 +20,7 @@ function setup({ runs = [], active = {}, github = null } = {}) {
     capNow: () => ({ used: 2, cap: 20 }),
     repos: REPOS,
     github,
+    actorOf: () => 'local operator', // owner of runs without `by`
   });
   return { api, dir };
 }
@@ -278,7 +279,7 @@ test('overview shows an open question until a follow-up answers it', async () =>
     { id: 'q2', status: 'done', log: log('q2') },
     { id: 'f1', status: 'done', parent: 'q2', log: log('f1') },
   ];
-  const api = createAgentsApi({ runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}), repos: REPOS, github: null });
+  const api = createAgentsApi({ runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}), repos: REPOS, github: null, actorOf: () => 'local operator' });
   const byId = (o) => Object.fromEntries(o.recent.map((r) => [r.id, r.question]));
   assert.deepEqual(byId(await api.overview({ headers: {} })), { q1: 'Postgres or SQLite?', q2: null, f1: null });
   runs = [...runs, { id: 'f2', status: 'running', parent: 'q1' }];
@@ -354,7 +355,7 @@ function threadApi({ runs, dispatchRun, runControl } = {}) {
     runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs: current }), capNow: () => ({}),
     repos: REPOS, github: null, queueFile: path.join(dir, 'q.json'),
     dispatchRun: dispatchRun || (async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: `n${sent.length}` } }; }),
-    runControl,
+    runControl, actorOf: () => 'local operator',
   });
   return { api, sent, setRuns: (r) => { current = r; }, runs: () => current };
 }
@@ -469,9 +470,9 @@ test('Ask page kinds: run passes the kind, bad kinds are refused, plans are appr
   fs.writeFileSync(planLog, '');
   fs.writeFileSync(path.join(dir, 'p1.hermes.json'), JSON.stringify({ result: '1. Add a check\n2. Show a message' }));
   const runs = [
-    { id: 'p1', agent: 'hermes', kind: 'plan', helper: 'claude', status: 'done', task: 'Signup accepts empty emails', log: planLog, started_at: '2026-11-23T10:00:00Z' },
-    { id: 'a1', agent: 'hermes', kind: 'answer', status: 'done', task: 'What is this?', log: planLog, started_at: '2026-11-23T10:00:00Z' },
-    { id: 'p2', agent: 'hermes', kind: 'plan', status: 'running', task: 'x', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { by: 'asha@example.com', id: 'p1', agent: 'hermes', kind: 'plan', helper: 'claude', status: 'done', task: 'Signup accepts empty emails', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { by: 'asha@example.com', id: 'a1', agent: 'hermes', kind: 'answer', status: 'done', task: 'What is this?', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { by: 'asha@example.com', id: 'p2', agent: 'hermes', kind: 'plan', status: 'running', task: 'x', log: planLog, started_at: '2026-11-23T10:00:00Z' },
   ];
   const sent = [];
   const api = createAgentsApi({
@@ -500,4 +501,45 @@ test('Ask page kinds: run passes the kind, bad kinds are refused, plans are appr
 
   const g = await call(api, { method: 'GET', url: '/api/agents/request-kind?q=write%20a%20report' });
   assert.deepEqual(g.payload, { ok: true, kind: 'document', source: 'model' });
+});
+
+test('a request is visible only to the person who started it, and admins', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-own-'));
+  const logFile = path.join(dir, 'a.log');
+  fs.writeFileSync(logFile, 'step 1\n');
+  const runs = [
+    { id: 'a', by: 'asha@example.com', agent: 'hermes', kind: 'plan', status: 'done', task: 'Asha task', log: logFile, started_at: '2026-11-23T10:00:00Z' },
+    { id: 'r', by: 'ravi@example.com', agent: 'hermes', status: 'running', task: 'Ravi task', log: logFile, started_at: '2026-11-23T10:00:00Z' },
+  ];
+  let actor = 'ravi@example.com';
+  let admin = false;
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, queueFile: path.join(dir, 'q.json'), isAdmin: () => admin, actorOf: () => actor,
+    dispatchRun: async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: 'n' } }; },
+    runControl: { stop: () => ({ ok: true }), waitForEnd: async () => ({ status: 'stopped' }) },
+  });
+  const tries = [
+    { method: 'GET', url: '/api/agents/thread?id=a' },
+    { method: 'GET', url: '/api/agents/log?id=a' },
+    { url: '/api/agents/followup', body: { runId: 'a', message: 'hi' } },
+    { url: '/api/agents/stop', body: { runId: 'a' } },
+    { url: '/api/agents/redirect', body: { runId: 'a', message: 'other' } },
+    { url: '/api/agents/plan/approve', body: { runId: 'a' } },
+    { url: '/api/agents/queue', body: { runId: 'a', text: 'hi' } },
+    { url: '/api/agents/queue/steer', body: { threadId: 'a', itemId: 'x' } },
+  ];
+  for (const t of tries) assert.equal((await call(api, t)).status, 404, `${t.url} for someone else`);
+  assert.equal(sent.length, 0, 'nothing was dispatched');
+  const ov = await api.overview({ headers: {} });
+  assert.deepEqual([...ov.running, ...ov.recent].map((r) => r.id), ['r'], 'the Ops overview shows only your runs');
+
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/thread?id=r' })).status, 200, 'your own run');
+  actor = 'asha@example.com';
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/thread?id=a' })).status, 200);
+  actor = 'ravi@example.com';
+  admin = true;
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/log?id=a' })).status, 200, 'admins see every run');
+  assert.equal((await api.overview({ headers: {} })).recent.length + (await api.overview({ headers: {} })).running.length, 2);
 });

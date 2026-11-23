@@ -59,3 +59,20 @@ test('read-only kinds are done, not ready for review, whatever the branch count 
   const byId = Object.fromEntries(myThreads({ runs, actor: 'a', now: NOW }).map((t) => [t.threadId, t.stage.key]));
   assert.deepEqual(byId, { q: 'done', c: 'review' });
 });
+
+test('mayOpen: your threads and admins only; a follow-up belongs to whoever started the thread', () => {
+  const { mayOpen, threadOwner } = require('./agents-mine');
+  const runs = [
+    { id: 'a', by: 'Asha@example.com' },
+    { id: 'a2', parent: 'a', by: 'admin@example.com' },
+    { id: 'old' },
+  ];
+  assert.equal(threadOwner(runs, 'a2'), 'Asha@example.com');
+  assert.equal(threadOwner(runs, 'nope'), null);
+  assert.equal(mayOpen({ runs, runId: 'a2', actor: 'asha@example.com' }), true, 'case-insensitive');
+  assert.equal(mayOpen({ runs, runId: 'a', actor: 'ravi@example.com' }), false);
+  assert.equal(mayOpen({ runs, runId: 'a', actor: 'ravi@example.com', admin: true }), true);
+  assert.equal(mayOpen({ runs, runId: 'old', actor: 'ravi@example.com' }), false, 'unattributed runs are the operator\'s');
+  assert.equal(mayOpen({ runs, runId: 'old', actor: 'local operator' }), true);
+  assert.equal(mayOpen({ runs, runId: 'nope', actor: 'ravi@example.com' }), true, 'unknown run: the route answers 404');
+});

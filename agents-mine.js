@@ -88,4 +88,21 @@ function myThreads({ runs, actor, decorate = (r) => r, now = Date.now(), windowM
   return out.slice(0, limit);
 }
 
-module.exports = { myThreads, rootsOf, ownerOf, plainTitle };
+/** Who started the thread `runId` belongs to; null for an unknown run. */
+function threadOwner(runs, runId) {
+  const byId = new Map(runs.map((r) => [r.id, r]));
+  if (!byId.has(runId)) return null;
+  return ownerOf(byId.get(rootsOf(runs).get(runId)));
+}
+
+/**
+ * May this person open or act on run `runId`? Admins: any run. Others: runs
+ * in threads they started. An unknown run passes (the route answers 404).
+ */
+function mayOpen({ runs, runId, actor, admin = false }) {
+  if (admin) return true;
+  const owner = threadOwner(runs, runId);
+  return owner === null || owner.toLowerCase() === String(actor || LOCAL).toLowerCase();
+}
+
+module.exports = { myThreads, rootsOf, ownerOf, plainTitle, threadOwner, mayOpen };
