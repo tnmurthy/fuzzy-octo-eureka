@@ -489,6 +489,42 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
+    if (url.pathname === '/api/agents/make-changes' && req.method === 'POST') {
+      // "Make these changes" under an answer or document: a new Change request
+      // (plan first, then Go ahead) on the same project, carrying that reply.
+      // Follow-ups keep their thread's kind, so this is the way from read-only
+      // findings to edits.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'run now is not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then(async (b) => {
+          const runs = loadRuns();
+          if (notYours(req, b.runId, runs)) return sendJson(res, 404, NOT_FOUND);
+          const src = runs.find((r) => r.id === String(b.runId || ''));
+          if (!src) return sendJson(res, 404, NOT_FOUND);
+          if (!['answer', 'document'].includes(src.kind)) return sendJson(res, 400, { ok: false, error: 'only an answer or a document can be turned into changes' });
+          if (src.status !== 'done') return sendJson(res, 409, { ok: false, error: 'wait for the reply to finish first' });
+          const j = path.dirname(path.resolve(String(src.log || ''))) === runsDir ? resultOf(src) : null;
+          const findings = j && j.result ? String(j.result).slice(0, 8000) : '';
+          if (!findings.trim()) return sendJson(res, 409, { ok: false, error: 'that reply has no text to act on' });
+          const agent = String(b.agent || src.agent || 'hermes');
+          if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
+          const t = agentQueue ? agentQueue.threadOf(src.id) : null;
+          const root = t && t.runs.length ? t.runs[0] : src;
+          const request = String(root.task || '').replace(/\s+/g, ' ').trim();
+          const focus = String(b.focus || '').trim().slice(0, 2000);
+          const task = `Make the changes from: ${request.slice(0, 120)}\n\n`
+            + (focus ? `What to do now: ${focus}\n\n` : 'What to do now: the most valuable fixes below, smallest first.\n\n')
+            + `Original request: ${request.slice(0, 2000)}\n\nThe ${src.kind} to act on:\n${findings}`;
+          const repo = path.basename(String(src.repo || '').replace(/[\\/]+$/, ''));
+          const r = await dispatchRun({
+            agent, repo, task, branch: `agent/run-${now().toString(36)}`, canAsk: true, kind: 'change',
+          }, { by: actorOf(req) });
+          return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
     if (url.pathname === '/api/agents/run' && req.method === 'POST') {
       // Run now on any registered repo: no GitHub issue; the work lands on a
       // new branch in its own worktree. Same checks and paid cap as dispatch.

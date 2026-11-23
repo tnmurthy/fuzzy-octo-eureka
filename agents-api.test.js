@@ -543,3 +543,39 @@ test('a request is visible only to the person who started it, and admins', async
   assert.equal((await call(api, { method: 'GET', url: '/api/agents/log?id=a' })).status, 200, 'admins see every run');
   assert.equal((await api.overview({ headers: {} })).recent.length + (await api.overview({ headers: {} })).running.length, 2);
 });
+
+test('make-changes turns your answer or document into a new Change request', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-mc-'));
+  const logFile = path.join(dir, 'd1.log');
+  fs.writeFileSync(logFile, '');
+  fs.writeFileSync(path.join(dir, 'd1.hermes.json'), JSON.stringify({ result: '| 1 | Add canonical tags |' }));
+  const runs = [
+    { id: 'd1', by: 'asha@example.com', agent: 'hermes', kind: 'document', status: 'done', task: 'Traffic report for vizag', repo: '/h/agent-repos/vizag-live', log: logFile },
+    { id: 'c1', by: 'asha@example.com', agent: 'hermes', kind: 'change', status: 'done', task: 'x', repo: '/h/r/app', log: logFile },
+    { id: 'd2', by: 'asha@example.com', agent: 'hermes', kind: 'answer', status: 'running', task: 'y', repo: '/h/r/app', log: logFile },
+    { id: 'o1', by: 'ravi@example.com', agent: 'hermes', kind: 'answer', status: 'done', task: 'z', repo: '/h/r/app', log: logFile },
+  ];
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, isAdmin: () => false, actorOf: () => 'asha@example.com', now: () => 1_700_000_000_000,
+    dispatchRun: async (p, ctx) => { sent.push({ p, ctx }); return { status: 202, body: { ok: true, runId: 'new1' } }; },
+  });
+  const r = await call(api, { url: '/api/agents/make-changes', body: { runId: 'd1', agent: 'claude', focus: 'fixes 1-3' } });
+  assert.deepEqual([r.status, r.payload.runId], [202, 'new1']);
+  const { p, ctx } = sent[0];
+  assert.equal(p.kind, 'change', 'starts as a change, so it runs as a plan first');
+  assert.equal(p.agent, 'claude');
+  assert.equal(p.repo, 'vizag-live');
+  assert.equal(p.followUpOf, undefined, 'a new request, not a read-only follow-up');
+  assert.match(p.task, /^Make the changes from: Traffic report for vizag/);
+  assert.match(p.task, /What to do now: fixes 1-3/);
+  assert.match(p.task, /The document to act on:\n\| 1 \| Add canonical tags \|/);
+  assert.deepEqual(ctx, { by: 'asha@example.com' });
+
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'c1' } })).status, 400, 'not from a change');
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'd2' } })).status, 409, 'not while running');
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'o1' } })).status, 404, 'not someone else\'s');
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'd1', agent: 'rm' } })).status, 400);
+  assert.equal(sent.length, 1);
+});
