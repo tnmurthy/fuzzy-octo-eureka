@@ -130,6 +130,7 @@ test('createTask refuses without a token or with bad input', async () => {
 
 // ---- admin: change the daily limit ----------------------------------------
 const { Readable } = require('stream');
+const { createTeammateModeSetting } = require('./teammate-mode');
 const { createDispatchSettings } = require('./dispatch-settings');
 
 function call(api, { method = 'POST', url, body, headers = {} }) {
@@ -149,12 +150,13 @@ function call(api, { method = 'POST', url, body, headers = {} }) {
 function settingsApi(admin) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-set-'));
   const settings = createDispatchSettings({ file: path.join(dir, 's.json'), envCap: 20 });
+  const teammateModeSetting = createTeammateModeSetting({ file: path.join(dir, 'tm.json'), envMode: 'sandbox' });
   const api = createAgentsApi({
     runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 'st.json'),
     readRuns: () => ({ runs: [] }), capNow: () => ({ used: 0, cap: settings.cap() }),
-    repos: REPOS, github: null, settings, isAdmin: () => admin, actorOf: () => 'sriad',
+    repos: REPOS, github: null, settings, teammateModeSetting, isAdmin: () => admin, actorOf: () => 'sriad',
   });
-  return { api, settings };
+  return { api, settings, teammateModeSetting };
 }
 
 test('an admin can change the daily limit; it applies at once and is reported', async () => {
@@ -418,4 +420,23 @@ test('run now records the signed-in person from the server, not from the body', 
   await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'hermes', title: 'Explain', by: 'someone-else' } });
   assert.deepEqual(ctxs[0].ctx, { by: 'sriad' });
   assert.equal('by' in ctxs[0].p, false);
+});
+
+test('only an admin switches the teammate mode; everyone sees it; issues follow it', async () => {
+  const admin = settingsApi(true);
+  const r = await call(admin.api, { url: '/api/agents/settings', body: { teammateMode: 'readonly' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.payload.teammateMode.mode, 'readonly');
+  assert.equal(admin.teammateModeSetting.get(), 'readonly');
+  assert.equal((await call(admin.api, { url: '/api/agents/settings', body: { teammateMode: 'everything' } })).status, 400);
+
+  const user = settingsApi(false);
+  assert.equal((await call(user.api, { url: '/api/agents/settings', body: { teammateMode: 'sandbox' } })).status, 403);
+  assert.equal((await user.api.overview({ headers: {} })).teammateMode.mode, 'sandbox');
+
+  // a teammate cannot route around the mode through a GitHub issue
+  user.teammateModeSetting.set('readonly', 'owner');
+  const issue = await call(user.api, { url: '/api/agents/task', body: { repo: REPOS[0], title: 'x' } });
+  assert.equal(issue.status, 403);
+  assert.match(issue.payload.error, /use Run now/);
 });

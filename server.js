@@ -1012,6 +1012,17 @@ const dispatchSettings = require('./dispatch-settings').createDispatchSettings({
   file: path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'),
   envCap: parseCap(process.env.DISPATCH_DAILY_PAID_RUNS),
 });
+// What teammates' runs may do (teammate-mode.js): an admin's choice on the
+// Agents page (logs/teammate-mode.json), else TEAMMATE_RUN_MODE.
+const teammateMode = require('./teammate-mode');
+const teammateModeSetting = teammateMode.createTeammateModeSetting({
+  file: path.join(DASHBOARD_DIR, 'logs', 'teammate-mode.json'),
+  envMode: process.env.TEAMMATE_RUN_MODE,
+});
+const isAdminAuthor = (by) => {
+  const author = identity.runAuthor(by);
+  return identity.isAdminUser({ local: author === 'local operator', user: author, adminUsers: ADMIN_USERS });
+};
 let pendingPaidRuns = [];
 
 // Admin = someone at this Mac (local request, no tunnel) or a signed-in user
@@ -1118,6 +1129,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
     }),
   repos: pollerRepos(),
   settings: dispatchSettings,
+  teammateModeSetting,
   specialists,
   suggester: specialistSuggester,
   recommender: specialistRecommender,
@@ -1162,6 +1174,14 @@ function spawnAgentDispatch({
   canAsk = false,
   by = null,
 }) {
+  // Every way to start an agent passes here: apply the teammate mode
+  // (teammate-mode.js) to anyone who is not an admin.
+  const gate = teammateMode.applyTeammateMode({ mode: teammateModeSetting.get(), admin: isAdminAuthor(by), agent });
+  if (!gate.ok) return Promise.reject(Object.assign(new Error(gate.error), { status: gate.status }));
+  if (gate.agent !== agent) {
+    agent = gate.agent;
+    resumeSession = null; // another agent's session cannot be resumed
+  }
   const safeBranch = branch && /^[a-zA-Z0-9._/-]+$/.test(branch) ? branch : `agent/${Date.now()}`;
   const effectiveRunId =
     runId ||
@@ -1254,6 +1274,14 @@ function spawnAgentDispatch({
       // Who asked and on which portal: recorded on the run's start line.
       dispatchEnv.AGENT_BY = identity.runAuthor(by);
       dispatchEnv.AGENT_PORTAL = PORTAL;
+      dispatchEnv.AGENT_RUN_MODE = gate.mode;
+      if (gate.hermesMode) {
+        // Teammates' Hermes runs are always boxed, whatever .env says.
+        dispatchEnv.AGENT_HERMES_SANDBOX = 'on';
+        dispatchEnv.AGENT_HERMES_MODE = gate.hermesMode;
+      } else {
+        delete dispatchEnv.AGENT_HERMES_MODE;
+      }
       // Approval level -> claude's flags. Levels that ask get a run token for
       // the approval helper; a review never asks (approval-levels.js).
       const runLevel = level || (readOnly ? 'review' : 'auto');

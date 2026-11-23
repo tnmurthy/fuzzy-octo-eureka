@@ -621,6 +621,49 @@
     }
   });
 
+  // ---- teammate run mode: admins switch it, teammates see it -------------
+  let tmBusy = false;
+  function renderTeammateMode(admin, t) {
+    const box = $('tm-box');
+    const sel = $('tm-mode');
+    if (!box || !sel) return;
+    if (!t) { box.hidden = true; return; }
+    box.hidden = false;
+    if (tmBusy || document.activeElement === sel) return;
+    if (sel.options.length !== t.modes.length) {
+      sel.textContent = '';
+      for (const m of t.modes) sel.append(new Option(m.label, m.value));
+    }
+    sel.value = t.mode;
+    sel.disabled = !admin;
+    box.title = t.source === 'admin'
+      ? `Set by ${t.updatedBy} on ${new Date(t.updatedAt).toLocaleString()} (default ${t.envDefault}). Admins are never restricted.`
+      : `Default from .env (${t.envDefault}). Admins are never restricted.`;
+  }
+  if ($('tm-mode')) {
+    $('tm-mode').addEventListener('change', async (e) => {
+      const sel = e.target;
+      const label = sel.options[sel.selectedIndex].text;
+      if (!confirm(`Teammates' agent runs will be: ${label}.\nThis applies from their next run. Continue?`)) { refresh(); return; }
+      tmBusy = true;
+      try {
+        const r = await fetch('/api/agents/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teammateMode: sel.value }),
+        });
+        const b = await r.json();
+        if (!r.ok || !b.ok) throw new Error(b.error || `HTTP ${r.status}`);
+      } catch (err) {
+        alert(`Not saved: ${err.message}`);
+      } finally {
+        tmBusy = false;
+        sel.blur();
+        refresh();
+      }
+    });
+  }
+
   function renderCap(cap) {
     if (!cap) return;
     const pct = cap.cap > 0 ? Math.min(100, (cap.used / cap.cap) * 100) : 100;
@@ -987,6 +1030,7 @@
       const b = await r.json();
       renderCap(b.cap);
       renderCapAdmin(b.admin, b.capSettings);
+      renderTeammateMode(b.admin, b.teammateMode);
       renderRunning(b.running || []);
       renderBoard(b.queue);
       lastRecent = b.recent || [];
