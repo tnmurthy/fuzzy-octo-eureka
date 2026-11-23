@@ -1,0 +1,118 @@
+/* ask.css - the Ask page (/agents, ask.html). Uses dashboard.css's colour
+   variables, so it follows the dashboard's dark theme. */
+
+body { margin: 0; background: var(--bg-primary); color: var(--color-text-main); font-family: 'Outfit', system-ui, sans-serif; }
+[hidden] { display: none !important; }
+
+.ask-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 18px 28px; border-bottom: 1px solid var(--border-color);
+}
+.ask-brand { display: flex; align-items: center; gap: 12px; }
+.ask-logo { font-size: 1.6rem; }
+.ask-top h1 { margin: 0; font-size: 1.35rem; font-weight: 600; }
+.ask-sub { color: var(--color-text-muted); font-size: 0.85rem; margin-top: 2px; }
+.ask-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ask-link {
+  color: var(--status-blue); text-decoration: none; font-size: 0.85rem;
+  border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px;
+}
+.ask-link:hover { border-color: var(--status-blue); }
+.ask-chip {
+  font-size: 0.78rem; color: var(--color-text-muted);
+  border: 1px solid var(--border-color); border-radius: 999px; padding: 4px 10px;
+}
+
+.ask-shell { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: calc(100vh - 80px); }
+.ask-shell > *, .ask-item, .ask-item-meta, .ask-thread-head > div { min-width: 0; }
+.ask-item-title, .ask-thread-title, .ask-answer { overflow-wrap: anywhere; }
+.ask-side { border-right: 1px solid var(--border-color); padding: 18px 16px; overflow-y: auto; }
+.ask-main { padding: 24px 32px; max-width: 880px; width: 100%; box-sizing: border-box; }
+
+.ask-new {
+  width: 100%; padding: 10px; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 600;
+  background: var(--bg-secondary); color: var(--color-text-main); border: 1px dashed var(--border-color);
+}
+.ask-new:hover { border-color: var(--status-blue); color: var(--status-blue); }
+.ask-side-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin: 20px 4px 8px; }
+.ask-threads { display: flex; flex-direction: column; gap: 6px; }
+.ask-empty { color: var(--color-text-muted); font-size: 0.85rem; padding: 8px 4px; line-height: 1.5; }
+.ask-item {
+  text-align: left; width: 100%; cursor: pointer; font: inherit; color: inherit;
+  background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 9px 10px;
+}
+.ask-item:hover { background: var(--bg-card); }
+.ask-item.active { background: var(--bg-card); border-color: var(--border-color); }
+.ask-item-title { font-size: 0.9rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ask-item-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 0.74rem; color: var(--color-text-muted); }
+
+.ask-pill { font-size: 0.72rem; font-weight: 600; border-radius: 999px; padding: 2px 8px; white-space: nowrap; border: 1px solid currentColor; }
+.tone-amber { color: var(--status-amber); }
+.tone-blue { color: var(--status-blue); }
+.tone-green { color: var(--status-green); }
+.tone-red { color: var(--status-red); }
+.tone-muted { color: var(--color-text-muted); }
+
+.ask-q { font-size: 1.5rem; font-weight: 600; margin: 0 0 18px; }
+.ask-label { display: block; font-size: 0.8rem; color: var(--color-text-muted); margin: 14px 0 6px; padding: 0; }
+.ask-field {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 0.95rem;
+  background: var(--bg-secondary); color: var(--color-text-main);
+  border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 12px;
+}
+.ask-field:focus { outline: none; border-color: var(--status-blue); }
+.ask-text { min-height: 120px; resize: vertical; line-height: 1.5; }
+.ask-hint { font-size: 0.76rem; color: var(--color-text-muted); margin-top: 4px; min-height: 1em; }
+.ask-starters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ask-starters button {
+  font: inherit; font-size: 0.82rem; cursor: pointer; color: var(--color-text-main);
+  background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 999px; padding: 6px 12px;
+}
+.ask-starters button:hover { border-color: var(--status-blue); }
+.ask-helpers { border: 0; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
+.ask-muted { color: var(--color-text-muted); font-size: 0.8rem; }
+.ask-mode {
+  margin-top: 12px; font-size: 0.84rem; line-height: 1.45; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-card); border: 1px solid var(--border-color);
+}
+.ask-send {
+  margin-top: 16px; font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px;
+  padding: 11px 20px; background: var(--status-blue); color: #04111d;
+}
+.ask-send:disabled { opacity: 0.5; cursor: default; }
+.ask-msg { font-size: 0.84rem; margin-top: 8px; min-height: 1.2em; }
+.ask-msg.err { color: var(--status-red); }
+.ask-safe { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 14px; }
+
+.ask-thread-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.ask-thread-title { font-size: 1.2rem; margin: 0 0 4px; line-height: 1.35; }
+.ask-convo { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.ask-bubble { border-radius: 12px; padding: 12px 14px; line-height: 1.5; font-size: 0.92rem; max-width: 100%; box-sizing: border-box; }
+.ask-bubble.you { align-self: flex-end; background: var(--bg-secondary); border: 1px solid var(--border-color); max-width: 85%; }
+.ask-bubble.helper { background: var(--bg-card); border: 1px solid var(--border-color); }
+.ask-bubble.queued { opacity: 0.7; border-style: dashed; }
+.ask-who { font-size: 0.72rem; color: var(--color-text-muted); margin-bottom: 4px; }
+.ask-answer { white-space: pre-wrap; word-break: break-word; margin: 0; font: inherit; }
+.ask-steps { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.8rem; color: var(--color-text-muted); }
+.ask-steps li { padding: 2px 0; }
+.ask-steps li::before { content: '› '; }
+.ask-callout { margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 0.84rem; border: 1px solid currentColor; }
+.ask-reply { position: sticky; bottom: 0; background: var(--bg-primary); padding: 10px 0 4px; }
+.ask-reply-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ask-reply-actions .ask-send { margin-top: 8px; }
+.ask-stop {
+  margin-top: 8px; font: inherit; cursor: pointer; border-radius: 10px; padding: 10px 14px;
+  background: transparent; color: var(--status-red); border: 1px solid var(--status-red);
+}
+.ask-dots::after { content: ''; animation: ask-dots 1.4s steps(4, end) infinite; }
+@keyframes ask-dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+@media (max-width: 760px) {
+  .ask-top { padding: 14px 16px; flex-direction: column; align-items: flex-start; }
+  .ask-brand, .ask-nav { min-width: 0; max-width: 100%; }
+  .ask-item-meta { flex-wrap: wrap; }
+  .ask-shell { grid-template-columns: minmax(0, 1fr); }
+  .ask-side { border-right: 0; border-bottom: 1px solid var(--border-color); max-height: 40vh; padding: 12px 16px; }
+  .ask-main { padding: 18px 16px; }
+  .ask-bubble.you { max-width: 100%; }
+}
