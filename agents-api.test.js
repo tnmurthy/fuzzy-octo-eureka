@@ -440,3 +440,24 @@ test('only an admin switches the teammate mode; everyone sees it; issues follow 
   assert.equal(issue.status, 403);
   assert.match(issue.payload.error, /use Run now/);
 });
+
+test('GET /api/agents/mine lists only the caller\'s threads, with mode and admin flag', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-mine-'));
+  const started = new Date(Date.now() - 60e3).toISOString();
+  const runs = [
+    { id: 'r-mine', agent: 'hermes', status: 'done', task: 'Explain auth', by: 'asha@example.com', started_at: started, finished_at: started, repo: '/x/app' },
+    { id: 'r-other', agent: 'hermes', status: 'done', task: 'Other', by: 'ravi@example.com', started_at: started, finished_at: started },
+  ];
+  const teammateModeSetting = createTeammateModeSetting({ file: path.join(dir, 'tm.json'), envMode: 'readonly' });
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'r.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }),
+    capNow: () => ({ used: 1, cap: 20 }), repos: REPOS, github: null, teammateModeSetting,
+    isAdmin: () => false, actorOf: () => 'asha@example.com',
+  });
+  const r = await call(api, { method: 'GET', url: '/api/agents/mine' });
+  assert.equal(r.status, 200);
+  assert.equal(r.payload.admin, false);
+  assert.equal(r.payload.teammateMode, 'readonly');
+  assert.deepEqual(r.payload.threads.map((t) => t.threadId), ['r-mine']);
+  assert.equal(r.payload.threads[0].repo, 'app');
+});
