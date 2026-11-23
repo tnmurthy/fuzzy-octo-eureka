@@ -4,6 +4,8 @@
 //
 //   GET  /api/agents/overview   cap, running + recent runs, issue queue
 //   GET  /api/agents/mine       the signed-in person's threads (Ask page)
+//   GET  /api/agents/request-kind?q=  answer | document | change guess
+//   POST /api/agents/plan/approve {runId}  carry out a finished plan
 //   GET  /api/agents/log?id=R   tail of run R's log (only files in the runs dir)
 //   POST /api/agents/task       { repo, title, body, agent } -> new issue
 //   POST /api/agents/settings   { dailyPaidRuns } (admin only) -> new cap
@@ -30,6 +32,7 @@ const path = require('path');
 const { resultOf } = require('./followup');
 const { createAgentQueue } = require('./agent-queue');
 const { myThreads } = require('./agents-mine');
+const { REQUEST_KINDS, keywordKind } = require('./request-kinds');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
 const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
@@ -118,6 +121,8 @@ const slimRun = (r, active) => ({
   link: linkOf(r, active),
   hasLog: Boolean(r.log),
   parent: r.parent || null,
+  kind: r.kind || null,
+  helper: r.helper || null,
 });
 
 /**
@@ -133,7 +138,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -355,6 +360,39 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
+    if (url.pathname === '/api/agents/request-kind' && req.method === 'GET') {
+      // The Ask page's guess at answer / document / change (request-kinds.js).
+      const q = String(url.searchParams.get('q') || '').slice(0, 600);
+      Promise.resolve(classifyKind ? classifyKind(q) : { kind: keywordKind(q), source: 'keywords' })
+        .then((r) => sendJson(res, 200, { ok: true, ...r }))
+        .catch(() => sendJson(res, 200, { ok: true, kind: keywordKind(q), source: 'keywords' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/plan/approve' && req.method === 'POST') {
+      // "Go ahead" on a plan: a new run on the same branch that carries out the
+      // plan (kind change), with the request and the plan in its task.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'run now is not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then(async (b) => {
+          const runs = loadRuns();
+          const plan = runs.find((r) => r.id === String(b.runId || ''));
+          if (!plan || plan.kind !== 'plan') return sendJson(res, 400, { ok: false, error: 'that is not a plan' });
+          if (plan.status !== 'done') return sendJson(res, 409, { ok: false, error: 'the plan is not finished yet' });
+          if (runs.some((r) => r.parent === plan.id)) return sendJson(res, 409, { ok: false, error: 'this plan already has a newer reply; approve the latest plan' });
+          const j = path.dirname(path.resolve(String(plan.log || ''))) === runsDir ? resultOf(plan) : null;
+          const planText = j && j.result ? String(j.result).slice(0, 6000) : '';
+          if (!planText.trim()) return sendJson(res, 409, { ok: false, error: 'the plan has no text to approve; ask for it again' });
+          const t = agentQueue ? agentQueue.threadOf(plan.id) : null;
+          const root = t && t.runs.length ? t.runs[0] : plan;
+          const request = String(root.task || '').slice(0, 2000);
+          const task = `Go ahead with the plan.\n\nOriginal request: ${request}\n\nApproved plan:\n${planText}`;
+          const r = await dispatchRun({ followUpOf: plan.id, approvePlan: true, canAsk: true, task }, { by: actorOf(req) });
+          return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
     if (url.pathname === '/api/agents/mine' && req.method === 'GET') {
       // The Ask page's list: only threads this person started (agents-mine.js).
       // Light on purpose: no GitHub queue, polled every few seconds.
@@ -454,9 +492,11 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const agent = String(b.agent || 'hermes');
           if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
           const task = details ? `${title}\n\n${details}` : title;
+          if (b.kind != null && !REQUEST_KINDS.includes(b.kind)) return sendJson(res, 400, { ok: false, error: `kind is one of: ${REQUEST_KINDS.join(', ')}` });
           const r = await dispatchRun({
             agent, repo: String(b.repo || ''), task, specialist: b.specialist || null,
             branch: `agent/run-${now().toString(36)}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
+            ...(b.kind ? { kind: b.kind } : {}),
           }, { by: actorOf(req) });
           if (r.status < 300 && recommender) recommender.invalidate();
           return sendJson(res, r.status, r.body);

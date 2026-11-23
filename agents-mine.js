@@ -7,6 +7,7 @@
 // before that, and runs started at this Mac, belong to "local operator".
 
 const { stageOf } = require('./task-feed');
+const { isReadOnlyKind } = require('./request-kinds');
 
 const LOCAL = 'local operator';
 
@@ -67,13 +68,16 @@ function myThreads({ runs, actor, decorate = (r) => r, now = Date.now(), windowM
     const latest = t.runs[t.runs.length - 1];
     const updated = Date.parse(latest.finished_at || latest.started_at || '') || 0;
     if (latest.status !== 'running' && now - updated > windowMs) continue;
-    const stage = stageOf(decorate(latest));
+    // Read-only kinds never change files: commits ahead are only the branch
+    // base's, so they must not read as "Ready for review".
+    const stage = stageOf(decorate(isReadOnlyKind(latest.kind) ? { ...latest, commits_ahead: 0 } : latest));
     out.push({
       threadId,
       runId: latest.id,
       title: plainTitle(t.root.task),
       repo: String(latest.repo || '').split(/[\\/]/).filter(Boolean).pop() || null,
       agent: latest.agent,
+      kind: latest.kind || t.root.kind || null,
       turns: t.runs.length,
       updatedAt: new Date(updated).toISOString(),
       stage: { key: stage.key, label: stage.label, tone: stage.tone, next: stage.next },
