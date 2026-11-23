@@ -219,6 +219,17 @@ task. Follow-ups keep their thread's kind. Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
 
+**Per-portal runs (P0.6, 2026-11-23, `portal-scope.js`):** both dashboards
+share one run log, but `server.js`'s `readRuns` returns only this portal's
+runs (`portal` on the start line; none = older than #49 = team). So lists,
+threads, logs, stop, follow-ups, the paid cap and `/api/costs` are per portal,
+and the Supabase run sync alone reads every run. Per-portal state files: the
+team keeps `logs/<name>.json`; Drisyon uses `logs/<name>.drisyon.json` for
+dispatch-settings (its own cap, else its `DISPATCH_DAILY_PAID_RUNS`),
+teammate-mode, repos and agent-queue. Drisyon offers no built-in repos and no
+issue queue: only repos an admin adds on its Ops console
+(`127.0.0.1:8788/agents/ops`) can run there.
+
 **Agents page / Ops console:** `http://127.0.0.1:8787/agents/ops` (the full
 page). Styles in `agents.css` + `agents-cockpit.css`; one plain-English voice
 (the Friendly/Developer toggle was removed 2026-11-23). A form that queues a task (opens a GitHub issue labelled
