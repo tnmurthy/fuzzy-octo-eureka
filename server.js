@@ -45,6 +45,9 @@ const agentsGate = require('./agents-gate');
 const IS_DRISYON_PORTAL = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
 const PORTAL_HAS_ACCESS = !IS_DRISYON_PORTAL || Boolean(process.env.ACCESS_AUD);
 
+// Ask page request kinds (request-kinds.js): answer / document / plan / change.
+const requestKinds = require('./request-kinds');
+
 // P0.3-P0.5: one identity per person (identity.js).
 const identity = require('./identity');
 const PORTAL = identity.portalName(IS_DRISYON_PORTAL);
@@ -876,6 +879,35 @@ async function startDispatch(payload, ctx = {}) {
       readOnly: false,
     };
   }
+  // The request kind (request-kinds.js). A follow-up keeps its thread's kind;
+  // only approving a plan turns a `plan` thread into a `change`.
+  const parentRun = followUp
+    ? (readRuns(RUNS_FILE, 5000).runs || []).find((r) => r.id === followUp.parent) || {}
+    : null;
+  const approvePlan = Boolean(followUp && payload.approvePlan === true && parentRun.kind === 'plan');
+  if (payload.approvePlan === true && !approvePlan) {
+    return { status: 400, body: { ok: false, error: 'only a finished plan can be approved' } };
+  }
+  const kind = requestKinds.resolveKind({
+    requested: payload.kind,
+    parentKind: parentRun ? parentRun.kind : null,
+    approvePlan,
+    followUp: Boolean(followUp),
+  });
+  // A new change starts as a free plan by the local agent; the helper the
+  // person picked is kept (`helper`) and does the approved change.
+  let helper = null;
+  if (!followUp && kind === 'plan') {
+    helper = payload.agent;
+    payload = { ...payload, agent: 'hermes' };
+  } else if (approvePlan) {
+    helper = parentRun.helper || 'hermes';
+    payload = { ...payload, agent: helper };
+  } else if (parentRun && parentRun.helper) {
+    helper = parentRun.helper;
+  }
+  // Another kind or agent than the parent: its session cannot be resumed.
+  if (followUp && (approvePlan || payload.agent !== followUp.agent)) followUp = { ...followUp, session: null };
   const { repo, branch, task } = payload;
   // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
   // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
@@ -923,16 +955,17 @@ async function startDispatch(payload, ctx = {}) {
       body: { ok: false, error: `level is one of: ${approvalLevels.LEVELS.join(', ')}` },
     };
   }
-  const parentLevel = followUp
-    ? ((readRuns(RUNS_FILE, 5000).runs || []).find((r) => r.id === followUp.parent) || {}).level ||
-      'auto'
-    : null;
-  const level = approvalLevels.effectiveLevel({
-    requested: payload.level,
-    readOnly,
-    parentLevel,
-    fallback: process.env.DISPATCH_DEFAULT_LEVEL || 'auto',
-  });
+  // A plan's `review` level must not cap the change it approves.
+  const parentLevel = followUp && !approvePlan ? parentRun.level || 'auto' : null;
+  // Read-only kinds always run at `review` (claude: read tools only).
+  const level = requestKinds.isReadOnlyKind(kind)
+    ? 'review'
+    : approvalLevels.effectiveLevel({
+        requested: payload.level,
+        readOnly,
+        parentLevel,
+        fallback: process.env.DISPATCH_DEFAULT_LEVEL || 'auto',
+      });
   const reviewBase =
     readOnly &&
     typeof payload.reviewBase === 'string' &&
@@ -965,6 +998,8 @@ async function startDispatch(payload, ctx = {}) {
       ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
       canAsk: payload.canAsk === true && !readOnly,
       by: ctx.by || null,
+      kind,
+      helper,
     });
     return {
       status: 202,
@@ -1133,6 +1168,19 @@ const agentsApi = require('./agents-api').createAgentsApi({
   repos: pollerRepos(),
   settings: dispatchSettings,
   teammateModeSetting,
+  // Ask page: answer / document / change guess by a local model
+  // (REQUEST_KIND_MODEL, default the suggester's model; `off` = keywords only).
+  classifyKind: requestKinds.createKindClassifier({
+    ask:
+      (process.env.REQUEST_KIND_MODEL || SUGGEST_MODEL) === 'off'
+        ? null
+        : requestKinds.ollamaKindAsker({
+            host: OLLAMA_HOST,
+            port: OLLAMA_PORT,
+            model: process.env.REQUEST_KIND_MODEL || SUGGEST_MODEL,
+            record: (call) => recordAiCall(AI_CALLS_FILE, call),
+          }),
+  }),
   specialists,
   suggester: specialistSuggester,
   recommender: specialistRecommender,
@@ -1176,6 +1224,8 @@ function spawnAgentDispatch({
   reviewBase = null,
   canAsk = false,
   by = null,
+  kind = null,
+  helper = null,
 }) {
   // Every way to start an agent passes here: apply the teammate mode
   // (teammate-mode.js) to anyone who is not an admin.
@@ -1220,7 +1270,7 @@ function spawnAgentDispatch({
       // Order: task (its first 160 chars name the run), specialist role, memories.
       fs.writeFileSync(
         promptFile,
-        buildDispatchPrompt(task + specialists.roleBlock(specialist), memories, {
+        buildDispatchPrompt(task + requestKinds.kindBlock(kind) + specialists.roleBlock(specialist), memories, {
           precompactPreserver,
           runId: effectiveRunId,
           directionLayer,
@@ -1277,14 +1327,27 @@ function spawnAgentDispatch({
       // Who asked and on which portal: recorded on the run's start line.
       dispatchEnv.AGENT_BY = identity.runAuthor(by);
       dispatchEnv.AGENT_PORTAL = PORTAL;
+      // Agents never get messaging-bot credentials: with DISCORD_BOT_TOKEN in
+      // the env, every Hermes run started a Discord gateway (and a fresh
+      // read-only home failed with "Gateway draining: not_ready").
+      for (const k of Object.keys(dispatchEnv)) {
+        if (/^(DISCORD|TELEGRAM|SLACK|WHATSAPP|SIGNAL|MATRIX)_/.test(k)) delete dispatchEnv[k];
+      }
       dispatchEnv.AGENT_RUN_MODE = gate.mode;
-      if (gate.hermesMode) {
-        // Teammates' Hermes runs are always boxed, whatever .env says.
+      // Read-only kinds (answer, document, plan) run Hermes read-only for
+      // everyone; otherwise the teammate mode decides.
+      const hermesMode = requestKinds.isReadOnlyKind(kind) ? 'readonly' : gate.hermesMode;
+      if (hermesMode) {
+        // Teammates' and read-only Hermes runs are always boxed, whatever .env says.
         dispatchEnv.AGENT_HERMES_SANDBOX = 'on';
-        dispatchEnv.AGENT_HERMES_MODE = gate.hermesMode;
+        dispatchEnv.AGENT_HERMES_MODE = hermesMode;
       } else {
         delete dispatchEnv.AGENT_HERMES_MODE;
       }
+      if (kind) dispatchEnv.AGENT_KIND = kind;
+      else delete dispatchEnv.AGENT_KIND;
+      if (helper) dispatchEnv.AGENT_HELPER = helper;
+      else delete dispatchEnv.AGENT_HELPER;
       // Approval level -> claude's flags. Levels that ask get a run token for
       // the approval helper; a review never asks (approval-levels.js).
       const runLevel = level || (readOnly ? 'review' : 'auto');

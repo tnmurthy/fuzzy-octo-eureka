@@ -74,6 +74,7 @@ function myThreads({ runs, actor, decorate = (r) => r, now = Date.now(), windowM
       title: plainTitle(t.root.task),
       repo: String(latest.repo || '').split(/[\\/]/).filter(Boolean).pop() || null,
       agent: latest.agent,
+      kind: latest.kind || t.root.kind || null,
       turns: t.runs.length,
       updatedAt: new Date(updated).toISOString(),
       stage: { key: stage.key, label: stage.label, tone: stage.tone, next: stage.next },
