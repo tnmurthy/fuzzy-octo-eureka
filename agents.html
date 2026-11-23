@@ -150,6 +150,10 @@
     .cap.warn .cap-fill { background: var(--status-amber); }
     .cap.full .cap-fill { background: var(--status-red); }
     .cap-form { display: flex; align-items: center; gap: 6px; }
+    /* Teammate run mode (teammate-mode.js): admins switch it, everyone sees it. */
+    .tm-box { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; }
+    .tm-box select { max-width: 240px; font-size: 0.78rem; padding: 4px 6px; }
+    .tm-box select:disabled { opacity: 0.85; cursor: default; }
     .cap-form[hidden] { display: none; }
     .cap-form input {
       width: 60px;
@@ -1244,6 +1248,11 @@
           <button class="btn-sm" type="submit">Save</button>
           <button class="btn-sm" type="button" id="cap-cancel">Cancel</button>
         </form>
+
+        <label class="tm-box" id="tm-box" hidden title="What agent runs started by teammates may do. Admins are never restricted.">
+          <span class="muted">Teammate runs:</span>
+          <select id="tm-mode" aria-label="Teammate run mode"></select>
+        </label>
 
         <a class="nav-btn" href="/onboarding">🚀 Onboarding</a>
         <a class="nav-btn" href="/context">🧠 Context</a>

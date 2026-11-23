@@ -131,7 +131,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -221,6 +221,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     return {
       cap: capNow(runs),
       capSettings: settings ? settings.describe() : null,
+      teammateMode: teammateModeSetting ? teammateModeSetting.describe() : null,
       admin: Boolean(req && isAdmin(req)),
       repos,
       agents: AGENTS,
@@ -469,11 +470,18 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
         return true;
       }
       if (!settings || !isAdmin(req)) {
-        sendJson(res, 403, { ok: false, error: 'only an admin can change the daily limit' });
+        sendJson(res, 403, { ok: false, error: 'only an admin can change agent settings' });
         return true;
       }
       readJsonBody(req, 1024)
         .then((b) => {
+          if (b.teammateMode !== undefined) {
+            if (!teammateModeSetting) return sendJson(res, 404, { ok: false, error: 'teammate mode is not available here' });
+            const t = teammateModeSetting.set(b.teammateMode, actorOf(req));
+            if (!t.ok) return sendJson(res, 400, { ok: false, error: t.error });
+            console.log(`teammate run mode set to ${t.value.mode} by ${t.value.updatedBy}`);
+            return sendJson(res, 200, { ok: true, teammateMode: teammateModeSetting.describe() });
+          }
           const r = settings.setCap(b.dailyPaidRuns, actorOf(req));
           if (!r.ok) return sendJson(res, 400, { ok: false, error: r.error });
           console.log(`dispatch cap set to ${r.value.dailyPaidRuns} by ${r.value.updatedBy}`);
@@ -488,6 +496,13 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       // grants), and a browser-sent Origin must be this host.
       if (!isSameSiteJson(req)) {
         sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+        return true;
+      }
+      // An issue runs later under the poller, which cannot tell who asked, so
+      // teammates may queue issues only when their runs are unrestricted
+      // (sandbox mode); otherwise they use Run now, where the mode applies.
+      if (!isAdmin(req) && teammateModeSetting && teammateModeSetting.get() !== 'sandbox') {
+        sendJson(res, 403, { ok: false, error: 'GitHub issue tasks are for admins in the current teammate mode; use Run now.' });
         return true;
       }
       readJsonBody(req, 16 * 1024)
