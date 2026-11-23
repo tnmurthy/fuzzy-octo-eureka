@@ -31,7 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const { resultOf } = require('./followup');
 const { createAgentQueue } = require('./agent-queue');
-const { myThreads } = require('./agents-mine');
+const { myThreads, mayOpen } = require('./agents-mine');
 const { REQUEST_KINDS, keywordKind } = require('./request-kinds');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
@@ -185,6 +185,11 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   }
 
   const loadRuns = () => readRuns(runsFile, 5000).runs || [];
+  // Each request is visible only to the person who started it, and admins
+  // (agents-mine.js mayOpen). Someone else's run reads as not found.
+  const notYours = (req, runId, runs = loadRuns()) =>
+    !mayOpen({ runs, runId: String(runId || ''), actor: actorOf(req), admin: Boolean(isAdmin(req)) });
+  const NOT_FOUND = { ok: false, error: 'run not found' };
   const loadActive = () => {
     try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')).active || {}; } catch (_) { return {}; }
   };
@@ -220,7 +225,8 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   }
 
   async function overview(req) {
-    const runs = loadRuns();
+    const all = loadRuns();
+    const runs = req && isAdmin(req) ? all : all.filter((r) => !notYours(req, r.id, all));
     const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
     const active = loadActive();
     let q;
@@ -325,6 +331,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const message = String(b.message || '').trim();
           if (!message) return sendJson(res, 400, { ok: false, error: 'write a message for the agent' });
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
+          if (notYours(req, b.runId)) return sendJson(res, 404, NOT_FOUND);
           // The level is capped at the parent run's by startDispatch (approval-levels.js).
           const r = await dispatchRun({
             followUpOf: String(b.runId || ''), task: `Follow-up: ${message}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
@@ -347,6 +354,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           if (redirect && !message) return sendJson(res, 400, { ok: false, error: 'tell the agent what to do instead' });
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
           if (redirect && !dispatchRun) return sendJson(res, 503, { ok: false, error: 'follow-ups are not available' });
+          if (notYours(req, runId)) return sendJson(res, 404, NOT_FOUND);
           if (!redirect) {
             const st = runControl.stop(runId);
             if (!st.ok) return sendJson(res, st.status || 409, { ok: false, error: st.error });
@@ -376,6 +384,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       readJsonBody(req, 1024)
         .then(async (b) => {
           const runs = loadRuns();
+          if (notYours(req, b.runId, runs)) return sendJson(res, 404, NOT_FOUND);
           const plan = runs.find((r) => r.id === String(b.runId || ''));
           if (!plan || plan.kind !== 'plan') return sendJson(res, 400, { ok: false, error: 'that is not a plan' });
           if (plan.status !== 'done') return sendJson(res, 409, { ok: false, error: 'the plan is not finished yet' });
@@ -418,6 +427,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       const id = url.searchParams.get('id') || '';
       if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
       const runs = loadRuns();
+      if (notYours(req, id, runs)) { sendJson(res, 404, NOT_FOUND); return true; }
       const t = agentQueue ? agentQueue.threadOf(id) : null;
       const chain = t ? t.runs : runs.filter((r) => r.id === id);
       if (!chain.length) { sendJson(res, 404, { ok: false, error: 'run not found' }); return true; }
@@ -441,6 +451,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       if (!agentQueue) { sendJson(res, 503, { ok: false, error: 'the message queue is not available' }); return true; }
       readJsonBody(req, 16 * 1024)
         .then(async (b) => {
+          if (notYours(req, b.runId || b.threadId)) return sendJson(res, 404, NOT_FOUND);
           if (url.pathname === '/api/agents/queue') {
             // Idle agent: send now (a follow-up). Working agent: queue it.
             const t = agentQueue.threadOf(String(b.runId || ''));
@@ -523,6 +534,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       return true;
     }
     if (url.pathname === '/api/agents/log' && req.method === 'GET') {
+      if (notYours(req, url.searchParams.get('id'))) { sendJson(res, 404, NOT_FOUND); return true; }
       const r = log(url.searchParams.get('id'));
       sendJson(res, r.status, r.body);
       return true;
