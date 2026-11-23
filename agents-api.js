@@ -3,6 +3,7 @@
 // labelled agent:ready, which the issue poller picks up).
 //
 //   GET  /api/agents/overview   cap, running + recent runs, issue queue
+//   GET  /api/agents/mine       the signed-in person's threads (Ask page)
 //   GET  /api/agents/log?id=R   tail of run R's log (only files in the runs dir)
 //   POST /api/agents/task       { repo, title, body, agent } -> new issue
 //   POST /api/agents/settings   { dailyPaidRuns } (admin only) -> new cap
@@ -28,6 +29,7 @@ const fs = require('fs');
 const path = require('path');
 const { resultOf } = require('./followup');
 const { createAgentQueue } = require('./agent-queue');
+const { myThreads } = require('./agents-mine');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
 const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
@@ -351,6 +353,27 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           return sendJson(res, r.status, r.body);
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/mine' && req.method === 'GET') {
+      // The Ask page's list: only threads this person started (agents-mine.js).
+      // Light on purpose: no GitHub queue, polled every few seconds.
+      const runs = loadRuns();
+      const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
+      const threads = myThreads({
+        runs,
+        actor: actorOf(req),
+        decorate: (r) => ({ ...r, canFollowUp: Boolean(canFollowUp(r)), question: openQuestion(r, answered) }),
+        now: now(),
+      });
+      sendJson(res, 200, {
+        ok: true,
+        me: actorOf(req),
+        admin: Boolean(isAdmin(req)),
+        teammateMode: teammateModeSetting ? teammateModeSetting.get() : null,
+        cap: capNow(runs),
+        threads,
+      });
       return true;
     }
     if (url.pathname === '/api/agents/thread' && req.method === 'GET') {

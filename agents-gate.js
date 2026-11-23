@@ -6,6 +6,7 @@
 
 const AGENT_PATHS = [
   /^\/agents(\.html|\/.*)?$/,
+  /^\/ask\.html$/,
   /^\/api\/agents\//,
   /^\/api\/dispatch\//,
   /^\/api\/team\/dispatch/,

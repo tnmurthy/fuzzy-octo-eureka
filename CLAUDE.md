@@ -198,11 +198,18 @@ sends (top-level html/css/js/images/fonts, `docs/*.md`); `.env*`, `logs/`,
 json state and server sources are 404. A new asset type or folder needs a
 line there.
 
-**Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
-header; also at `/agents/ops`, which becomes the admin Ops console when the
-teammate Ask page takes over `/agents`). Styles in `agents.css` +
-`agents-cockpit.css`; one plain-English voice (the Friendly/Developer toggle
-was removed 2026-11-23). A form that queues a task (opens a GitHub issue labelled
+**Ask page** (2026-11-23): `/agents` (🤖 Agents on the dashboard header) is
+the simple view for everyone (`ask.html`, `ask.js`, `ask.css`): a list of
+*my* requests (`GET /api/agents/mine`: threads the signed-in person started,
+grouped request + follow-ups, plain stage from `task-feed.js`; shaping in
+`agents-mine.js`), a new-request form (project, starters, free/expert helper
+per the teammate mode) and the conversation for one request (answer, live
+steps, questions, Stop, reply = follow-up or queued message). Admins get an
+"Ops console" link.
+
+**Agents page / Ops console:** `http://127.0.0.1:8787/agents/ops` (the full
+page). Styles in `agents.css` + `agents-cockpit.css`; one plain-English voice
+(the Friendly/Developer toggle was removed 2026-11-23). A form that queues a task (opens a GitHub issue labelled
 `agent:ready` + `agent:<name>`), the issue queue as four columns (queued,
 working, needs review, failed; cached 30 s), running agents with a live log
 viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):
