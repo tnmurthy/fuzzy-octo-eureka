@@ -30,23 +30,12 @@
 
   const bySlug = new Map(); // specialist slug -> catalog entry (filled by loadSpecialists)
 
-  // ---- UI Experience Mode (Friendly vs Pro) ------------------------------
-  function setUiMode(mode) {
-    const isFriendly = mode === 'friendly';
-    document.body.classList.toggle('mode-friendly', isFriendly);
-    document.body.classList.toggle('mode-pro', !isFriendly);
-    const btnFriendly = $('btn-mode-friendly');
-    const btnPro = $('btn-mode-pro');
-    if (btnFriendly) btnFriendly.classList.toggle('active', isFriendly);
-    if (btnPro) btnPro.classList.toggle('active', !isFriendly);
-    try { localStorage.setItem('agents.uiMode', mode); } catch (_) {}
-  }
-
-  if ($('btn-mode-friendly')) $('btn-mode-friendly').addEventListener('click', () => setUiMode('friendly'));
-  if ($('btn-mode-pro')) $('btn-mode-pro').addEventListener('click', () => setUiMode('pro'));
-  let savedMode = 'friendly';
-  try { savedMode = localStorage.getItem('agents.uiMode') || 'friendly'; } catch (_) {}
-  setUiMode(savedMode);
+  // One plain-English voice for everyone (the Friendly/Developer toggle was
+  // removed 2026-11-23): body keeps class mode-friendly, so pro-only text stays
+  // hidden. Forget a choice saved by the old toggle.
+  document.body.classList.add('mode-friendly');
+  document.body.classList.remove('mode-pro');
+  try { localStorage.removeItem('agents.uiMode'); } catch (_) {}
 
   let activeSelectedRepo = 'fuzzy-octo-eureka';
 
