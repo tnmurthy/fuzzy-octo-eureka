@@ -278,9 +278,6 @@
             <button class="cockpit-tab-btn active" id="tab-btn-live" type="button" role="tab">
               ⚡ Live Activity
             </button>
-            <button class="cockpit-tab-btn" id="tab-btn-preview" type="button" role="tab">
-              👁️ Preview &amp; Deliverables
-            </button>
             <button class="cockpit-tab-btn" id="tab-btn-board" type="button" role="tab">
               📌 Pipeline Board
             </button>
@@ -329,65 +326,6 @@
                 </div>
               </div>
               <pre class="log collapsible-target" id="log"></pre>
-            </div>
-          </section>
-
-          <!-- View 2: Visual Deliverable & Repository Code Preview -->
-          <section id="view-preview">
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title-row">
-                <h2 class="card-title" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
-                  <span>👁️</span>
-                  <span>Active Workspace Preview: <strong id="preview-active-repo" style="color:var(--status-blue); font-family:'JetBrains Mono',monospace;">fuzzy-octo-eureka</strong></span>
-                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'preview-workspace-summary')" title="Toggle Workspace Summary" aria-label="Toggle Workspace Summary">▾</button>
-                </h2>
-                <div style="display:flex; gap:8px;">
-                  <button type="button" class="btn-sm" id="btn-refresh-preview" onclick="loadWorkspacePreview()">🔄 Refresh</button>
-                  <button type="button" class="btn-sm" onclick="window.open('/canvas', '_blank')">👐 Open Canvas</button>
-                </div>
-              </div>
-
-              <!-- Quick File & Structure Preview -->
-              <div id="preview-workspace-summary" class="collapsible-target" style="margin-top:12px; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
-                  <span style="font-weight:600; color:#fff;">📁 Repository File Tree &amp; State</span>
-                  <span class="mono muted" id="preview-repo-path" style="font-size:0.75rem;">Loading path...</span>
-                </div>
-                <div id="preview-files-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;"></div>
-
-                <!-- Interactive In-Browser Code & File Viewer -->
-                <div id="preview-code-viewer" class="code-viewer-box" style="display:none; margin-bottom:14px;">
-                  <div class="code-viewer-header">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                      <span style="font-weight:600; color:#fff;" id="code-viewer-filename">filename</span>
-                      <span class="chip mono" id="code-viewer-meta" style="font-size:0.72rem; padding:2px 8px; background:rgba(0,176,255,0.15); border:1px solid rgba(0,176,255,0.3); color:#38bdf8;">0 lines</span>
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                      <button type="button" class="btn-sm" id="btn-copy-code" onclick="copyCurrentFileCode()">📋 Copy</button>
-                      <button type="button" class="btn-sm" onclick="closeFileViewer()">✕ Close</button>
-                    </div>
-                  </div>
-                  <pre id="code-viewer-content" class="code-viewer-pre"></pre>
-                </div>
-
-                <div style="font-weight:600; color:#fff; margin-bottom:6px;">📖 README / Specification Overview:</div>
-                <div id="preview-readme-text" class="mono" style="font-size:0.78rem; color:#cbd5e1; max-height:220px; overflow-y:auto; background:rgba(0,0,0,0.4); padding:10px 14px; border-radius:6px; white-space:pre-wrap; border:1px solid rgba(255,255,255,0.06);">Loading README overview...</div>
-              </div>
-            </div>
-
-            <!-- Latest Task Deliverable Preview -->
-            <div class="card">
-              <div class="card-title-row">
-                <h2 class="card-title" style="display:flex; align-items:center;">
-                  <span>📄</span>
-                  <span>Latest Run Deliverable &amp; Code Changes</span>
-                  <button type="button" class="collapse-btn" onclick="toggleSection(this, 'preview-latest-deliverable-body')" title="Toggle Deliverable Details" aria-label="Toggle Deliverable Details">▾</button>
-                </h2>
-                <div id="preview-latest-run-badge" class="muted" style="font-size:0.75rem;"></div>
-              </div>
-              <div id="preview-latest-deliverable-body" class="collapsible-target" style="margin-top:10px;">
-                <div class="empty">Select a completed run or dispatch a task to inspect deliverables.</div>
-              </div>
             </div>
           </section>
 
