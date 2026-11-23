@@ -265,8 +265,8 @@
     } else if (run.answer) {
       box.append(el('pre', { className: 'ask-answer', textContent: run.answer }));
     }
+    if (!run.answer && run.status === 'done') box.append(el('div', { className: 'ask-muted', textContent: 'Finished without a written answer.' }));
     if (run.kind === 'plan' && run.status === 'done' && run.answer && latest) box.append(planActions(run));
-    else if (run.status === 'done') box.append(el('div', { className: 'ask-muted', textContent: 'Finished without a written answer.' }));
     if (run.question) {
       box.append(el('div', { className: 'ask-callout tone-amber', textContent: `The helper asks: ${run.question} Reply below.` }));
     }
@@ -274,7 +274,7 @@
     if (['failed', 'timed_out', 'stale'].includes(run.status)) {
       box.append(el('div', { className: 'ask-callout tone-red', textContent: 'This did not finish. Reply below to try again, or ask an admin to look at it.' }));
     }
-    if (run.commits_ahead > 0) {
+    if (run.commits_ahead > 0 && !['answer', 'document', 'plan'].includes(run.kind)) {
       box.append(el('div', { className: 'ask-callout tone-green', textContent: `${run.commits_ahead} change(s) saved on a private draft copy. Nothing is live yet: an admin reviews them first.` }));
     }
     return box;
