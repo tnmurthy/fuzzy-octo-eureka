@@ -70,7 +70,11 @@ const RUNS_FILE =
   process.env.AGENT_RUNS_FILE || path.join(STACK_ROOT, '04_internal', 'agent-runs', 'runs.jsonl');
 // Default: the parent of the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
-const { readRuns } = require('./runs-reader');
+const { readRuns: readAllRuns } = require('./runs-reader');
+// P0.6: everything below sees only this portal's runs (portal-scope.js); the
+// Supabase run sync alone reads them all (it is the outbox for every run).
+const portalScope = require('./portal-scope');
+const readRuns = portalScope.scopedReader(readAllRuns, PORTAL);
 const { readOrigin, prUrlOf } = require('./repo-registry');
 const { isSameSiteJson } = require('./agents-api');
 const { recordRunReflection } = require('./task-reflection');
@@ -106,7 +110,7 @@ const blackboard = createBlackboard({ ledgerDB, memoryEngine: memory });
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
-  readRuns,
+  readRuns: readAllRuns,
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'run-sync-state.json'),
   callsFile: path.join(DASHBOARD_DIR, 'logs', 'ai-calls.jsonl'),
@@ -930,7 +934,8 @@ async function startDispatch(payload, ctx = {}) {
   if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
     return { status: 400, body: { ok: false, error: 'repo must be a plain directory name' } };
   }
-  const repoPath = resolveRepoPath(repo);
+  // P0.6: on the Drisyon portal only repos an admin added there may run.
+  const repoPath = IS_DRISYON_PORTAL ? repoRegistry.resolve(repo) : resolveRepoPath(repo);
   if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) {
     return { status: 400, body: { ok: false, error: `not a known repo: ${repo}` } };
   }
@@ -1047,14 +1052,14 @@ const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 // The cap: an admin's choice on the Agents page (logs/dispatch-settings.json)
 // else DISPATCH_DAILY_PAID_RUNS.
 const dispatchSettings = require('./dispatch-settings').createDispatchSettings({
-  file: path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'),
+  file: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'), PORTAL),
   envCap: parseCap(process.env.DISPATCH_DAILY_PAID_RUNS),
 });
 // What teammates' runs may do (teammate-mode.js): an admin's choice on the
 // Agents page (logs/teammate-mode.json), else TEAMMATE_RUN_MODE.
 const teammateMode = require('./teammate-mode');
 const teammateModeSetting = teammateMode.createTeammateModeSetting({
-  file: path.join(DASHBOARD_DIR, 'logs', 'teammate-mode.json'),
+  file: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'teammate-mode.json'), PORTAL),
   envMode: process.env.TEAMMATE_RUN_MODE,
 });
 const isAdminAuthor = (by) => {
@@ -1137,9 +1142,11 @@ const specialistRecommender = require('./specialist-recommend').createRecommende
 // Repos agents may work on: built-ins (listAvailableRepos) plus local folders
 // and clones an admin added on the Agents page (logs/repos.json).
 const repoRegistry = require('./repo-registry').createRepoRegistry({
-  file: path.join(DASHBOARD_DIR, 'logs', 'repos.json'),
+  file: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'repos.json'), PORTAL),
   cloneDir: process.env.AGENT_REPOS_DIR || path.join(require('os').homedir(), 'agent-repos'),
-  builtins: () => listAvailableRepos(),
+  // P0.6: the Drisyon portal offers only repos an admin added there, never
+  // this Mac's own folders.
+  builtins: () => (IS_DRISYON_PORTAL ? [] : listAvailableRepos()),
 });
 // Approval levels and cards (OMB-1..4): what a run may do unasked, and the
 // Allow/Deny cards for the rest. approval-levels.js, approvals.js, approvals-api.js.
@@ -1165,7 +1172,8 @@ const agentsApi = require('./agents-api').createAgentsApi({
       pending: pendingPaidRuns,
       cap: dispatchSettings.cap(),
     }),
-  repos: pollerRepos(),
+  // The issue poller dispatches to the team portal only.
+  repos: IS_DRISYON_PORTAL ? [] : pollerRepos(),
   settings: dispatchSettings,
   teammateModeSetting,
   // Ask page: answer / document / change guess by a local model
@@ -1187,7 +1195,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
   repoRegistry,
   dispatchRun: startDispatch,
   canFollowUp: (run) => followUpStatus(run).ok,
-  queueFile: path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'),
+  queueFile: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'), PORTAL),
   runControl: require('./run-control').createRunControl({
     runsDir: path.dirname(RUNS_FILE),
     loadRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
@@ -1201,13 +1209,11 @@ const agentsApi = require('./agents-api').createAgentsApi({
     : null,
 });
 
-// Queued messages go out when their agent finishes (agent-queue.js). Off on
-// the Drisyon portal, which does not serve the Agents page.
-if (PORT != 8788) {
-  setInterval(() => {
-    agentsApi.tickQueue().catch((err) => console.error('queue tick failed:', err.message));
-  }, 5000).unref();
-}
+// Queued messages go out when their agent finishes (agent-queue.js). Each
+// portal ticks its own queue file over its own runs (P0.6).
+setInterval(() => {
+  agentsApi.tickQueue().catch((err) => console.error('queue tick failed:', err.message));
+}, 5000).unref();
 
 function spawnAgentDispatch({
   agent,
