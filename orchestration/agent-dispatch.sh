@@ -181,7 +181,7 @@ node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$r
   task="$(if [ -n "${AGENT_TASK_TITLE:-}" ]; then printf '%s' "$AGENT_TASK_TITLE" | head -c 160; else head -c 160 "$prompt_file"; fi | tr '\r\n' '  ')" \
   ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} ${AGENT_PARENT_RUN:+"parent=$AGENT_PARENT_RUN"} \
   ${AGENT_LEVEL:+"level=$AGENT_LEVEL"} ${AGENT_BY:+"by=$AGENT_BY"} \
-  ${AGENT_PORTAL:+"portal=$AGENT_PORTAL"} started_at="$(iso_date)"
+  ${AGENT_PORTAL:+"portal=$AGENT_PORTAL"} ${AGENT_RUN_MODE:+"mode=$AGENT_RUN_MODE"} started_at="$(iso_date)"
 
 # Stop (Agents page -> run-control.js): the dashboard signals this script and
 # every process under it. The trap lets the script outlive the signal and
@@ -298,6 +298,30 @@ run_claude() {
 # Docker (OrbStack) down: one `orb start` attempt, then the run fails rather
 # than running unboxed.
 hermes_sandbox_on() { [ "${AGENT_HERMES_SANDBOX:-on}" != off ]; }
+# Read-only (AGENT_HERMES_MODE=readonly, a teammate mode - teammate-mode.js):
+# the sandbox with no network and file tools only, its own HERMES_HOME so it
+# never races a normal run's config, and every file change thrown away after
+# the run. The answer is the reply. Never runs unboxed.
+hermes_readonly() { [ "${AGENT_HERMES_MODE:-}" = readonly ]; }
+
+# Throw away whatever a read-only run changed, after checking the worktree's
+# .git pointer was not tampered with. Returns 0 always.
+discard_sandbox_changes() {
+  local gitfile_before="$1"
+  if [ -n "$gitfile_before" ] && { [ ! -f "$worktree/.git" ] || [ "$(cat "$worktree/.git" 2>/dev/null)" != "$gitfile_before" ]; }; then
+    echo "== read-only: the agent changed the worktree's .git pointer - restored it"
+    rm -rf "$worktree/.git"
+    printf '%s\n' "$gitfile_before" > "$worktree/.git"
+  fi
+  if [ -z "$(git -C "$(native "$worktree")" -c core.hooksPath=/dev/null status --porcelain 2>/dev/null)" ]; then
+    echo "== read-only: no file changes"
+    return 0
+  fi
+  git -C "$(native "$worktree")" -c core.hooksPath=/dev/null checkout -q -- . 2>/dev/null || true
+  git -C "$(native "$worktree")" -c core.hooksPath=/dev/null clean -fdq 2>/dev/null || true
+  echo "== read-only: discarded the agent's file changes"
+  return 0
+}
 
 ensure_docker() {
   docker info >/dev/null 2>&1 && return 0
@@ -346,7 +370,21 @@ run_hermes() {
   fi
   [[ "${AGENT_RESUME_SESSION:-}" =~ ^local-[0-9a-f]{16,128}$ ]] && resume=(--resume "$AGENT_RESUME_SESSION")
   [ -n "${HERMES_MODEL:-}" ] && model=(-m "$HERMES_MODEL")
-  if hermes_sandbox_on; then
+  if hermes_readonly && ! hermes_sandbox_on; then
+    echo "== read-only: refused - a read-only run must use the sandbox"
+    return 3
+  fi
+  if hermes_readonly; then
+    ensure_docker || return 3
+    local home="${AGENT_HERMES_HOME:-$HOME/.hermes-agents}-readonly"
+    mkdir -p "$home" \
+      && sed 's/^\(  docker_network:\).*/\1 false/' "$HERE/hermes-agent-config.yaml" > "$home/config.yaml" || return 3
+    export HERMES_HOME="$home"
+    boxed=(-t file)
+    gitfile="$(cat "$worktree/.git" 2>/dev/null)"
+    run_prompt="$prompt"$'\n\n'"Read-only: you work inside a container with no network. The repository is at /workspace (that is the directory named above). Read whatever you need, but do not change, create or delete files: anything you change is thrown away. Give your whole answer in your reply."
+    echo "== read-only: hermes in Docker, workspace only, no network, file tools; changes are discarded"
+  elif hermes_sandbox_on; then
     ensure_docker || return 3
     local home="${AGENT_HERMES_HOME:-$HOME/.hermes-agents}"
     mkdir -p "$home" && cp "$HERE/hermes-agent-config.yaml" "$home/config.yaml" || return 3
@@ -360,7 +398,8 @@ run_hermes() {
       ${model[@]+"${model[@]}"} ${boxed[@]+"${boxed[@]}"} ${resume[@]+"${resume[@]}"} < /dev/null 2>&1) \
     | node "$(native "$HERE/stream-log.js")" "$(native "$json")" hermes
   rc=${PIPESTATUS[0]}
-  if hermes_sandbox_on && [ -n "$gitfile" ]; then commit_sandbox_changes "$gitfile"; fi
+  if hermes_readonly; then discard_sandbox_changes "$gitfile"
+  elif hermes_sandbox_on && [ -n "$gitfile" ]; then commit_sandbox_changes "$gitfile"; fi
   echo "== result"
   node -e 'try { const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(j.result || "(no answer)"); } catch (_) { console.log("(no result: the run ended early)"); }' "$(native "$json")"
   return "$rc"

@@ -40,8 +40,21 @@ worktree is kept for inspection).
   (`followup.js` resumes `local-...` sessions with hermes). Hermes reports its
   session id only at the end, so a redirect of a stopped hermes run starts a
   fresh hermes run on the same branch instead of resuming. Approval levels do
-  not apply to hermes: it runs commands with its own guardrails
-  (`terminal.backend: local`); the secret scan still gates every push.
+  not apply to hermes; instead every dispatched hermes run is boxed (#46): a
+  Docker container that sees only its worktree, config from
+  `orchestration/hermes-agent-config.yaml` (`~/.hermes` is the personal
+  setup, not used by dispatch), changes committed on the host with hooks off;
+  the secret scan still gates every push.
+- **Teammate run mode** (`teammate-mode.js`, 2026-11-23): what runs started
+  by non-admins may do, switched by an admin in the /agents header (saved to
+  `logs/teammate-mode.json`, default `TEAMMATE_RUN_MODE`, else `sandbox`):
+  `sandbox` (boxed hermes as above; claude keeps approval cards), `readonly`
+  (hermes only, boxed with no network and file tools, every change discarded;
+  `AGENT_HERMES_MODE=readonly`, own home `~/.hermes-agents-readonly`),
+  `claude` (every run becomes claude, risky steps need an admin's Allow) or
+  `off`. Enforced in `spawnAgentDispatch`, the one path every run takes;
+  teammates may use only hermes/claude/auto/noop, and may queue GitHub issues
+  only in `sandbox` mode. Runs record `mode`. Admins are never restricted.
   Reviews default to `off` when the default agent is hermes (they need
   claude's read-only lock, which is paid).
 - Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run.

@@ -258,7 +258,7 @@ echo '{"type":"tool_use","name":"write_file","input":{"path":"boxed.txt"}}'
 echo '{"type":"result","session_id":"local-0123456789abcdef0123","exit_code":0,"text":"done"}'
 `;
 
-function boxed(t, { docker = 'ok', evil = false } = {}) {
+function boxed(t, { docker = 'ok', evil = false, readonly = false, sandboxOff = false } = {}) {
   fs.writeFileSync(path.join(t.bin, 'hermes-stub'), BOXED_HERMES, { mode: 0o755 });
   fs.writeFileSync(path.join(t.bin, 'docker'), `#!/usr/bin/env bash\n${docker === 'ok' ? 'exit 0' : 'exit 1'}\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(t.bin, 'orb'), '#!/usr/bin/env bash\nexit 1\n', { mode: 0o755 });
@@ -277,13 +277,15 @@ function boxed(t, { docker = 'ok', evil = false } = {}) {
       STUB_SEEN_HOME: posix(seenHome),
       STUB_SEEN_PROMPT: posix(seenPrompt),
       SANDBOX_EVIL: evil ? '1' : '',
+      ...(readonly ? { AGENT_HERMES_MODE: 'readonly', AGENT_RUN_MODE: 'readonly' } : {}),
+      ...(sandboxOff ? { AGENT_HERMES_SANDBOX: 'off' } : {}),
     },
   });
   const wt = path.join(t.dir, 'repo--task-x');
   const git = (...a) => spawnSync('git', ['-C', wt, ...a], { encoding: 'utf8' }).stdout.trim();
   const lines = fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   return {
-    res, wt, git, home, end: lines.at(-1),
+    res, wt, git, home, start: lines[0], end: lines.at(-1),
     log: fs.readFileSync(path.join(t.runs, 'run-1.log'), 'utf8'),
     seenHome: fs.existsSync(seenHome) ? fs.readFileSync(seenHome, 'utf8').trim() : null,
     seenPrompt: fs.existsSync(seenPrompt) ? fs.readFileSync(seenPrompt, 'utf8') : '',
@@ -313,6 +315,38 @@ test('sandboxed hermes: a rewritten .git pointer is restored before committing',
   assert.match(r.log, /changed the worktree's .git pointer - restored it/);
   assert.doesNotMatch(fs.readFileSync(path.join(r.wt, '.git'), 'utf8'), /evil/);
   assert.equal(r.git('log', '-1', '--format=%an'), 'Hermes local agent');
+});
+
+test('read-only hermes: no network, own HERMES_HOME, changes discarded, mode recorded', () => {
+  const t = setup({ withTests: false });
+  const r = boxed(t, { readonly: true });
+  assert.equal(r.res.status, 0, r.log);
+  const home = `${posix(r.home)}-readonly`;
+  assert.equal(r.seenHome, home);
+  const cfg = fs.readFileSync(path.join(`${r.home}-readonly`, 'config.yaml'), 'utf8');
+  assert.match(cfg, /backend: docker/);
+  assert.match(cfg, /docker_network: false/);
+  assert.match(r.seenPrompt, /Read-only: you work inside a container with no network/);
+  assert.match(r.log, /== read-only: discarded the agent's file changes/);
+  assert.ok(!fs.existsSync(path.join(r.wt, 'boxed.txt')), 'the change was thrown away');
+  assert.equal(r.git('status', '--porcelain'), '');
+  assert.equal(r.git('rev-list', '--count', 'main..HEAD'), '0');
+  assert.equal(r.start.mode, 'readonly');
+});
+
+test('read-only hermes: a rewritten .git pointer is restored, never followed', () => {
+  const t = setup({ withTests: false });
+  const r = boxed(t, { readonly: true, evil: true });
+  assert.match(r.log, /read-only: the agent changed the worktree's .git pointer - restored it/);
+  assert.doesNotMatch(fs.readFileSync(path.join(r.wt, '.git'), 'utf8'), /evil/);
+});
+
+test('read-only hermes never runs unboxed, even with the sandbox switched off', () => {
+  const t = setup({ withTests: false });
+  const r = boxed(t, { readonly: true, sandboxOff: true });
+  assert.notEqual(r.res.status, 0);
+  assert.match(r.log, /read-only: refused/);
+  assert.equal(r.seenHome, null, 'hermes never started');
 });
 
 test('sandboxed hermes: no Docker means no run, never an unboxed one', () => {
