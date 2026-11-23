@@ -206,6 +206,18 @@ grouped request + follow-ups, plain stage from `task-feed.js`; shaping in
 per the teammate mode) and the conversation for one request (answer, live
 steps, questions, Stop, reply = follow-up or queued message). Admins get an
 "Ops console" link.
+Request kinds (`request-kinds.js`, runs record `kind` and `helper`): the page
+guesses answer / document / change as you type (`GET
+/api/agents/request-kind`, keywords + local model `REQUEST_KIND_MODEL`,
+default the suggester's, `off` = keywords). Answer, document and plan run
+read-only for everyone (Hermes `AGENT_HERMES_MODE=readonly`, Claude at the
+`review` level); a document gets Copy / Download .md. A change first runs as
+a free read-only `plan` by Hermes; "Go ahead" (`POST
+/api/agents/plan/approve`, latest finished plan only) starts the `change` run
+on the same branch with the picked helper, the request and the plan in its
+task. Follow-ups keep their thread's kind. Agent runs never inherit
+messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
+`DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
 
 **Agents page / Ops console:** `http://127.0.0.1:8787/agents/ops` (the full
 page). Styles in `agents.css` + `agents-cockpit.css`; one plain-English voice

@@ -53,3 +53,9 @@ test('list titles drop the wording the dashboard adds to follow-ups', () => {
   assert.equal(plainTitle('Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: do X'), 'do X');
   assert.equal(plainTitle('Plain  task\n\nwith body'), 'Plain task with body');
 });
+
+test('read-only kinds are done, not ready for review, whatever the branch count says', () => {
+  const runs = [run('q', { by: 'a', kind: 'answer', commits_ahead: 4 }), run('c', { by: 'a', kind: 'change', commits_ahead: 1 })];
+  const byId = Object.fromEntries(myThreads({ runs, actor: 'a', now: NOW }).map((t) => [t.threadId, t.stage.key]));
+  assert.deepEqual(byId, { q: 'done', c: 'review' });
+});
