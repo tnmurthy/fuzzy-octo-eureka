@@ -329,7 +329,7 @@ function serveStaticFile(req, res) {
   if (urlPath === '/team') urlPath = '/team.html';
   if (urlPath === '/costing') urlPath = '/costing.html';
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
-  if (urlPath === '/agents') urlPath = '/agents.html';
+  if (urlPath === '/agents' || urlPath === '/agents/ops') urlPath = '/agents.html';
   if (urlPath === '/context') urlPath = '/context.html';
   if (urlPath === '/cockpit') urlPath = '/cockpit.html';
   if (urlPath === '/onboarding' || urlPath === '/welcome') urlPath = '/onboarding.html';

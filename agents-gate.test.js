@@ -10,6 +10,7 @@ test('blocks every agent-starting path through the tunnel without Access', () =>
   for (const url of [
     '/agents',
     '/agents.html',
+    '/agents/ops',
     '/api/agents/run',
     '/api/agents/overview?x=1',
     '/api/dispatch/run',
