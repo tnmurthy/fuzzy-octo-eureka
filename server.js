@@ -38,6 +38,12 @@ const accessGate = createAccessGate({
   publicHostnames: (process.env.PUBLIC_HOSTNAMES || 'team.mytestbed.tech').split(','),
   allowedEmails: (process.env.ACCESS_ALLOWED_EMAILS || '').split(',').filter(Boolean),
 });
+
+// P0.2: the Drisyon portal (8788) has no Access app of its own yet, so agents
+// stay off there for tunnelled requests until ACCESS_AUD is set for it.
+const agentsGate = require('./agents-gate');
+const IS_DRISYON_PORTAL = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
+const PORTAL_HAS_ACCESS = !IS_DRISYON_PORTAL || Boolean(process.env.ACCESS_AUD);
 const auth = require('./auth');
 const { getHostSpecs } = require('./host-specs');
 const DASHBOARD_DIR = __dirname;
@@ -2994,6 +3000,15 @@ function handleRequest(req, res) {
 
 const server = http.createServer(async (req, res) => {
   const urlPath = req.url.split('?')[0];
+  if (
+    agentsGate.agentsBlocked({
+      portalHasAccess: PORTAL_HAS_ACCESS,
+      viaTunnel: accessGate.requiresAccess(req),
+      url: req.url,
+    })
+  ) {
+    return sendJson(res, 403, { ok: false, error: agentsGate.BLOCK_MESSAGE });
+  }
   const isPublicAuth =
     urlPath === '/login' ||
     urlPath === '/logout' ||

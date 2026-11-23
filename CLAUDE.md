@@ -193,7 +193,11 @@ viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):
 `GET /api/agents/overview`, `GET /api/agents/log?id=` (only files inside the
 runs folder, last 64 KB), `POST /api/agents/task` (repo must be one the poller
 watches; JSON-only and same-origin, so another website cannot start a paid
-agent through a local browser). Off on the Drisyon portal (8788).
+agent through a local browser). On the Drisyon portal (8788) agents are
+blocked for tunnelled requests until that portal has its own Access app
+(`ACCESS_AUD` in `.env.drisyon`): `agents-gate.js` answers 403 for `/agents`,
+`/api/agents/*`, `/api/dispatch/*`, `/api/team/dispatch`, `/api/patrol/*` and
+`/api/agent/chat` (it can auto-dispatch). Requests at this Mac still work.
 Admins see **Change** next to the paid-runs meter: `POST /api/agents/settings`
 {dailyPaidRuns 0-1000} saves `logs/dispatch-settings.json` (who + when), which
 wins over `.env` from the next dispatch on, no restart (both dashboards re-read
