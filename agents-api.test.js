@@ -461,3 +461,43 @@ test('GET /api/agents/mine lists only the caller\'s threads, with mode and admin
   assert.deepEqual(r.payload.threads.map((t) => t.threadId), ['r-mine']);
   assert.equal(r.payload.threads[0].repo, 'app');
 });
+
+test('Ask page kinds: run passes the kind, bad kinds are refused, plans are approved once', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-kind-'));
+  const runsFile = path.join(dir, 'runs.jsonl');
+  const planLog = path.join(dir, 'p1.log');
+  fs.writeFileSync(planLog, '');
+  fs.writeFileSync(path.join(dir, 'p1.hermes.json'), JSON.stringify({ result: '1. Add a check\n2. Show a message' }));
+  const runs = [
+    { id: 'p1', agent: 'hermes', kind: 'plan', helper: 'claude', status: 'done', task: 'Signup accepts empty emails', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { id: 'a1', agent: 'hermes', kind: 'answer', status: 'done', task: 'What is this?', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { id: 'p2', agent: 'hermes', kind: 'plan', status: 'running', task: 'x', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+  ];
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile, stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, isAdmin: () => false, actorOf: () => 'asha@example.com', now: () => 1_700_000_000_000,
+    dispatchRun: async (p, ctx) => { sent.push({ p, ctx }); return { status: 202, body: { ok: true, runId: 'new' } }; },
+    classifyKind: async () => ({ kind: 'document', source: 'model' }),
+  });
+  await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'claude', title: 'Fix signup', kind: 'change' } });
+  assert.equal(sent[0].p.kind, 'change');
+  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x', kind: 'plan' } })).status, 400, 'plan is not a request kind');
+
+  assert.equal((await call(api, { url: '/api/agents/plan/approve', body: { runId: 'a1' } })).status, 400);
+  assert.equal((await call(api, { url: '/api/agents/plan/approve', body: { runId: 'p2' } })).status, 409);
+  const ok = await call(api, { url: '/api/agents/plan/approve', body: { runId: 'p1' } });
+  assert.equal(ok.status, 202);
+  const last = sent.at(-1);
+  assert.equal(last.p.followUpOf, 'p1');
+  assert.equal(last.p.approvePlan, true);
+  assert.match(last.p.task, /Original request: Signup accepts empty emails/);
+  assert.match(last.p.task, /Approved plan:\n1\. Add a check/);
+  assert.deepEqual(last.ctx, { by: 'asha@example.com' });
+
+  runs.push({ id: 'p1b', parent: 'p1', agent: 'hermes', kind: 'plan', status: 'done', task: 'y', started_at: '2026-11-23T11:00:00Z' });
+  assert.equal((await call(api, { url: '/api/agents/plan/approve', body: { runId: 'p1' } })).status, 409, 'an older plan cannot be approved');
+
+  const g = await call(api, { method: 'GET', url: '/api/agents/request-kind?q=write%20a%20report' });
+  assert.deepEqual(g.payload, { ok: true, kind: 'document', source: 'model' });
+});

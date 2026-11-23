@@ -59,6 +59,10 @@
     send.disabled = false;
     expert.hidden = false;
     note.hidden = true;
+    const changeChip = document.querySelector('.ask-kinds button[data-kind=change]');
+    changeChip.disabled = !state.admin && (state.mode === 'readonly' || state.mode === 'off');
+    changeChip.title = changeChip.disabled ? 'Changes are switched off for teammates right now' : '';
+    if (changeChip.disabled && kind === 'change') setKind('answer', false);
     if (state.admin) return;
     const say = (text) => { note.textContent = text; note.hidden = false; };
     if (state.mode === 'readonly') {
@@ -108,6 +112,38 @@
     }
   }
 
+  // ---- what kind of request (request-kinds.js on the server) ------------------
+  const KIND_NOTES = {
+    answer: 'The helper reads your project and replies in plain words. Nothing is changed. Free.',
+    document: 'The helper writes the document in its reply, ready to copy or download. Nothing is changed. Free.',
+    change: 'First you get a short plan (free). Nothing changes until you press Go ahead.',
+  };
+  let kind = 'answer';
+  let kindPinned = false;
+  let kindTimer = null;
+  function setKind(k, guessed) {
+    kind = k;
+    for (const b of document.querySelectorAll('.ask-kinds button')) b.setAttribute('aria-checked', String(b.dataset.kind === k));
+    $('kind-note').textContent = KIND_NOTES[k] || '';
+    $('kind-src').textContent = guessed ? '(my guess: tap to change)' : '';
+  }
+  for (const b of document.querySelectorAll('.ask-kinds button')) {
+    b.addEventListener('click', () => { kindPinned = true; setKind(b.dataset.kind, false); });
+  }
+  $('request').addEventListener('input', () => {
+    if (kindPinned) return;
+    clearTimeout(kindTimer);
+    const q = $('request').value.trim();
+    if (q.length < 6) return;
+    kindTimer = setTimeout(async () => {
+      try {
+        const r = await api(`/api/agents/request-kind?q=${encodeURIComponent(q.slice(0, 600))}`);
+        const change = document.querySelector('.ask-kinds button[data-kind=change]');
+        if (!kindPinned && $('request').value.trim() === q && !(r.kind === 'change' && change.disabled)) setKind(r.kind, true);
+      } catch (_) { /* keep the current kind */ }
+    }, 700);
+  });
+
   // ---- a new request ---------------------------------------------------------
   function showNew() {
     state.openId = null;
@@ -124,6 +160,7 @@
       const ta = $('request');
       const rest = ta.value.replace(/^(Explain how this works|Something is wrong|Please change|Check for problems in|Write a short document about): /, '');
       ta.value = b.dataset.prefix + rest;
+      if (b.dataset.kind) { kindPinned = true; setKind(b.dataset.kind, false); }
       ta.focus();
       ta.setSelectionRange(ta.value.length, ta.value.length);
     });
@@ -143,8 +180,10 @@
     msg.className = 'ask-msg';
     msg.textContent = 'Sending…';
     try {
-      const r = await api('/api/agents/run', { repo: $('project').value, agent: helper, title, body });
+      const r = await api('/api/agents/run', { repo: $('project').value, agent: helper, title, body, kind });
       $('request').value = '';
+      kindPinned = false;
+      setKind('answer', false);
       msg.textContent = '';
       await loadMine();
       openThread(r.runId);
@@ -161,9 +200,59 @@
     .replace(/^Follow-up: the person stopped you mid-task and changed direction\. Check git status for uncommitted work first\. New instruction: /, '')
     .replace(/^Follow-up: /, '');
 
-  function helperBubble(run, steps) {
+  const KIND_TAG = { plan: 'plan', document: 'document', answer: 'answer', change: 'change' };
+  const slug = (t) => String(t || 'document').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'document';
+
+  function docActions(run, title) {
+    const copy = el('button', { type: 'button', className: 'ask-btn', textContent: '📋 Copy' });
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(run.answer); copy.textContent = '✓ Copied'; } catch (_) { copy.textContent = 'Copy failed'; }
+      setTimeout(() => { copy.textContent = '📋 Copy'; }, 2000);
+    });
+    const dl = el('button', { type: 'button', className: 'ask-btn', textContent: '⬇ Download .md' });
+    dl.addEventListener('click', () => {
+      const a = el('a', { href: URL.createObjectURL(new Blob([run.answer], { type: 'text/markdown' })), download: `${slug(title)}.md` });
+      document.body.append(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    });
+    return el('div', { className: 'ask-actions' }, copy, dl);
+  }
+
+  function planActions(run) {
+    if (!state.admin && (state.mode === 'readonly' || state.mode === 'off')) {
+      return el('div', { className: 'ask-callout tone-muted', textContent: 'Changes are switched off for teammates right now, so this plan cannot be carried out. Ask an admin.' });
+    }
+    const go = el('button', { type: 'button', className: 'ask-btn go', textContent: '✓ Go ahead' });
+    const edit = el('button', { type: 'button', className: 'ask-btn', textContent: '✎ Change the plan' });
+    go.addEventListener('click', async () => {
+      if (!confirm('Carry out this plan? The helper will make the changes on a private draft copy.')) return;
+      go.disabled = true;
+      edit.disabled = true;
+      try {
+        const r = await api('/api/agents/plan/approve', { runId: run.id });
+        state.openId = r.runId || state.openId;
+        await loadMine();
+        await renderThread();
+      } catch (err) {
+        go.disabled = false;
+        edit.disabled = false;
+        $('reply-msg').className = 'ask-msg err';
+        $('reply-msg').textContent = `Could not start: ${err.message}`;
+      }
+    });
+    edit.addEventListener('click', () => {
+      $('reply').placeholder = 'What should be different in the plan?';
+      $('reply').focus();
+    });
+    return el('div', { className: 'ask-actions' }, go, edit);
+  }
+
+  function helperBubble(run, steps, { latest = false, title = '' } = {}) {
     const box = el('div', { className: 'ask-bubble helper' },
-      el('div', { className: 'ask-who', textContent: run.agent === 'claude' ? 'Expert helper' : 'Helper' }));
+      el('div', { className: 'ask-who' },
+        run.agent === 'claude' ? 'Expert helper' : 'Helper',
+        KIND_TAG[run.kind] ? el('span', { className: 'ask-kind-tag', textContent: `· ${KIND_TAG[run.kind]}` }) : null));
     if (run.status === 'running') {
       box.append(el('div', {}, el('span', { className: 'ask-dots', textContent: 'Working on it' })));
       if (steps && steps.length) {
@@ -171,7 +260,12 @@
       }
       return box;
     }
-    if (run.answer) box.append(el('pre', { className: 'ask-answer', textContent: run.answer }));
+    if (run.answer && run.kind === 'document' && run.status === 'done') {
+      box.append(el('div', { className: 'ask-doc' }, el('pre', { className: 'ask-answer', textContent: run.answer })), docActions(run, title));
+    } else if (run.answer) {
+      box.append(el('pre', { className: 'ask-answer', textContent: run.answer }));
+    }
+    if (run.kind === 'plan' && run.status === 'done' && run.answer && latest) box.append(planActions(run));
     else if (run.status === 'done') box.append(el('div', { className: 'ask-muted', textContent: 'Finished without a written answer.' }));
     if (run.question) {
       box.append(el('div', { className: 'ask-callout tone-amber', textContent: `The helper asks: ${run.question} Reply below.` }));
@@ -218,11 +312,14 @@
     $('t-stage').className = `ask-pill tone-${stage ? TONES[stage.key] || 'muted' : 'muted'}`;
 
     const items = [];
-    for (const run of runs) {
+    const title = stripPrefix(runs[0] && runs[0].task);
+    for (const [i, run] of runs.entries()) {
+      const approved = run.kind === 'change' && /^Go ahead with the plan\./.test(String(run.task || ''));
       items.push(el('div', { className: 'ask-bubble you' },
         el('div', { className: 'ask-who', textContent: 'You' }),
-        el('pre', { className: 'ask-answer', textContent: stripPrefix(run.task) })));
-      items.push(helperBubble(run, await stepsOf(run)));
+        el('pre', { className: 'ask-answer', textContent: approved ? '✓ Go ahead with the plan.' : stripPrefix(run.task) })));
+      const isLatest = i === runs.length - 1 && !(t.queue || []).length;
+      items.push(helperBubble(run, await stepsOf(run), { latest: isLatest, title }));
     }
     for (const q of t.queue || []) {
       items.push(el('div', { className: 'ask-bubble you queued' },
@@ -292,6 +389,7 @@
   });
 
   $('new-btn').addEventListener('click', showNew);
+  setKind('answer', false);
 
   // ---- start ---------------------------------------------------------------------
   const fromHash = decodeURIComponent((location.hash.match(/^#t=(.+)$/) || [])[1] || '');

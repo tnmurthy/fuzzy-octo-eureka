@@ -69,6 +69,22 @@ body { margin: 0; background: var(--bg-primary); color: var(--color-text-main); 
   background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 999px; padding: 6px 12px;
 }
 .ask-starters button:hover { border-color: var(--status-blue); }
+.ask-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.ask-kinds button {
+  font: inherit; font-size: 0.82rem; cursor: pointer; color: var(--color-text-muted);
+  background: transparent; border: 1px solid var(--border-color); border-radius: 8px; padding: 5px 10px;
+}
+.ask-kinds button[aria-checked="true"] { color: var(--color-text-main); border-color: var(--status-blue); background: var(--bg-card); }
+.ask-kinds button:disabled { opacity: 0.4; cursor: default; }
+.ask-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ask-btn {
+  font: inherit; font-size: 0.86rem; cursor: pointer; border-radius: 8px; padding: 7px 14px;
+  background: transparent; color: var(--color-text-main); border: 1px solid var(--border-color);
+}
+.ask-btn.go { background: var(--status-green); color: #04140a; border-color: var(--status-green); font-weight: 600; }
+.ask-btn:disabled { opacity: 0.5; cursor: default; }
+.ask-doc { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 16px; margin-top: 4px; }
+.ask-kind-tag { font-size: 0.72rem; color: var(--color-text-muted); margin-left: 6px; }
 .ask-helpers { border: 0; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
 .ask-muted { color: var(--color-text-muted); font-size: 0.8rem; }
 .ask-mode {

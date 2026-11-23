@@ -47,16 +47,25 @@
           <div class="ask-hint" id="project-hint"></div>
 
           <div class="ask-starters" id="starters" role="group" aria-label="Kinds of request">
-            <button type="button" data-prefix="Explain how this works: ">💡 Explain how it works</button>
-            <button type="button" data-prefix="Something is wrong: ">🐞 Fix a problem</button>
-            <button type="button" data-prefix="Please change: ">✏️ Change text or layout</button>
-            <button type="button" data-prefix="Check for problems in: ">🔍 Check for issues</button>
-            <button type="button" data-prefix="Write a short document about: ">📄 Write a document</button>
+            <button type="button" data-kind="answer" data-prefix="Explain how this works: ">💡 Explain how it works</button>
+            <button type="button" data-kind="change" data-prefix="Something is wrong: ">🐞 Fix a problem</button>
+            <button type="button" data-kind="change" data-prefix="Please change: ">✏️ Change text or layout</button>
+            <button type="button" data-kind="answer" data-prefix="Check for problems in: ">🔍 Check for issues</button>
+            <button type="button" data-kind="document" data-prefix="Write a short document about: ">📄 Write a document</button>
           </div>
 
           <label class="ask-label" for="request">Your request</label>
           <textarea id="request" class="ask-field ask-text" maxlength="8000" required
             placeholder="e.g. The signup form accepts empty emails. Or: explain how invoicing works, in simple words."></textarea>
+
+          <div class="ask-kinds" role="radiogroup" aria-label="Kind of request">
+            <span class="ask-muted">I'll treat this as:</span>
+            <button type="button" role="radio" data-kind="answer">💬 Answer</button>
+            <button type="button" role="radio" data-kind="document">📄 Document</button>
+            <button type="button" role="radio" data-kind="change">🔧 Change</button>
+            <span class="ask-muted" id="kind-src"></span>
+          </div>
+          <div class="ask-hint" id="kind-note"></div>
 
           <fieldset class="ask-helpers" id="helpers">
             <legend class="ask-label">Helper</legend>
