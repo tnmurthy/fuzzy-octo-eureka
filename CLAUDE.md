@@ -221,7 +221,15 @@ starts a new Change request (plan first) carrying that reply. Long
 conversations: `ask-nav.js` folds all but the last two turns, clips long
 replies behind "Show all", and adds a sticky toolbar (New chat, Collapse /
 Expand all, Go to turn, Top, Latest; Alt+N / Alt+Up / Alt+Down) and floating
-top / latest buttons. Agent runs never inherit
+top / latest buttons. **Files changed** (`ask-files.js`, `run-changes.js`,
+`GET /api/agents/changes?id=` and `/changes/file?id=&path=`, owner or admin):
+under the latest run that may change files, the files changed on its
+worktree since the merge-base with the default branch (committed, "not saved
+yet" and new files, +/- counts, commits) and each file's diff on click (400
+lines max). Reads only the worktree derived from repo + branch
+(`<repo>--<branch with - for />`); a file's diff only for a listed path;
+secret-looking files are listed by name, never shown. The Ask page sidebar
+scrolls on its own (sticky, 100vh) so the page is as tall as the conversation. Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
 

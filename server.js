@@ -1193,6 +1193,8 @@ const agentsApi = require('./agents-api').createAgentsApi({
   suggester: specialistSuggester,
   recommender: specialistRecommender,
   repoRegistry,
+  // "Files changed" on the Ask page: diffs from a run's own worktree.
+  runChanges: require('./run-changes').createRunChanges(),
   dispatchRun: startDispatch,
   canFollowUp: (run) => followUpStatus(run).ok,
   queueFile: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'), PORTAL),
