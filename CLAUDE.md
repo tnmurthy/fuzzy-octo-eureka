@@ -199,7 +199,10 @@ json state and server sources are 404. A new asset type or folder needs a
 line there.
 
 **Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
-header). A form that queues a task (opens a GitHub issue labelled
+header; also at `/agents/ops`, which becomes the admin Ops console when the
+teammate Ask page takes over `/agents`). Styles in `agents.css` +
+`agents-cockpit.css`; one plain-English voice (the Friendly/Developer toggle
+was removed 2026-11-23). A form that queues a task (opens a GitHub issue labelled
 `agent:ready` + `agent:<name>`), the issue queue as four columns (queued,
 working, needs review, failed; cached 30 s), running agents with a live log
 viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):

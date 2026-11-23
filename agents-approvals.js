@@ -110,7 +110,10 @@
     const waiting = b.pending.length
       ? [el('h3', { className: 'approvals-title', textContent: `Waiting for you (${b.pending.length})` }), ...b.pending.map(card)]
       : [];
-    box.replaceChildren(...waiting, standing(b.alwaysAllow || {}, b.recent || []));
+    // standing() returns null when there is nothing to show; replaceChildren
+    // would print that as the text "null".
+    const rules = standing(b.alwaysAllow || {}, b.recent || []);
+    box.replaceChildren(...waiting, ...(rules ? [rules] : []));
   }
 
   refresh();
