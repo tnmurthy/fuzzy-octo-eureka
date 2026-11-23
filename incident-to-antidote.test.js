@@ -53,13 +53,41 @@ test('antidote synthesizer: deriveScopes identifies appropriate domains', () => 
   assert.deepEqual(deriveScopes([], 'clean'), ['general']);
 });
 
-test('antidote synthesizer: mineGitCommits discovers fix commits from current git history', () => {
-  const mined = mineGitCommits(process.cwd(), { limit: 10 });
-  assert.ok(Array.isArray(mined));
-  assert.ok(mined.length >= 1, 'Should find at least 1 recent fix commit in git history');
-  const e9c = mined.find((a) => a.id === 'ANT-E9C2699' || a.pattern.includes('APPROVALS'));
-  assert.ok(e9c, 'Should discover commit e9c2699');
-  assert.ok(e9c.scope.includes('auth'));
+test('antidote synthesizer: mineGitCommits discovers fix commits from git history', () => {
+  // Its own throwaway repo: CI checks out one commit, so the real history
+  // cannot be relied on to hold any particular fix.
+  const fs = require('fs');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'antidote-git-'));
+  try {
+    const git = (...args) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], { encoding: 'utf8' });
+    git('init', '-q');
+    fs.writeFileSync(path.join(dir, 'README.md'), 'x\n');
+    git('add', '.');
+    git('commit', '-q', '--no-verify', '-m', 'feat: first');
+    fs.writeFileSync(path.join(dir, 'access-auth.js'), 'module.exports = 1;\n');
+    git('add', '.');
+    git('commit', '-q', '--no-verify', '-m', 'fix(approvals): grant admin permissions to Access users');
+
+    const mined = mineGitCommits(dir, { limit: 10 });
+    assert.ok(Array.isArray(mined));
+    assert.equal(mined.length, 1, 'only the fix commit is mined');
+    assert.match(mined[0].pattern, /APPROVALS/);
+    assert.ok(mined[0].scope.includes('auth'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('antidote synthesizer: mineGitCommits returns [] outside a git repo', () => {
+  const os = require('os');
+  const fs = require('fs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'antidote-nogit-'));
+  try {
+    assert.deepEqual(mineGitCommits(dir), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('antidote synthesizer: mineFailedRuns processes failed agent trajectories', () => {
