@@ -138,7 +138,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -485,6 +485,57 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
             return sendJson(res, r.status, r.body);
           }
           return sendJson(res, 404, { ok: false, error: 'unknown queue action' });
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if ((url.pathname === '/api/agents/changes' || url.pathname === '/api/agents/changes/file') && req.method === 'GET') {
+      // Files changed on a run's draft copy (run-changes.js): the list, or one
+      // file's diff. Owner or admin only; read-only.
+      const id = url.searchParams.get('id') || '';
+      if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
+      if (!runChanges) { sendJson(res, 503, { ok: false, error: 'change view is not available' }); return true; }
+      const runs = loadRuns();
+      const run = runs.find((r) => r.id === id);
+      if (!run || notYours(req, id, runs)) { sendJson(res, 404, NOT_FOUND); return true; }
+      const file = url.pathname.endsWith('/file') ? String(url.searchParams.get('path') || '') : null;
+      (file === null ? runChanges.summary(run) : runChanges.fileDiff(run, file))
+        .then((r) => sendJson(res, r.ok ? 200 : r.status || 500, r.ok ? r : { ok: false, error: r.error }))
+        .catch(() => sendJson(res, 500, { ok: false, error: 'could not read the changes' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/make-changes' && req.method === 'POST') {
+      // "Make these changes" under an answer or document: a new Change request
+      // (plan first, then Go ahead) on the same project, carrying that reply.
+      // Follow-ups keep their thread's kind, so this is the way from read-only
+      // findings to edits.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'run now is not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then(async (b) => {
+          const runs = loadRuns();
+          if (notYours(req, b.runId, runs)) return sendJson(res, 404, NOT_FOUND);
+          const src = runs.find((r) => r.id === String(b.runId || ''));
+          if (!src) return sendJson(res, 404, NOT_FOUND);
+          if (!['answer', 'document'].includes(src.kind)) return sendJson(res, 400, { ok: false, error: 'only an answer or a document can be turned into changes' });
+          if (src.status !== 'done') return sendJson(res, 409, { ok: false, error: 'wait for the reply to finish first' });
+          const j = path.dirname(path.resolve(String(src.log || ''))) === runsDir ? resultOf(src) : null;
+          const findings = j && j.result ? String(j.result).slice(0, 8000) : '';
+          if (!findings.trim()) return sendJson(res, 409, { ok: false, error: 'that reply has no text to act on' });
+          const agent = String(b.agent || src.agent || 'hermes');
+          if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
+          const t = agentQueue ? agentQueue.threadOf(src.id) : null;
+          const root = t && t.runs.length ? t.runs[0] : src;
+          const request = String(root.task || '').replace(/\s+/g, ' ').trim();
+          const focus = String(b.focus || '').trim().slice(0, 2000);
+          const task = `Make the changes from: ${request.slice(0, 120)}\n\n`
+            + (focus ? `What to do now: ${focus}\n\n` : 'What to do now: the most valuable fixes below, smallest first.\n\n')
+            + `Original request: ${request.slice(0, 2000)}\n\nThe ${src.kind} to act on:\n${findings}`;
+          const repo = path.basename(String(src.repo || '').replace(/[\\/]+$/, ''));
+          const r = await dispatchRun({
+            agent, repo, task, branch: `agent/run-${now().toString(36)}`, canAsk: true, kind: 'change',
+          }, { by: actorOf(req) });
+          return sendJson(res, r.status, r.body);
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;

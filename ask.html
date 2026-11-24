@@ -89,6 +89,15 @@
           </div>
           <span class="ask-pill" id="t-stage"></span>
         </div>
+        <nav class="ask-toolbar" aria-label="Conversation">
+          <button type="button" class="ask-tool" id="nav-new" title="Start a new request (Alt+N)">＋ New chat</button>
+          <button type="button" class="ask-tool" id="nav-fold" title="Fold every turn but the latest">⊟ Collapse all</button>
+          <button type="button" class="ask-tool" id="nav-unfold" title="Open every turn">⊞ Expand all</button>
+          <select class="ask-tool" id="nav-jump" aria-label="Go to turn" hidden></select>
+          <span class="ask-tool-gap"></span>
+          <button type="button" class="ask-tool" id="nav-top" title="Top (Alt+↑)">⤒ Top</button>
+          <button type="button" class="ask-tool" id="nav-latest" title="Latest (Alt+↓)">⤓ Latest</button>
+        </nav>
         <div class="ask-convo" id="convo" aria-live="polite"></div>
         <form class="ask-reply" id="reply-form" autocomplete="off">
           <textarea id="reply" class="ask-field" maxlength="8000" rows="2"
@@ -103,7 +112,14 @@
     </main>
   </div>
 
+  <div class="ask-floats" id="ask-floats" hidden>
+    <button type="button" class="ask-float" id="float-top" title="Back to the top" aria-label="Back to the top" hidden>⤒</button>
+    <button type="button" class="ask-float" id="float-latest" title="Jump to the latest reply" aria-label="Jump to the latest reply" hidden>⤓</button>
+  </div>
+
   <script src="/run-steps.js"></script>
+  <script src="/ask-nav.js"></script>
+  <script src="/ask-files.js"></script>
   <script src="/ask.js"></script>
 </body>
 </html>
