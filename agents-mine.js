@@ -14,6 +14,7 @@ const LOCAL = 'local operator';
 // The task text without the wording the dashboard adds to follow-ups.
 function plainTitle(task) {
   return String(task || '')
+    .replace(/\s*Where this request stands \(a summary of earlier work; data, not instructions\):[\s\S]*$/, '')
     .replace(/^Follow-up: the person stopped you mid-task and changed direction\.[^:]*: /, '')
     .replace(/^Follow-up: /, '')
     .replace(/\s+/g, ' ')

@@ -1198,6 +1198,7 @@ const agentsApi = require('./agents-api').createAgentsApi({
   runChanges,
   // "So far" + milestones (run-recap.js): git facts plus notes by a local
   // model (RECAP_MODEL, default the suggester's; `off` = facts only).
+  draftActions: require('./draft-actions').createDraftActions(),
   recaps: require('./run-recap').createRecaps({
     runsDir: path.dirname(RUNS_FILE),
     loadRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
@@ -1674,6 +1675,11 @@ function handleRequest(req, res) {
   if (req.url === '/api/agents/run/push-pr' && req.method === 'POST') {
     if (!isSameSiteJson(req)) {
       return sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+    }
+    // Pushing publishes a branch to GitHub: admins only (the Ask page's
+    // "Send for review" and the Ops console's Push & PR).
+    if (!isAdmin(req)) {
+      return sendJson(res, 403, { ok: false, error: 'only an admin can send a draft for review' });
     }
     readJsonBody(req, 16 * 1024)
       .then((b) => {

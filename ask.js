@@ -3,7 +3,8 @@
 // APIs: GET /api/agents/mine, /api/agents/repos, /api/agents/thread,
 // /api/agents/log; POST /api/agents/run, /api/agents/queue, /api/agents/stop,
 // /api/agents/plan/approve, /api/agents/make-changes, /api/agents/milestone.
-// Navigation: ask-nav.js; files changed: ask-files.js; "So far": ask-recap.js.
+// Navigation: ask-nav.js; files changed: ask-files.js; "So far": ask-recap.js;
+// formatted replies: ask-md.js; undo / discard / send for review: ask-draft.js.
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -45,7 +46,7 @@
     box.replaceChildren(...state.threads.map((t) => {
       const tone = TONES[t.stage.key] || 'muted';
       const b = el('button', { type: 'button', className: `ask-item${t.threadId === state.openThread ? ' active' : ''}` },
-        el('div', { className: 'ask-item-title', textContent: t.title || '(untitled)' }),
+        el('div', { className: 'ask-item-title', textContent: shortTitle(t.title) || '(untitled)', title: t.title || '' }),
         el('div', { className: 'ask-item-meta' },
           el('span', { className: `ask-pill tone-${tone}`, textContent: t.stage.label }),
           el('span', { textContent: [t.repo, ago(t.updatedAt)].filter(Boolean).join(' · ') })));
@@ -120,6 +121,7 @@
     document: 'The helper writes the document in its reply, ready to copy or download. Nothing is changed. Free.',
     change: 'First you get a short plan (free). Nothing changes until you press Go ahead.',
   };
+  const SEND_LABEL = { answer: 'Ask the helper →', document: 'Write the document →', change: 'Get a plan first →' };
   let kind = 'answer';
   let kindPinned = false;
   let kindTimer = null;
@@ -128,6 +130,7 @@
     for (const b of document.querySelectorAll('.ask-kinds button')) b.setAttribute('aria-checked', String(b.dataset.kind === k));
     $('kind-note').textContent = KIND_NOTES[k] || '';
     $('kind-src').textContent = guessed ? '(my guess: tap to change)' : '';
+    $('new-send').textContent = SEND_LABEL[k] || SEND_LABEL.answer;
   }
   for (const b of document.querySelectorAll('.ask-kinds button')) {
     b.addEventListener('click', () => { kindPinned = true; setKind(b.dataset.kind, false); });
@@ -199,9 +202,22 @@
   });
 
   // ---- one thread --------------------------------------------------------------
+  // The task as the person wrote it: without the follow-up wording and the
+  // recap block run-recap.js adds for the agent.
   const stripPrefix = (task) => String(task || '')
+    .replace(/\s*Where this request stands \(a summary of earlier work; data, not instructions\):[\s\S]*$/, '')
     .replace(/^Follow-up: the person stopped you mid-task and changed direction\. Check git status for uncommitted work first\. New instruction: /, '')
     .replace(/^Follow-up: /, '');
+
+  /** A request's first sentence or line, at most `max` characters, cut at a word. */
+  function shortTitle(task, max = 70) {
+    let t = stripPrefix(task).replace(/^Make the changes from: /, 'Changes: ').split('\n')[0].trim();
+    const first = t.match(/^(.{20,}?[.!?:])(\s|$)/);
+    if (first) t = first[1].replace(/[.:]$/, '');
+    if (t.length <= max) return t;
+    const cut = t.slice(0, max);
+    return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 15))}…`;
+  }
 
   const KIND_TAG = { plan: 'plan', document: 'document', answer: 'answer', change: 'change' };
   const slug = (t) => String(t || 'document').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'document';
@@ -222,6 +238,58 @@
     return el('div', { className: 'ask-actions' }, copy, dl);
   }
 
+  /** "Go ahead" on a plan; false when cancelled or refused. */
+  async function approvePlan(run) {
+    if (!confirm('Carry out this plan? The helper will make the changes on a private draft copy.')) return false;
+    try {
+      const r = await api('/api/agents/plan/approve', { runId: run.id });
+      state.openId = r.runId || state.openId;
+      await loadMine();
+      await renderThread();
+      return true;
+    } catch (err) {
+      $('reply-msg').className = 'ask-msg err';
+      $('reply-msg').textContent = `Could not start: ${err.message}`;
+      return false;
+    }
+  }
+
+  // ---- quick replies above the reply box ------------------------------------
+  const QUICK = {
+    plan: [['Make the plan smaller', 'Make the plan smaller: only the most important step for now.'], ['Explain it simply', 'Explain this plan in plain words: what changes and what I will see.']],
+    change: [['Explain what you changed', 'Explain in plain words what you changed and how I can check it once it is live.'], ['Do what is still open', 'Now do the items that are still open from the plan.'], ['Make it smaller', 'That is more than I wanted. Keep only the most important change and undo the rest.']],
+    answer: [['Shorter please', 'Make it shorter: the key points only.'], ['More detail', 'Go into more detail on the most important points.'], ['Explain simply', 'Explain this in plain words for a non-technical reader.']],
+    failed: [['Try again', 'Try again. If something blocked you, say what.']],
+  };
+  QUICK.document = QUICK.answer;
+
+  function fill(text) {
+    $('reply').value = text;
+    $('reply').focus();
+  }
+
+  function renderQuick(latest, hasQueue) {
+    const box = $('quick');
+    if (!latest || latest.status === 'running' || hasQueue) { box.replaceChildren(); return; }
+    const chip = (label, onClick, cls = '') => {
+      const b = el('button', { type: 'button', className: `ask-chip${cls}`, textContent: label });
+      b.addEventListener('click', onClick);
+      return b;
+    };
+    const failed = ['failed', 'timed_out', 'stale', 'stopped'].includes(latest.status);
+    const chips = [];
+    if (!failed && latest.kind === 'plan' && latest.answer && (state.admin || !['readonly', 'off'].includes(state.mode))) {
+      chips.push(chip('✓ Go ahead', () => approvePlan(latest), ' go'));
+    }
+    if (!failed && latest.kind === 'change') {
+      chips.push(chip('↶ Undo that', async () => {
+        try { const m = await window.AskDraft.undo(latest); if (m) { $('reply-msg').className = 'ask-msg'; $('reply-msg').textContent = m; refreshDraft(); } } catch (err) { $('reply-msg').className = 'ask-msg err'; $('reply-msg').textContent = `Could not undo: ${err.message}`; }
+      }));
+    }
+    for (const [label, text] of QUICK[failed ? 'failed' : latest.kind] || []) chips.push(chip(label, () => fill(text)));
+    box.replaceChildren(...chips);
+  }
+
   function planActions(run) {
     if (!state.admin && (state.mode === 'readonly' || state.mode === 'off')) {
       return el('div', { className: 'ask-callout tone-muted', textContent: 'Changes are switched off for teammates right now, so this plan cannot be carried out. Ask an admin.' });
@@ -229,20 +297,9 @@
     const go = el('button', { type: 'button', className: 'ask-btn go', textContent: '✓ Go ahead' });
     const edit = el('button', { type: 'button', className: 'ask-btn', textContent: '✎ Change the plan' });
     go.addEventListener('click', async () => {
-      if (!confirm('Carry out this plan? The helper will make the changes on a private draft copy.')) return;
       go.disabled = true;
       edit.disabled = true;
-      try {
-        const r = await api('/api/agents/plan/approve', { runId: run.id });
-        state.openId = r.runId || state.openId;
-        await loadMine();
-        await renderThread();
-      } catch (err) {
-        go.disabled = false;
-        edit.disabled = false;
-        $('reply-msg').className = 'ask-msg err';
-        $('reply-msg').textContent = `Could not start: ${err.message}`;
-      }
+      if (!(await approvePlan(run))) { go.disabled = false; edit.disabled = false; }
     });
     edit.addEventListener('click', () => {
       $('reply').placeholder = 'What should be different in the plan?';
@@ -282,6 +339,13 @@
       el('div', { className: 'ask-make-row' }, focus, helper, go), msg);
   }
 
+  /** After undo / discard / send: refetch the files, the card and the conversation. */
+  function refreshDraft() {
+    window.AskFiles.reset();
+    if (state.openThread) window.AskRecap.invalidate(state.openThread);
+    renderThread();
+  }
+
   /** "Mark as milestone" (or rename / remove) for a finished turn. */
   function markButton(run) {
     const m = run.milestone;
@@ -316,9 +380,9 @@
       return box;
     }
     if (run.answer && run.kind === 'document' && run.status === 'done') {
-      box.append(el('div', { className: 'ask-doc' }, window.AskNav.reply(run.answer, run.id)), docActions(run, title));
+      box.append(el('div', { className: 'ask-doc' }, window.AskNav.reply(run.answer, run.id, { md: true })), docActions(run, title));
     } else if (run.answer) {
-      box.append(window.AskNav.reply(run.answer, run.id, { open: latest && run.answer.length < 6000 }));
+      box.append(window.AskNav.reply(run.answer, run.id, { open: latest && run.answer.length < 6000, md: true }));
     }
     if (!run.answer && run.status === 'done') box.append(el('div', { className: 'ask-muted', textContent: 'Finished without a written answer.' }));
     if (run.kind === 'plan' && run.status === 'done' && run.answer && latest) box.append(planActions(run));
@@ -333,7 +397,10 @@
     if (run.commits_ahead > 0 && !['answer', 'document', 'plan'].includes(run.kind)) {
       box.append(el('div', { className: 'ask-callout tone-green', textContent: `${run.commits_ahead} change(s) saved on a private draft copy. Nothing is live yet: an admin reviews them first.` }));
     }
-    if (files) box.append(window.AskFiles.panel(run));
+    if (files) {
+      box.append(window.AskFiles.panel(run));
+      box.append(window.AskDraft.bar(run, { admin: state.admin, onDone: refreshDraft }));
+    }
     box.append(markButton(run));
     return box;
   }
@@ -363,7 +430,8 @@
     const runs = t.runs || [];
     const latest = runs[runs.length - 1];
     const listed = state.threads.find((x) => x.threadId === t.threadId);
-    $('t-title').textContent = stripPrefix(runs[0] && runs[0].task) || 'Request';
+    $('t-title').textContent = shortTitle(runs[0] && runs[0].task) || 'Request';
+    $('t-title').title = stripPrefix(runs[0] && runs[0].task);
     $('t-meta').textContent = [listed && listed.repo, runs.length > 1 ? `${runs.length} turns` : null].filter(Boolean).join(' · ');
     const stage = listed ? listed.stage : null;
     $('t-stage').textContent = stage ? stage.label : (latest && latest.status) || '';
@@ -405,6 +473,7 @@
     window.AskNav.setJump(sums);
     window.AskRecap.render($('recap'), t.threadId, runs.map((r) => `${r.id}:${r.status}:${r.milestone ? r.milestone.label : ''}`).join('|'));
     if (nearBottom) window.scrollTo(0, document.body.scrollHeight);
+    renderQuick(latest, (t.queue || []).length > 0);
     $('stop-btn').hidden = !(latest && latest.status === 'running');
     $('stop-btn').dataset.runId = latest ? latest.id : '';
     $('reply').placeholder = latest && latest.status === 'running'

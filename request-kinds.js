@@ -20,12 +20,16 @@ const isReadOnlyKind = (kind) => READ_ONLY_KINDS.has(kind);
 
 const DOC_WORDS = /\b(document|report|proposal|backlog|checklist|guide|brief|write-?up|plan|roadmap|summary|memo|outline|strategy|faq|minutes)\b/;
 const CHANGE_WORDS = /\b(fix|add|change|update|remove|delete|rename|refactor|implement|replace|migrate|upgrade|install|build|create|make|split|move|speed up|improve|translate|resize|style)\b/;
+// "Write a short document / report / plan ..." is a document whatever else it
+// mentions ("...to increase traffic" read as a change once).
+const ASKS_FOR_DOC = /^(please |can you |could you )?(write|draft|prepare|produce|give me|put together|create|make)\b.{0,60}?\b(document|doc|report|proposal|backlog|checklist|guide|brief|write-?up|plan|roadmap|summary|memo|outline|strategy|faq)\b/;
 const QUESTION_START = /^(what|why|how|where|which|who|when|can|could|does|do|is|are|should|explain|tell me|describe|summari[sz]e|review|read|check|find|list|compare|show)\b/;
 
 /** A quick guess from the words alone (no model). */
 function keywordKind(text) {
   const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!t) return 'answer';
+  if (ASKS_FOR_DOC.test(t)) return 'document';
   if (DOC_WORDS.test(t)) return 'document';
   const firstWords = t.split(' ').slice(0, 3).join(' ');
   if (CHANGE_WORDS.test(firstWords)) return 'change';
@@ -56,7 +60,7 @@ function kindBlock(kind) {
     case 'plan':
       return '\n\n---\nHow to respond: do not change any files yet. Look at what is needed, then reply with a short plan in plain language:\n1. What you will do, as numbered steps.\n2. What it affects (pages, files, people).\n3. Anything you need to know first.\nThe person approves the plan before any change is made.';
     case 'change':
-      return '\n\n---\nThe person approved the plan above. Carry it out now on this branch. Keep the change as small as the plan says, and finish with a plain-language summary of what changed and how to check it.';
+      return '\n\n---\nThe person approved the plan above. Carry it out now on this branch. Keep the change as small as the plan says, and commit your work. Do not push, open a pull request or deploy: the person sends the draft for review from the page. Do not give them terminal commands to run. Finish with a plain-language summary of what changed and how to check it once it is live.';
     default:
       return '';
   }
@@ -72,6 +76,7 @@ function createKindClassifier({ ask = null } = {}) {
     const q = String(text || '').trim().slice(0, 600);
     const guess = keywordKind(q);
     if (!q || !ask) return { kind: guess, source: 'keywords' };
+    if (ASKS_FOR_DOC.test(q.toLowerCase().replace(/\s+/g, ' '))) return { kind: 'document', source: 'keywords' };
     if (cache.has(q)) return cache.get(q);
     let out = { kind: guess, source: 'keywords' };
     try {

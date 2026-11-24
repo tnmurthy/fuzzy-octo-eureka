@@ -20,6 +20,7 @@
 //   POST /api/agents/stop       { runId } -> stop a running agent (run-control.js)
 //   POST /api/agents/redirect   { runId, message } -> stop it, then resume with the message
 //   GET  /api/agents/thread?id=R  the task R belongs to: every run (answer, question) + queue
+//   POST /api/agents/draft {runId, action: undo|discard}  the request's draft copy (draft-actions.js)
 //   GET  /api/agents/recap?id=R   its "So far" (run-recap.js); POST /api/agents/milestone {runId, label|remove}
 //   POST /api/agents/queue      { runId, text } -> send now if the agent is idle, else queue it
 //   POST /api/agents/queue/update { threadId, itemId, text? | move: up|down | remove }
@@ -31,9 +32,9 @@
 const fs = require('fs');
 const path = require('path');
 const { resultOf } = require('./followup');
-const { createAgentQueue } = require('./agent-queue');
+const { createAgentQueue, rootOf, threadRuns } = require('./agent-queue');
 const { myThreads, mayOpen } = require('./agents-mine');
-const { REQUEST_KINDS, keywordKind } = require('./request-kinds');
+const { REQUEST_KINDS, keywordKind, isReadOnlyKind } = require('./request-kinds');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
 const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
@@ -139,7 +140,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, recaps = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, recaps = null, draftActions = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -543,6 +544,28 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           return sendJson(res, 200, { ok: true, milestone: r.milestone });
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/draft' && req.method === 'POST') {
+      // Undo the last saved step, or discard the draft (draft-actions.js), for
+      // the request runId belongs to. Owner or admin; never while it runs.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!draftActions) { sendJson(res, 503, { ok: false, error: 'draft actions are not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then(async (b) => {
+          const action = String(b.action || '');
+          if (!['undo', 'discard'].includes(action)) return sendJson(res, 400, { ok: false, error: 'action is undo or discard' });
+          const runs = loadRuns();
+          const run = runs.find((r) => r.id === String(b.runId || ''));
+          if (!run || notYours(req, run.id, runs)) return sendJson(res, 404, NOT_FOUND);
+          const chain = threadRuns(runs, rootOf(runs, run.id));
+          if (chain.some((r) => r.status === 'running')) return sendJson(res, 409, { ok: false, error: 'wait for the helper to finish first' });
+          const target = [...chain].reverse().find((r) => !isReadOnlyKind(r.kind));
+          if (!target) return sendJson(res, 400, { ok: false, error: 'this request has no draft copy' });
+          const r = await draftActions[action](target);
+          return sendJson(res, r.ok ? 200 : r.status || 500, r.ok ? { ...r, runId: target.id } : { ok: false, error: r.error });
+        })
+        .catch(() => sendJson(res, 500, { ok: false, error: 'could not change the draft' }));
       return true;
     }
     if (url.pathname === '/api/agents/make-changes' && req.method === 'POST') {

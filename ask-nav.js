@@ -58,9 +58,9 @@
     return section;
   }
 
-  /** A reply; long ones are clipped behind "Show all" unless `open`. */
-  function reply(text, key, { open = false } = {}) {
-    const pre = el('pre', { className: 'ask-answer', textContent: text });
+  /** A reply; long ones are clipped behind "Show all" unless `open`. `md`: format it (ask-md.js). */
+  function reply(text, key, { open = false, md = false } = {}) {
+    const pre = md && window.AskMd ? window.AskMd.render(text) : el('pre', { className: 'ask-answer', textContent: text });
     if (open || String(text).length <= CLIP_CHARS) return pre;
     const wrap = el('div', { className: `ask-clip${unclipped.has(key) ? ' open' : ''}` }, pre);
     const more = el('button', { type: 'button', className: 'ask-clip-btn' });

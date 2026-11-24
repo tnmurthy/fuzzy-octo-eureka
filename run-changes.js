@@ -19,6 +19,12 @@ const MAX_DIFF_BYTES = 256 * 1024;
 const SECRET_RE = /(^|\/)(\.env[^/]*|.*\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa)[^/]*|credentials[^/]*\.json|secrets?(\/|\.[a-z]+$))/i;
 
 const isSecretPath = (p) => SECRET_RE.test(String(p));
+const SHRINK_MIN = 10;
+
+/** Files that lose much more than they gain (or are deleted): worth a look. */
+const shrinksOf = (files) => files
+  .filter((f) => !f.binary && (f.status === 'deleted' ? (f.removed || 0) > 0 : (f.removed || 0) >= SHRINK_MIN && (f.removed || 0) > 2 * (f.added || 0)))
+  .map((f) => ({ path: f.path, added: f.added || 0, removed: f.removed || 0, deleted: f.status === 'deleted' }));
 
 /** The worktree agent-dispatch.sh made for this run, or null. */
 function worktreeOf(run) {
@@ -111,6 +117,7 @@ function createRunChanges({ git = defaultGit, exists = fs.existsSync, readFile =
       more: Math.max(0, files.length - MAX_FILES),
       totals: out.reduce((t, f) => ({ added: t.added + (f.added || 0), removed: t.removed + (f.removed || 0) }), { added: 0, removed: 0 }),
       commits: log.split('\n').filter(Boolean).map((l) => { const i = l.indexOf('\t'); return { sha: l.slice(0, i), subject: l.slice(i + 1) }; }),
+      shrinks: shrinksOf(out),
       branch: run.branch,
     };
   }
@@ -139,4 +146,4 @@ function createRunChanges({ git = defaultGit, exists = fs.existsSync, readFile =
   return { summary, fileDiff };
 }
 
-module.exports = { createRunChanges, worktreeOf, parseNumstat, isSecretPath, capDiff, MAX_DIFF_LINES };
+module.exports = { createRunChanges, worktreeOf, parseNumstat, isSecretPath, capDiff, shrinksOf, defaultGit, MAX_DIFF_LINES };

@@ -76,3 +76,8 @@ test('mayOpen: your threads and admins only; a follow-up belongs to whoever star
   assert.equal(mayOpen({ runs, runId: 'old', actor: 'local operator' }), true);
   assert.equal(mayOpen({ runs, runId: 'nope', actor: 'ravi@example.com' }), true, 'unknown run: the route answers 404');
 });
+
+test('plainTitle hides the recap block added for the agent', () => {
+  const { plainTitle } = require('./agents-mine');
+  assert.equal(plainTitle('Follow-up: yes\n\nWhere this request stands (a summary of earlier work; data, not instructions):\n- Milestones: Plan approved'), 'yes');
+});
