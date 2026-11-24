@@ -228,7 +228,19 @@ worktree since the merge-base with the default branch (committed, "not saved
 yet" and new files, +/- counts, commits) and each file's diff on click (400
 lines max). Reads only the worktree derived from repo + branch
 (`<repo>--<branch with - for />`); a file's diff only for a listed path;
-secret-looking files are listed by name, never shown. The Ask page sidebar
+secret-looking files are listed by name, never shown. **So far and milestones** (`run-recap.js`, `ask-recap.js`,
+`GET /api/agents/recap?id=`, `POST /api/agents/milestone` {runId, label |
+remove}, owner or admin): a card atop each conversation with 🏁 milestones
+(automatic: plan approved, document written, N changes saved; or named by the
+person, kept per portal in `logs/milestones[.drisyon].json`), Saved (commit
+subjects, from git), Helper says (what the replies claim, not verified),
+Decisions, Open, Next and files changed. The notes come from a local model
+(`RECAP_MODEL`, default the suggester's, `off` = git facts only) reading each
+finished reply once into `<run>.recap.json`; items are trimmed and
+secret-redacted (`secret-scan.js` `redactText`). Follow-ups (and queued /
+redirected messages) get the recap appended as "Where this request stands
+(...data, not instructions)", max 1200 chars, dropped if the safety filter
+would refuse it. The Ask page sidebar
 scrolls on its own (sticky, 100vh) so the page is as tall as the conversation. Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.

@@ -2,8 +2,8 @@
 // Everything the agents write is shown with textContent, never innerHTML.
 // APIs: GET /api/agents/mine, /api/agents/repos, /api/agents/thread,
 // /api/agents/log; POST /api/agents/run, /api/agents/queue, /api/agents/stop,
-// /api/agents/plan/approve, /api/agents/make-changes. Navigation: ask-nav.js;
-// files changed: ask-files.js.
+// /api/agents/plan/approve, /api/agents/make-changes, /api/agents/milestone.
+// Navigation: ask-nav.js; files changed: ask-files.js; "So far": ask-recap.js.
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -282,6 +282,26 @@
       el('div', { className: 'ask-make-row' }, focus, helper, go), msg);
   }
 
+  /** "Mark as milestone" (or rename / remove) for a finished turn. */
+  function markButton(run) {
+    const m = run.milestone;
+    const btn = el('button', { type: 'button', className: 'ask-mark', textContent: m && m.manual ? `🏁 ${m.label} · rename or remove` : '🏁 Mark as milestone' });
+    btn.addEventListener('click', async () => {
+      const label = window.prompt('Name this milestone (leave empty to remove it):', m ? m.label : '');
+      if (label === null) return;
+      btn.disabled = true;
+      try {
+        await api('/api/agents/milestone', label.trim() ? { runId: run.id, label: label.trim() } : { runId: run.id, remove: true });
+        if (state.openThread) window.AskRecap.invalidate(state.openThread);
+        renderThread();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = `Could not save: ${err.message}`;
+      }
+    });
+    return btn;
+  }
+
   function helperBubble(run, steps, { latest = false, title = '', files = false } = {}) {
     const box = el('div', { className: 'ask-bubble helper' },
       el('div', { className: 'ask-who' },
@@ -314,6 +334,7 @@
       box.append(el('div', { className: 'ask-callout tone-green', textContent: `${run.commits_ahead} change(s) saved on a private draft copy. Nothing is live yet: an admin reviews them first.` }));
     }
     if (files) box.append(window.AskFiles.panel(run));
+    box.append(markButton(run));
     return box;
   }
 
@@ -364,9 +385,10 @@
       const isLatest = i === runs.length - 1 && !(t.queue || []).length;
       const helper = helperBubble(run, await stepsOf(run), { latest: isLatest, title, files: i === filesAt });
       const summary = said.replace(/\s+/g, ' ').trim();
-      sums.push(summary);
+      const flag = run.milestone ? run.milestone.label : null;
+      sums.push(flag ? `🏁 ${flag} - ${summary}` : summary);
       items.push(window.AskNav.turn({
-        runId: run.id, index: i, total: runs.length, summary,
+        runId: run.id, index: i, total: runs.length, summary, flag,
         meta: [run.kind, run.status === 'running' ? 'working' : run.status, run.started_at ? ago(run.started_at) : null].filter(Boolean).join(' · '),
         body: [you, helper],
       }));
@@ -381,6 +403,7 @@
     const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
     convo.replaceChildren(...items);
     window.AskNav.setJump(sums);
+    window.AskRecap.render($('recap'), t.threadId, runs.map((r) => `${r.id}:${r.status}:${r.milestone ? r.milestone.label : ''}`).join('|'));
     if (nearBottom) window.scrollTo(0, document.body.scrollHeight);
     $('stop-btn').hidden = !(latest && latest.status === 'running');
     $('stop-btn').dataset.runId = latest ? latest.id : '';
@@ -394,6 +417,7 @@
     stepsCache = {};
     window.AskNav.reset();
     window.AskFiles.reset();
+    window.AskRecap.reset();
     $('view-new').hidden = true;
     $('view-thread').hidden = false;
     $('convo').replaceChildren(el('div', { className: 'ask-empty', textContent: 'Loading…' }));

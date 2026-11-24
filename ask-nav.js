@@ -38,14 +38,15 @@
 
   /**
    * One turn: your message and the helper's reply, with a header that folds it.
-   * @param {{runId: string, index: number, total: number, summary: string, meta: string, body: Node[]}} o
+   * @param {{runId: string, index: number, total: number, summary: string, meta: string, body: Node[], flag?: string|null}} o
    */
-  function turn({ runId, index, total, summary, meta, body }) {
+  function turn({ runId, index, total, summary, meta, body, flag = null }) {
     if (!folded.has(runId)) folded.set(runId, index < total - OPEN_LATEST);
     const fold = folded.get(runId);
     const btn = el('button', { type: 'button', className: 'ask-turn-toggle' },
       el('span', { className: 'ask-turn-caret', textContent: '▾' }),
       el('span', { className: 'ask-turn-n', textContent: `${index + 1}` }),
+      flag ? el('span', { className: 'ask-turn-flag', textContent: `🏁 ${flag}`, title: 'Milestone' }) : null,
       el('span', { className: 'ask-turn-sum', textContent: summary }),
       el('span', { className: 'ask-turn-meta', textContent: meta }));
     const section = el('section', { className: `ask-turn${fold ? ' folded' : ''}`, id: `turn-${index + 1}` },

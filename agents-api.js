@@ -20,6 +20,7 @@
 //   POST /api/agents/stop       { runId } -> stop a running agent (run-control.js)
 //   POST /api/agents/redirect   { runId, message } -> stop it, then resume with the message
 //   GET  /api/agents/thread?id=R  the task R belongs to: every run (answer, question) + queue
+//   GET  /api/agents/recap?id=R   its "So far" (run-recap.js); POST /api/agents/milestone {runId, label|remove}
 //   POST /api/agents/queue      { runId, text } -> send now if the agent is idle, else queue it
 //   POST /api/agents/queue/update { threadId, itemId, text? | move: up|down | remove }
 //   POST /api/agents/queue/steer  { threadId, itemId } -> stop the agent, deliver that message now
@@ -138,7 +139,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, recaps = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -148,8 +149,9 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
    * before it reported one) gets a fresh run of the same agent on its branch.
    * Returns dispatchRun's { status, body }.
    */
-  async function continueWith(run, task, by = null) {
+  async function continueWith(run, task0, by = null) {
     const ctx = { by };
+    const task = await withRecap(run.id, task0);
     let r = await dispatchRun({ followUpOf: run.id, canAsk: true, task }, ctx);
     if (r.status === 400 && /no session/.test(String(r.body && r.body.error)) && run.agent && run.branch && run.repo) {
       r = await dispatchRun({
@@ -159,6 +161,12 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       r = { ...r, body: { ...r.body, fresh: true } };
     }
     return r;
+  }
+
+  /** A follow-up's task plus where the request stands (run-recap.js), framed as data. */
+  async function withRecap(runId, task) {
+    const text = recaps ? await recaps.promptFor(runId) : '';
+    return text ? `${task}\n\n${text}` : task;
   }
 
   // Messages written while an agent works wait here (agent-queue.js).
@@ -334,7 +342,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           if (notYours(req, b.runId)) return sendJson(res, 404, NOT_FOUND);
           // The level is capped at the parent run's by startDispatch (approval-levels.js).
           const r = await dispatchRun({
-            followUpOf: String(b.runId || ''), task: `Follow-up: ${message}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
+            followUpOf: String(b.runId || ''), task: await withRecap(String(b.runId || ''), `Follow-up: ${message}`), canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
           }, { by: actorOf(req) });
           return sendJson(res, r.status, r.body);
         })
@@ -433,6 +441,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       if (!chain.length) { sendJson(res, 404, { ok: false, error: 'run not found' }); return true; }
       const active = loadActive();
       const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
+      const marks = recaps ? recaps.milestones(chain) : {};
       const items = chain.map((r) => {
         const j = r.status === 'running' || path.dirname(path.resolve(String(r.log || ''))) !== runsDir ? null : resultOf(r);
         return {
@@ -440,6 +449,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           canFollowUp: Boolean(canFollowUp(r)),
           question: openQuestion(r, answered),
           answer: j && j.result ? String(j.result).slice(0, 6000) : null,
+          milestone: marks[r.id] || null,
         };
       });
       const q = agentQueue ? agentQueue.view(id) : null;
@@ -502,6 +512,37 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       (file === null ? runChanges.summary(run) : runChanges.fileDiff(run, file))
         .then((r) => sendJson(res, r.ok ? 200 : r.status || 500, r.ok ? r : { ok: false, error: r.error }))
         .catch(() => sendJson(res, 500, { ok: false, error: 'could not read the changes' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/recap' && req.method === 'GET') {
+      // "So far" for a request (run-recap.js): milestones, done, decisions,
+      // open, next and files changed. Owner or admin only; read-only.
+      const id = url.searchParams.get('id') || '';
+      if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
+      if (!recaps) { sendJson(res, 503, { ok: false, error: 'recaps are not available' }); return true; }
+      const runs = loadRuns();
+      if (!runs.some((r) => r.id === id) || notYours(req, id, runs)) { sendJson(res, 404, NOT_FOUND); return true; }
+      recaps.thread(id)
+        .then((r) => (r ? sendJson(res, 200, { ok: true, ...r }) : sendJson(res, 404, NOT_FOUND)))
+        .catch(() => sendJson(res, 500, { ok: false, error: 'could not build the summary' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/milestone' && req.method === 'POST') {
+      // "Mark as milestone" on a finished turn: {runId, label}; an empty label unmarks.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!recaps) { sendJson(res, 503, { ok: false, error: 'milestones are not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then((b) => {
+          const runs = loadRuns();
+          const run = runs.find((r) => r.id === String(b.runId || ''));
+          if (!run || notYours(req, run.id, runs)) return sendJson(res, 404, NOT_FOUND);
+          if (run.status === 'running') return sendJson(res, 409, { ok: false, error: 'wait for this turn to finish' });
+          if (b.remove !== true && !String(b.label || '').trim()) return sendJson(res, 400, { ok: false, error: 'name the milestone' });
+          const r = recaps.setMark(run.id, b.remove === true ? '' : String(b.label || ''), actorOf(req));
+          if (!r.ok) return sendJson(res, r.status || 400, { ok: false, error: r.error });
+          return sendJson(res, 200, { ok: true, milestone: r.milestone });
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
     if (url.pathname === '/api/agents/make-changes' && req.method === 'POST') {

@@ -125,4 +125,14 @@ function describe(findings, max = 10) {
   return lines.join('\n');
 }
 
-module.exports = { scanDiff, scanRange, knownSecrets, describe, isServiceRoleJwt, randomish };
+/** Text with known secret values, token formats and private keys replaced by [hidden]. */
+function redactText(text, known = knownSecrets()) {
+  let out = String(text || '');
+  for (const s of known) out = out.split(s.value).join('[hidden]');
+  for (const [, re] of RULES) out = out.replace(re, (m) => (randomish(m) ? '[hidden]' : m));
+  out = out.replace(/-----BEGIN [A-Z ]*PRIVATE KEY[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[hidden]');
+  out = out.replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, (m) => (isServiceRoleJwt(m) ? '[hidden]' : m));
+  return out;
+}
+
+module.exports = { scanDiff, scanRange, knownSecrets, describe, isServiceRoleJwt, randomish, redactText };
