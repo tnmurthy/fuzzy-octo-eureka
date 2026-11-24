@@ -2,7 +2,8 @@
 // Everything the agents write is shown with textContent, never innerHTML.
 // APIs: GET /api/agents/mine, /api/agents/repos, /api/agents/thread,
 // /api/agents/log; POST /api/agents/run, /api/agents/queue, /api/agents/stop,
-// /api/agents/plan/approve, /api/agents/make-changes. Navigation: ask-nav.js.
+// /api/agents/plan/approve, /api/agents/make-changes. Navigation: ask-nav.js;
+// files changed: ask-files.js.
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -281,7 +282,7 @@
       el('div', { className: 'ask-make-row' }, focus, helper, go), msg);
   }
 
-  function helperBubble(run, steps, { latest = false, title = '' } = {}) {
+  function helperBubble(run, steps, { latest = false, title = '', files = false } = {}) {
     const box = el('div', { className: 'ask-bubble helper' },
       el('div', { className: 'ask-who' },
         run.agent === 'claude' ? 'Expert helper' : 'Helper',
@@ -291,6 +292,7 @@
       if (steps && steps.length) {
         box.append(el('ul', { className: 'ask-steps' }, ...steps.map((s) => el('li', { textContent: s.text }))));
       }
+      if (files) box.append(window.AskFiles.panel(run));
       return box;
     }
     if (run.answer && run.kind === 'document' && run.status === 'done') {
@@ -311,6 +313,7 @@
     if (run.commits_ahead > 0 && !['answer', 'document', 'plan'].includes(run.kind)) {
       box.append(el('div', { className: 'ask-callout tone-green', textContent: `${run.commits_ahead} change(s) saved on a private draft copy. Nothing is live yet: an admin reviews them first.` }));
     }
+    if (files) box.append(window.AskFiles.panel(run));
     return box;
   }
 
@@ -348,6 +351,10 @@
     const items = [];
     const sums = [];
     const title = stripPrefix(runs[0] && runs[0].task);
+    // Follow-ups share one draft copy, so its files show once: under the
+    // latest run that may change files (ask-files.js).
+    let filesAt = -1;
+    runs.forEach((r, i) => { if (!['answer', 'document', 'plan'].includes(r.kind)) filesAt = i; });
     for (const [i, run] of runs.entries()) {
       const approved = run.kind === 'change' && /^Go ahead with the plan\./.test(String(run.task || ''));
       const said = approved ? '✓ Go ahead with the plan.' : stripPrefix(run.task);
@@ -355,7 +362,7 @@
         el('div', { className: 'ask-who', textContent: 'You' }),
         window.AskNav.reply(said, `you-${run.id}`));
       const isLatest = i === runs.length - 1 && !(t.queue || []).length;
-      const helper = helperBubble(run, await stepsOf(run), { latest: isLatest, title });
+      const helper = helperBubble(run, await stepsOf(run), { latest: isLatest, title, files: i === filesAt });
       const summary = said.replace(/\s+/g, ' ').trim();
       sums.push(summary);
       items.push(window.AskNav.turn({
@@ -386,6 +393,7 @@
     state.openId = runId;
     stepsCache = {};
     window.AskNav.reset();
+    window.AskFiles.reset();
     $('view-new').hidden = true;
     $('view-thread').hidden = false;
     $('convo').replaceChildren(el('div', { className: 'ask-empty', textContent: 'Loading…' }));

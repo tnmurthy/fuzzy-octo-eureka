@@ -579,3 +579,30 @@ test('make-changes turns your answer or document into a new Change request', asy
   assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'd1', agent: 'rm' } })).status, 400);
   assert.equal(sent.length, 1);
 });
+
+test('changes: owner or admin only, and only for a known run', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-chg-'));
+  const runs = [
+    { id: 'c1', by: 'asha@example.com', kind: 'change', status: 'done', repo: '/r/app', branch: 'agent/run-a', worktree: '/r/app--agent-run-a' },
+  ];
+  const calls = [];
+  let actor = 'asha@example.com';
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, isAdmin: () => false, actorOf: () => actor,
+    runChanges: {
+      summary: async (run) => { calls.push(['summary', run.id]); return { ok: true, files: [{ path: 'a.ts' }] }; },
+      fileDiff: async (run, file) => { calls.push(['file', run.id, file]); return file === 'a.ts' ? { ok: true, diff: '+x' } : { ok: false, status: 404, error: 'not among the changes' }; },
+    },
+  });
+  const s = await call(api, { method: 'GET', url: '/api/agents/changes?id=c1' });
+  assert.deepEqual([s.status, s.payload.files[0].path], [200, 'a.ts']);
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes/file?id=c1&path=a.ts' })).payload.diff, '+x');
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes/file?id=c1&path=..%2F.env' })).status, 404);
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes?id=nope' })).status, 404);
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes?id=../x' })).status, 400);
+  actor = 'ravi@example.com';
+  const n = calls.length;
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes?id=c1' })).status, 404, 'not someone else\'s');
+  assert.equal(calls.length, n, 'git is not touched for someone else');
+});
