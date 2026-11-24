@@ -41,3 +41,11 @@ test('the repo must still be known to the dashboard at the same path', () => {
   assert.match(resolveFollowUp({ runs: [run({ repo: '/tmp/app' })], runId: 'r1', resolveRepo, readFile }).error, /no longer registered/);
   assert.match(resolveFollowUp({ runs: [run({ repo: '/Users/me/gone' })], runId: 'r1', resolveRepo, readFile }).error, /no longer registered/);
 });
+
+test('switchedHelper: Expert or Free only; the recorded helper follows the switch', () => {
+  const { switchedHelper } = require('./followup');
+  assert.deepEqual(switchedHelper({ agent: 'claude', helper: 'claude', switchTo: 'hermes' }), { agent: 'hermes', helper: 'hermes' });
+  assert.deepEqual(switchedHelper({ agent: 'hermes', helper: null, switchTo: 'claude' }), { agent: 'claude', helper: null });
+  assert.deepEqual(switchedHelper({ agent: 'claude', helper: 'claude', switchTo: 'codex' }), { agent: 'claude', helper: 'claude' });
+  assert.deepEqual(switchedHelper({ agent: 'claude', helper: 'claude' }), { agent: 'claude', helper: 'claude' });
+});

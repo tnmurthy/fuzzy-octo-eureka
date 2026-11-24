@@ -369,7 +369,7 @@
   function helperBubble(run, steps, { latest = false, title = '', files = false } = {}) {
     const box = el('div', { className: 'ask-bubble helper' },
       el('div', { className: 'ask-who' },
-        run.fallback ? 'Free helper (the Expert helper was out of usage)' : run.agent === 'claude' ? 'Expert helper' : 'Helper',
+        run.fallback ? 'Free helper (the Expert helper was out of usage)' : run.agent === 'claude' ? 'Expert helper' : run.agent === 'hermes' ? 'Free helper' : 'Helper',
         KIND_TAG[run.kind] ? el('span', { className: 'ask-kind-tag', textContent: `· ${KIND_TAG[run.kind]}` }) : null));
     if (run.status === 'running') {
       box.append(el('div', {}, el('span', { className: 'ask-dots', textContent: 'Working on it' })));
@@ -475,6 +475,7 @@
     if (nearBottom) window.scrollTo(0, document.body.scrollHeight);
     renderQuick(latest, (t.queue || []).length > 0);
     $('stop-btn').hidden = !(latest && latest.status === 'running');
+    showHelperPick(latest);
     $('stop-btn').dataset.runId = latest ? latest.id : '';
     $('reply').placeholder = latest && latest.status === 'running'
       ? 'Add something while it works; it is sent when the helper finishes…'
@@ -496,6 +497,26 @@
     renderThread().then(() => { window.scrollTo(0, document.body.scrollHeight); renderThreads(); });
   }
 
+  // Switch helper mid-conversation: Expert (claude) or Free (hermes, local).
+  // Starts on the helper that answered last; the new one picks up from the
+  // So far summary and the draft's commits. Teammates get what their mode allows.
+  function showHelperPick(latest) {
+    const box = $('reply-helper-box');
+    const fixed = !state.admin && ['readonly', 'claude', 'off'].includes(state.mode);
+    box.hidden = !latest || fixed;
+    if (!latest) return;
+    const current = latest.agent === 'hermes' ? 'hermes' : 'claude'; // a fallback run's next reply tries Expert again
+    if (state.helperFor !== latest.id) { $('reply-helper').value = current; state.helperFor = latest.id; }
+    $('reply-helper').dataset.current = current;
+  }
+  $('reply-helper').addEventListener('change', () => {
+    const sel = $('reply-helper');
+    $('reply-msg').className = 'ask-msg';
+    $('reply-msg').textContent = sel.value === sel.dataset.current ? ''
+      : sel.value === 'hermes' ? 'Your next reply goes to the free local helper. It continues on the same draft from the So far summary.'
+        : 'Your next reply goes to the Expert helper (paid). It continues on the same draft from the So far summary.';
+  });
+
   $('reply-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = $('reply').value.trim();
@@ -505,7 +526,10 @@
     msg.className = 'ask-msg';
     msg.textContent = 'Sending…';
     try {
-      const r = await api('/api/agents/queue', { runId: state.openId, text });
+      const sel = $('reply-helper');
+      const helper = !$('reply-helper-box').hidden && sel.value !== sel.dataset.current ? sel.value : undefined;
+      const r = await api('/api/agents/queue', { runId: state.openId, text, ...(helper ? { helper } : {}) });
+      state.helperFor = null;
       $('reply').value = '';
       msg.textContent = r.queued ? 'Saved: it is sent when the helper finishes.' : '';
       if (r.runId) state.openId = r.runId;

@@ -67,4 +67,14 @@ function resolveFollowUp({ runs, runId, resolveRepo, readFile }) {
   return { ok: true, repo: name, repoPath: known, branch: run.branch, session: st.session, parent: run.id, agent: resumeAgentOf(run) };
 }
 
-module.exports = { resolveFollowUp, followUpStatus, sessionOf, resultOf, resumeAgentOf };
+/**
+ * The person switched helper mid-conversation (Ask page): Expert (claude) or
+ * Free (hermes). Anything else keeps the follow-up's agent. The recorded
+ * helper follows the switch, so later replies stay with the new one.
+ */
+function switchedHelper({ agent, helper = null, switchTo }) {
+  if (switchTo !== 'claude' && switchTo !== 'hermes') return { agent, helper };
+  return { agent: switchTo, helper: helper ? switchTo : null };
+}
+
+module.exports = { resolveFollowUp, followUpStatus, sessionOf, resultOf, resumeAgentOf, switchedHelper };

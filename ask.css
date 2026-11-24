@@ -120,6 +120,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--color-text-main); 
 .ask-reply { position: sticky; bottom: 0; background: var(--bg-primary); padding: 10px 0 4px; }
 .ask-reply-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .ask-reply-actions .ask-send { margin-top: 8px; }
+.ask-helper-pick { margin-top: 8px; margin-right: auto; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-muted, inherit); }
+.ask-helper-pick select { width: auto; padding: 6px 8px; }
 .ask-stop {
   margin-top: 8px; font: inherit; cursor: pointer; border-radius: 10px; padding: 10px 14px;
   background: transparent; color: var(--status-red); border: 1px solid var(--status-red);

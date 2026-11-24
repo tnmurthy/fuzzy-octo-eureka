@@ -397,6 +397,19 @@ test('queue: a message to an idle agent is sent at once', async () => {
   assert.equal(t.sent[0].followUpOf, 'b', 'continues the newest run of the task');
 });
 
+test('queue: switching helper mid-conversation, sent now or when the agent finishes', async () => {
+  const t = threadApi();
+  await call(t.api, { url: '/api/agents/queue', body: { runId: 'a', text: 'carry on locally', helper: 'hermes' } });
+  t.setRuns(t.runs().map((r) => (r.id === 'b' ? { ...r, status: 'done' } : r)));
+  await t.api.tickQueue();
+  assert.equal(t.sent[0].switchTo, 'hermes', 'a queued message keeps its helper');
+  const r = await call(t.api, { url: '/api/agents/queue', body: { runId: 'a', text: 'now the expert', helper: 'claude' } });
+  assert.equal(r.status, 202);
+  assert.equal(t.sent[1].switchTo, 'claude');
+  await call(t.api, { url: '/api/agents/queue', body: { runId: 'a', text: 'no switch', helper: 'codex' } });
+  assert.equal('switchTo' in t.sent[2], false, 'only Expert or Free');
+});
+
 test('queue: edit and remove; steer stops the agent and delivers that message now', async () => {
   const calls = [];
   const runControl = {

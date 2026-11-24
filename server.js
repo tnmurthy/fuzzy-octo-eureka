@@ -123,7 +123,7 @@ const { parseTasksMd, resolveTasksFile, addLocalTask, moveLocalTask } = require(
 const { validateDispatchSafety } = require('./safety-filter');
 const { checkDispatchCap, parseCap } = require('./dispatch-cap');
 const { buildContextView } = require('./context-view');
-const { resolveFollowUp, followUpStatus } = require('./followup');
+const { resolveFollowUp, followUpStatus, switchedHelper } = require('./followup');
 // agency-agents personas (specialists/), optional role guidance per dispatch.
 const specialists = require('./specialists').createSpecialists();
 const { validateNewTask, validateStatus } = require('./team-store/tasks');
@@ -909,6 +909,14 @@ async function startDispatch(payload, ctx = {}) {
     payload = { ...payload, agent: helper };
   } else if (parentRun && parentRun.helper) {
     helper = parentRun.helper;
+  }
+  // The person switched helper mid-conversation (Ask page): Expert (claude)
+  // or Free (hermes). The new helper starts fresh on the same branch (the
+  // follow-up carries the recap); the teammate mode still applies.
+  if (followUp) {
+    const sw = switchedHelper({ agent: payload.agent, helper, switchTo: payload.switchTo });
+    payload = { ...payload, agent: sw.agent };
+    helper = sw.helper;
   }
   // Another kind or agent than the parent: its session cannot be resumed.
   if (followUp && (approvePlan || payload.agent !== followUp.agent)) followUp = { ...followUp, session: null };
