@@ -125,6 +125,7 @@ const slimRun = (r, active) => ({
   parent: r.parent || null,
   kind: r.kind || null,
   helper: r.helper || null,
+  fallback: r.fallback || null,
 });
 
 /**

@@ -369,7 +369,7 @@
   function helperBubble(run, steps, { latest = false, title = '', files = false } = {}) {
     const box = el('div', { className: 'ask-bubble helper' },
       el('div', { className: 'ask-who' },
-        run.agent === 'claude' ? 'Expert helper' : 'Helper',
+        run.fallback ? 'Free helper (the Expert helper was out of usage)' : run.agent === 'claude' ? 'Expert helper' : 'Helper',
         KIND_TAG[run.kind] ? el('span', { className: 'ask-kind-tag', textContent: `· ${KIND_TAG[run.kind]}` }) : null));
     if (run.status === 'running') {
       box.append(el('div', {}, el('span', { className: 'ask-dots', textContent: 'Working on it' })));

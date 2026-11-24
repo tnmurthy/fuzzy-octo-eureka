@@ -250,7 +250,13 @@ reuses the branch's open PR); title from the request, body = request + the
 helper's summary marked "not verified"; without gh/access it falls back to
 the compare URL. Change runs are told not to push, open PRs or hand out
 terminal commands. The Ask page sidebar
-scrolls on its own (sticky, 100vh) so the page is as tall as the conversation. Agent runs never inherit
+scrolls on its own (sticky, 100vh) so the page is as tall as the conversation. **Out of usage** (2026-11-24, `orchestration/claude-limit.js`): when a claude
+run ends on a usage limit (5-hour / weekly, rate limit, no credit), the dispatch
+script reruns the same task with Hermes on the same branch, always boxed and
+read-only at the `review` level; the end line records `fallback="hermes"`, the
+claude error is kept as `<run>.claude-limit.json` and the Ask page says "Free
+helper (the Expert helper was out of usage)". Never for PR reviews or after
+`auto` already tried locally; `CLAUDE_LIMIT_FALLBACK=off` turns it off. Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
 
