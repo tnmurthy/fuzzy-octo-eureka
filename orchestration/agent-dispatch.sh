@@ -211,7 +211,7 @@ run_agent() {
   local who="$1" limit="$2"
   [ -n "$stopped" ] && return 143
   case "$who" in
-    claude) run_claude "$limit" ;;
+    claude) run_claude "$limit"; claude_fallback "$limit" "$?" ;;
     codex)  run_timeout "$limit" codex exec -C "$worktree" -s workspace-write \
                ${CODEX_MODEL:+-m "$CODEX_MODEL"} "$prompt" ;;
     agy)    (cd "$worktree" && run_timeout "$limit" agy --mode plan --disable-slash-commands \
@@ -281,6 +281,33 @@ run_claude() {
   echo "== result"
   node "$(native "$HERE/claude-usage.mjs")" "$(native "$json")" "$(native "$AI_CALLS_FILE")" "$run_id"
   return "$rc"
+}
+
+# Out of usage (5-hour / weekly limit, rate limit, no credit): the same task
+# goes to the free local helper on the same branch instead of failing
+# (CLAUDE_LIMIT_FALLBACK=off to fail as before). Never for a PR review (its
+# answer is posted publicly; reviews are claude-only) or after `auto` already
+# tried the local agent. The local run is always boxed, and read-only when the
+# claude run was (review level). claude's error result is kept as
+# <run>.claude-limit.json, so the reply and the session come from hermes; the
+# end line records fallback="hermes". A follow-up tries claude again (fresh,
+# with the recap) and falls back again while the limit lasts.
+claude_fallback() {
+  local limit="$1" rc="$2" why json="$RUNS_DIR/$run_id.claude.json"
+  [ -n "$stopped" ] && return "$rc"
+  [ "${CLAUDE_LIMIT_FALLBACK:-hermes}" = hermes ] || return "$rc"
+  [ -n "${AGENT_REVIEW_BASE:-}" ] && return "$rc"
+  [ -n "$local_tried" ] && return "$rc"
+  why="$(node "$(native "$HERE/claude-limit.js")" "$(native "$json")" 2>/dev/null)" || return "$rc"
+  if [ -z "${HERMES:-}" ]; then
+    HERMES="$(resolve_hermes 2>/dev/null)" || { echo "== claude is out of usage ($why); no local helper to switch to"; return "$rc"; }
+  fi
+  echo "== claude is out of usage ($why) - the free local helper takes over"
+  mv -f "$json" "$RUNS_DIR/$run_id.claude-limit.json"
+  fallback=hermes
+  export AGENT_HERMES_SANDBOX=on
+  [ "${AGENT_LEVEL:-}" = review ] && export AGENT_HERMES_MODE=readonly
+  run_hermes "$limit"
 }
 
 # Hermes (local, Ollama) streams its steps the same way: stream-log.js writes
@@ -479,6 +506,7 @@ run_auto() {
     echo "== auto: no tests to check a local attempt with - going straight to claude"
   else
     echo "== auto: local attempt with $LOCAL_AGENT (tests: $tests)"
+    local_tried=1
     run_agent "$LOCAL_AGENT" "$LOCAL_TIMEOUT_SECONDS"; rc=$?
     if [ "$rc" -eq 0 ]; then
       echo "== auto: $LOCAL_AGENT finished - running tests"
@@ -517,6 +545,8 @@ run_auto() {
 }
 
 escalated=""
+fallback=""
+local_tried=""
 set +e
 if [ "$agent" = auto ]; then
   run_auto > "$log" 2>&1   # same shell, so escalated= stands
@@ -536,7 +566,7 @@ rm -f "$pidfile"
 node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" status="$status" \
   exit_code:="$exit_code" duration_s:="$(( $(date +%s) - started ))" \
   commits_ahead:="$commits" head="$(git -C "$(native "$worktree")" rev-parse --short HEAD)" \
-  finished_at="$(iso_date)" ${escalated:+escalated:="$escalated"}
+  finished_at="$(iso_date)" ${escalated:+escalated:="$escalated"} ${fallback:+fallback="$fallback"}
 
 echo "$run_id $status (exit $exit_code) log: $log"
 exit "$exit_code"

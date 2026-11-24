@@ -417,3 +417,64 @@ test('auto with the sandbox: a .git pointer rewritten by the tests is restored b
   assert.match(r.log, /the tests changed the worktree's .git pointer - restored it/);
   assert.doesNotMatch(fs.readFileSync(path.join(r.wt, '.git'), 'utf8'), /evil/);
 });
+
+// ---- claude out of usage -> the local helper (2026-11-24) --------------------
+const LIMIT_CLAUDE = `#!/usr/bin/env bash
+cat <<'JSON'
+{"type":"result","subtype":"success","is_error":true,"result":"You've hit your 5-hour limit · resets 12:30pm (Asia/Calcutta)","total_cost_usd":0}
+JSON
+exit 1
+`;
+
+function outOfUsage(t, extraEnv = {}) {
+  fs.writeFileSync(path.join(t.bin, 'claude'), LIMIT_CLAUDE, { mode: 0o755 });
+  fs.writeFileSync(path.join(t.bin, 'hermes-stub'), BOXED_HERMES, { mode: 0o755 });
+  fs.writeFileSync(path.join(t.bin, 'docker'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
+  const res = spawnSync(BASH, [posix(SCRIPT), 'claude', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env, PATH: `${t.bin}${path.delimiter}${process.env.PATH}`, AGENT_RUNS_DIR: posix(t.runs),
+      HERMES_BIN: posix(path.join(t.bin, 'hermes-stub')), AGENT_HERMES_HOME: posix(path.join(t.dir, 'agent-home')),
+      AGENT_HERMES_SANDBOX: 'off', // forced back on for the fallback
+      STUB_SEEN_HOME: posix(path.join(t.dir, 'seen-home')), STUB_SEEN_PROMPT: posix(path.join(t.dir, 'seen-prompt')),
+      AI_CALLS_FILE: posix(path.join(t.dir, 'ai.jsonl')), ...extraEnv,
+    },
+  });
+  const lines = fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const wt = path.join(t.dir, 'repo--task-x');
+  return {
+    res, wt, end: lines.at(-1), log: fs.readFileSync(path.join(t.runs, 'run-1.log'), 'utf8'),
+    seenHome: fs.existsSync(path.join(t.dir, 'seen-home')) ? fs.readFileSync(path.join(t.dir, 'seen-home'), 'utf8').trim() : null,
+  };
+}
+
+test('claude out of usage: the boxed local helper does the task; the reply and session are hermes\'s', () => {
+  const t = setup({ withTests: false });
+  const r = outOfUsage(t);
+  assert.equal(r.res.status, 0, r.log);
+  assert.equal(r.end.status, 'done');
+  assert.equal(r.end.fallback, 'hermes');
+  assert.match(r.log, /claude is out of usage \(You've hit your 5-hour limit/);
+  assert.equal(r.seenHome, posix(path.join(t.dir, 'agent-home')), 'boxed even with the sandbox switched off');
+  assert.match(spawnSync('git', ['-C', r.wt, 'log', '-1', '--format=%an'], { encoding: 'utf8' }).stdout, /Hermes local agent/, r.log);
+  assert.ok(!fs.existsSync(path.join(t.runs, 'run-1.claude.json')), 'claude\'s error is moved aside');
+  assert.ok(fs.existsSync(path.join(t.runs, 'run-1.claude-limit.json')));
+  assert.match(fs.readFileSync(path.join(t.runs, 'run-1.hermes.json'), 'utf8'), /local-0123456789abcdef0123/);
+});
+
+test('claude out of usage on a read-only run: the local helper runs read-only', () => {
+  const t = setup({ withTests: false });
+  const r = outOfUsage(t, { AGENT_LEVEL: 'review' });
+  assert.equal(r.end.fallback, 'hermes');
+  assert.match(r.log, /read-only: hermes in Docker/);
+  assert.equal(fs.existsSync(path.join(r.wt, 'boxed.txt')), false, 'nothing kept');
+});
+
+test('no fallback for a PR review, or when switched off', () => {
+  for (const env of [{ AGENT_REVIEW_BASE: 'main' }, { CLAUDE_LIMIT_FALLBACK: 'off' }]) {
+    const r = outOfUsage(setup({ withTests: false }), env);
+    assert.equal(r.end.status, 'failed', JSON.stringify(env));
+    assert.equal(r.end.fallback, undefined);
+    assert.equal(r.seenHome, null, 'hermes never ran');
+  }
+});
