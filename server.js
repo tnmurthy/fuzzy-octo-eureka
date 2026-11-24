@@ -1161,6 +1161,7 @@ const approvalsApi = require('./approvals-api').createApprovalsApi({
   isAdmin,
   actorOf,
 });
+const runChanges = require('./run-changes').createRunChanges();
 const agentsApi = require('./agents-api').createAgentsApi({
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'issue-poller-state.json'),
@@ -1194,7 +1195,25 @@ const agentsApi = require('./agents-api').createAgentsApi({
   recommender: specialistRecommender,
   repoRegistry,
   // "Files changed" on the Ask page: diffs from a run's own worktree.
-  runChanges: require('./run-changes').createRunChanges(),
+  runChanges,
+  // "So far" + milestones (run-recap.js): git facts plus notes by a local
+  // model (RECAP_MODEL, default the suggester's; `off` = facts only).
+  recaps: require('./run-recap').createRecaps({
+    runsDir: path.dirname(RUNS_FILE),
+    loadRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
+    resultOf: require('./followup').resultOf,
+    runChanges,
+    marksFile: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'milestones.json'), PORTAL),
+    ask:
+      (process.env.RECAP_MODEL || SUGGEST_MODEL) === 'off'
+        ? null
+        : require('./run-recap').ollamaRecapAsker({
+            host: OLLAMA_HOST,
+            port: OLLAMA_PORT,
+            model: process.env.RECAP_MODEL || SUGGEST_MODEL,
+            record: (call) => recordAiCall(AI_CALLS_FILE, call),
+          }),
+  }),
   dispatchRun: startDispatch,
   canFollowUp: (run) => followUpStatus(run).ok,
   queueFile: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'), PORTAL),
