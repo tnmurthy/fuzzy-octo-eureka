@@ -138,7 +138,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -487,6 +487,21 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           return sendJson(res, 404, { ok: false, error: 'unknown queue action' });
         })
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if ((url.pathname === '/api/agents/changes' || url.pathname === '/api/agents/changes/file') && req.method === 'GET') {
+      // Files changed on a run's draft copy (run-changes.js): the list, or one
+      // file's diff. Owner or admin only; read-only.
+      const id = url.searchParams.get('id') || '';
+      if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
+      if (!runChanges) { sendJson(res, 503, { ok: false, error: 'change view is not available' }); return true; }
+      const runs = loadRuns();
+      const run = runs.find((r) => r.id === id);
+      if (!run || notYours(req, id, runs)) { sendJson(res, 404, NOT_FOUND); return true; }
+      const file = url.pathname.endsWith('/file') ? String(url.searchParams.get('path') || '') : null;
+      (file === null ? runChanges.summary(run) : runChanges.fileDiff(run, file))
+        .then((r) => sendJson(res, r.ok ? 200 : r.status || 500, r.ok ? r : { ok: false, error: r.error }))
+        .catch(() => sendJson(res, 500, { ok: false, error: 'could not read the changes' }));
       return true;
     }
     if (url.pathname === '/api/agents/make-changes' && req.method === 'POST') {
