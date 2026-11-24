@@ -73,6 +73,22 @@
 
   const STATUS = { new: 'new', deleted: 'deleted', renamed: 'renamed', modified: '' };
 
+  /** "Check before going on": files that lose much more than they gain. */
+  function shrinkWarning(shrinks) {
+    if (!shrinks || !shrinks.length) return null;
+    const names = shrinks.map((s) => (s.deleted ? `${s.path} (deleted)` : `${s.path} (−${s.removed} +${s.added})`));
+    const fix = el('button', { type: 'button', className: 'ask-clip-btn', textContent: 'Ask the helper to restore them' });
+    fix.addEventListener('click', () => {
+      const box = document.getElementById('reply');
+      if (!box) return;
+      box.value = `Restore what you removed from ${shrinks.map((s) => s.path).join(', ')} unless I asked for it to be removed, and explain any removal you keep.`;
+      box.focus();
+    });
+    return el('div', { className: 'ask-callout tone-amber ask-shrink' },
+      el('div', { textContent: `⚠ Check before going on: ${shrinks.length === 1 ? 'this file loses' : 'these files lose'} much more than ${shrinks.length === 1 ? 'it gains' : 'they gain'}: ${names.join(', ')}. Open ${shrinks.length === 1 ? 'it' : 'them'} below to see what was removed.` }),
+      fix);
+  }
+
   /** The panel for `run`; empty when nothing changed (yet). */
   function panel(run) {
     loadList(run);
@@ -117,6 +133,7 @@
             el('span', { className: 'ask-diff-add', textContent: `+${d.totals.added}` }), ' ',
             el('span', { className: 'ask-diff-del', textContent: `−${d.totals.removed}` })),
           el('span', { className: 'ask-tool-gap' }), toggleAll),
+        shrinkWarning(d.shrinks),
         ...rows,
         d.commits.length ? el('div', { className: 'ask-muted ask-commits', textContent: `Saved steps (${d.commits.length}): ${d.commits.map((x) => x.subject).join(' · ')}` }) : null,
         el('div', { className: 'ask-muted', textContent: `Draft branch ${d.branch}. Nothing is live until it is reviewed and merged.` }));

@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { createRunChanges, worktreeOf, parseNumstat, isSecretPath, capDiff, MAX_DIFF_LINES } = require('./run-changes');
+const { createRunChanges, worktreeOf, parseNumstat, isSecretPath, capDiff, shrinksOf, MAX_DIFF_LINES } = require('./run-changes');
 
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'run-changes-')));
@@ -92,4 +92,17 @@ test('helpers: numstat with renames and binaries, secret paths, diff cap', () =>
   const long = Array.from({ length: MAX_DIFF_LINES + 5 }, (_, i) => `+${i}`).join('\n');
   assert.equal(capDiff(long).truncated, true);
   assert.equal(capDiff(long).diff.split('\n').length, MAX_DIFF_LINES);
+});
+
+test('shrinksOf flags files that lose much more than they gain, and deleted files', () => {
+  assert.deepEqual(shrinksOf([
+    { path: 'pageMeta.ts', added: 13, removed: 27, status: 'modified' },
+    { path: 'big-refactor.ts', added: 30, removed: 40, status: 'modified' },
+    { path: 'tiny.ts', added: 0, removed: 4, status: 'modified' },
+    { path: 'old.txt', added: 0, removed: 1, status: 'deleted' },
+    { path: 'logo.png', added: null, removed: null, binary: true, status: 'deleted' },
+  ]), [
+    { path: 'pageMeta.ts', added: 13, removed: 27, deleted: false },
+    { path: 'old.txt', added: 0, removed: 1, deleted: true },
+  ]);
 });

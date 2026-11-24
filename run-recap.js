@@ -114,8 +114,8 @@ function recapText(s) {
 }
 
 const within = (promise, ms, fallback) => new Promise((resolve) => {
+  // Not unref'd: a short timer, and the caller is waiting on it.
   const t = setTimeout(() => resolve(fallback), ms);
-  if (t.unref) t.unref();
   Promise.resolve(promise).then((v) => { clearTimeout(t); resolve(v); }, () => { clearTimeout(t); resolve(fallback); });
 });
 

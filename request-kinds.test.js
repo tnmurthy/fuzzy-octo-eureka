@@ -38,6 +38,7 @@ test('read-only kinds and their guidance', () => {
   assert.equal(k.isReadOnlyKind('change'), false);
   assert.equal(k.isReadOnlyKind(null), false);
   assert.match(k.kindBlock('change'), /approved the plan/);
+  assert.match(k.kindBlock('change'), /Do not push, open a pull request or deploy/);
   assert.equal(k.kindBlock(null), '');
 });
 
@@ -50,4 +51,12 @@ test('classifier uses the model when it answers, keywords when it fails or talks
   assert.deepEqual(await odd('What is this?'), { kind: 'answer', source: 'keywords' });
   const none = k.createKindClassifier();
   assert.deepEqual(await none('write a report'), { kind: 'document', source: 'keywords' });
+});
+
+test('an explicit request for a document is a document, even if the model says change', async () => {
+  const classify = k.createKindClassifier({ ask: async () => 'change' });
+  const r = await classify('Write a short document: how to increase organic traffic to vizag-live. Start with reports/seo_audit.md');
+  assert.deepEqual(r, { kind: 'document', source: 'keywords' });
+  assert.equal(k.keywordKind('Please draft a plan to fix the header'), 'document');
+  assert.deepEqual(await classify('Fix the header on mobile'), { kind: 'change', source: 'model' });
 });

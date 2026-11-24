@@ -649,3 +649,34 @@ test('recap and milestones: owner or admin only; follow-ups carry the recap; thr
   assert.equal((await call(api, { method: 'GET', url: '/api/agents/recap?id=../x' })).status, 400);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('draft: undo or discard the request\'s latest draft; owner or admin; never while running', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-draft-'));
+  const runs = [
+    { id: 'p1', by: 'asha@example.com', kind: 'plan', status: 'done', started_at: '2026-11-24T10:00:00Z' },
+    { id: 'c1', by: 'asha@example.com', kind: 'change', parent: 'p1', status: 'done', started_at: '2026-11-24T10:05:00Z' },
+    { id: 'a1', by: 'asha@example.com', kind: 'answer', status: 'done', started_at: '2026-11-24T11:00:00Z' },
+    { id: 'w1', by: 'asha@example.com', kind: 'change', status: 'running', started_at: '2026-11-24T12:00:00Z' },
+  ];
+  const calls = [];
+  let actor = 'asha@example.com';
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, queueFile: path.join(dir, 'q.json'), isAdmin: () => false, actorOf: () => actor,
+    draftActions: {
+      undo: async (run) => { calls.push(['undo', run.id]); return { ok: true, undone: 'Add sitemap' }; },
+      discard: async (run) => { calls.push(['discard', run.id]); return { ok: false, status: 404, error: 'the draft copy for this request is gone' }; },
+    },
+  });
+  const u = await call(api, { url: '/api/agents/draft', body: { runId: 'p1', action: 'undo' } });
+  assert.deepEqual([u.status, u.payload.undone, u.payload.runId], [200, 'Add sitemap', 'c1'], 'acts on the latest changing run of the thread');
+  assert.equal((await call(api, { url: '/api/agents/draft', body: { runId: 'c1', action: 'discard' } })).status, 404);
+  assert.equal((await call(api, { url: '/api/agents/draft', body: { runId: 'a1', action: 'undo' } })).status, 400, 'an answer has no draft');
+  assert.equal((await call(api, { url: '/api/agents/draft', body: { runId: 'w1', action: 'undo' } })).status, 409, 'not while running');
+  assert.equal((await call(api, { url: '/api/agents/draft', body: { runId: 'c1', action: 'reset' } })).status, 400);
+  assert.equal((await call(api, { url: '/api/agents/draft', body: { runId: 'c1', action: 'undo' }, headers: { origin: 'https://evil.example' } })).status, 403);
+  actor = 'ravi@example.com';
+  assert.equal((await call(api, { url: '/api/agents/draft', body: { runId: 'c1', action: 'undo' } })).status, 404, 'not someone else\'s');
+  assert.deepEqual(calls, [['undo', 'c1'], ['discard', 'c1']]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
