@@ -3,6 +3,9 @@
 // labelled agent:ready, which the issue poller picks up).
 //
 //   GET  /api/agents/overview   cap, running + recent runs, issue queue
+//   GET  /api/agents/mine       the signed-in person's threads (Ask page)
+//   GET  /api/agents/request-kind?q=  answer | document | change guess
+//   POST /api/agents/plan/approve {runId}  carry out a finished plan
 //   GET  /api/agents/log?id=R   tail of run R's log (only files in the runs dir)
 //   POST /api/agents/task       { repo, title, body, agent } -> new issue
 //   POST /api/agents/settings   { dailyPaidRuns } (admin only) -> new cap
@@ -28,6 +31,8 @@ const fs = require('fs');
 const path = require('path');
 const { resultOf } = require('./followup');
 const { createAgentQueue } = require('./agent-queue');
+const { myThreads, mayOpen } = require('./agents-mine');
+const { REQUEST_KINDS, keywordKind } = require('./request-kinds');
 
 const AGENTS = ['claude', 'hermes', 'codex', 'noop', 'auto'];
 const QUEUE_LABELS = { ready: 'agent:ready', running: 'agent:running', review: 'agent:review', failed: 'agent:failed' };
@@ -116,6 +121,8 @@ const slimRun = (r, active) => ({
   link: linkOf(r, active),
   hasLog: Boolean(r.log),
   parent: r.parent || null,
+  kind: r.kind || null,
+  helper: r.helper || null,
 });
 
 /**
@@ -131,7 +138,7 @@ const slimRun = (r, active) => ({
  * @param {(req) => string} [deps.actorOf]  who to record as making a change
  * @param {() => number} [deps.now]
  */
-function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
+function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github, settings = null, teammateModeSetting = null, classifyKind = null, specialists = null, suggester = null, recommender = null, repoRegistry = null, runChanges = null, dispatchRun = null, canFollowUp = () => false, runControl = null, queueFile = null, isAdmin = () => false, actorOf = () => 'unknown', now = Date.now }) {
   const runsDir = path.resolve(path.dirname(runsFile));
   let queueCache = { at: 0, value: null };
 
@@ -178,6 +185,11 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   }
 
   const loadRuns = () => readRuns(runsFile, 5000).runs || [];
+  // Each request is visible only to the person who started it, and admins
+  // (agents-mine.js mayOpen). Someone else's run reads as not found.
+  const notYours = (req, runId, runs = loadRuns()) =>
+    !mayOpen({ runs, runId: String(runId || ''), actor: actorOf(req), admin: Boolean(isAdmin(req)) });
+  const NOT_FOUND = { ok: false, error: 'run not found' };
   const loadActive = () => {
     try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')).active || {}; } catch (_) { return {}; }
   };
@@ -213,7 +225,8 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   }
 
   async function overview(req) {
-    const runs = loadRuns();
+    const all = loadRuns();
+    const runs = req && isAdmin(req) ? all : all.filter((r) => !notYours(req, r.id, all));
     const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
     const active = loadActive();
     let q;
@@ -221,6 +234,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     return {
       cap: capNow(runs),
       capSettings: settings ? settings.describe() : null,
+      teammateMode: teammateModeSetting ? teammateModeSetting.describe() : null,
       admin: Boolean(req && isAdmin(req)),
       repos,
       agents: AGENTS,
@@ -317,6 +331,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const message = String(b.message || '').trim();
           if (!message) return sendJson(res, 400, { ok: false, error: 'write a message for the agent' });
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
+          if (notYours(req, b.runId)) return sendJson(res, 404, NOT_FOUND);
           // The level is capped at the parent run's by startDispatch (approval-levels.js).
           const r = await dispatchRun({
             followUpOf: String(b.runId || ''), task: `Follow-up: ${message}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
@@ -339,6 +354,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           if (redirect && !message) return sendJson(res, 400, { ok: false, error: 'tell the agent what to do instead' });
           if (message.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
           if (redirect && !dispatchRun) return sendJson(res, 503, { ok: false, error: 'follow-ups are not available' });
+          if (notYours(req, runId)) return sendJson(res, 404, NOT_FOUND);
           if (!redirect) {
             const st = runControl.stop(runId);
             if (!st.ok) return sendJson(res, st.status || 409, { ok: false, error: st.error });
@@ -352,10 +368,66 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
+    if (url.pathname === '/api/agents/request-kind' && req.method === 'GET') {
+      // The Ask page's guess at answer / document / change (request-kinds.js).
+      const q = String(url.searchParams.get('q') || '').slice(0, 600);
+      Promise.resolve(classifyKind ? classifyKind(q) : { kind: keywordKind(q), source: 'keywords' })
+        .then((r) => sendJson(res, 200, { ok: true, ...r }))
+        .catch(() => sendJson(res, 200, { ok: true, kind: keywordKind(q), source: 'keywords' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/plan/approve' && req.method === 'POST') {
+      // "Go ahead" on a plan: a new run on the same branch that carries out the
+      // plan (kind change), with the request and the plan in its task.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'run now is not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then(async (b) => {
+          const runs = loadRuns();
+          if (notYours(req, b.runId, runs)) return sendJson(res, 404, NOT_FOUND);
+          const plan = runs.find((r) => r.id === String(b.runId || ''));
+          if (!plan || plan.kind !== 'plan') return sendJson(res, 400, { ok: false, error: 'that is not a plan' });
+          if (plan.status !== 'done') return sendJson(res, 409, { ok: false, error: 'the plan is not finished yet' });
+          if (runs.some((r) => r.parent === plan.id)) return sendJson(res, 409, { ok: false, error: 'this plan already has a newer reply; approve the latest plan' });
+          const j = path.dirname(path.resolve(String(plan.log || ''))) === runsDir ? resultOf(plan) : null;
+          const planText = j && j.result ? String(j.result).slice(0, 6000) : '';
+          if (!planText.trim()) return sendJson(res, 409, { ok: false, error: 'the plan has no text to approve; ask for it again' });
+          const t = agentQueue ? agentQueue.threadOf(plan.id) : null;
+          const root = t && t.runs.length ? t.runs[0] : plan;
+          const request = String(root.task || '').slice(0, 2000);
+          const task = `Go ahead with the plan.\n\nOriginal request: ${request}\n\nApproved plan:\n${planText}`;
+          const r = await dispatchRun({ followUpOf: plan.id, approvePlan: true, canAsk: true, task }, { by: actorOf(req) });
+          return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/mine' && req.method === 'GET') {
+      // The Ask page's list: only threads this person started (agents-mine.js).
+      // Light on purpose: no GitHub queue, polled every few seconds.
+      const runs = loadRuns();
+      const answered = new Set(runs.map((r) => r.parent).filter(Boolean));
+      const threads = myThreads({
+        runs,
+        actor: actorOf(req),
+        decorate: (r) => ({ ...r, canFollowUp: Boolean(canFollowUp(r)), question: openQuestion(r, answered) }),
+        now: now(),
+      });
+      sendJson(res, 200, {
+        ok: true,
+        me: actorOf(req),
+        admin: Boolean(isAdmin(req)),
+        teammateMode: teammateModeSetting ? teammateModeSetting.get() : null,
+        cap: capNow(runs),
+        threads,
+      });
+      return true;
+    }
     if (url.pathname === '/api/agents/thread' && req.method === 'GET') {
       const id = url.searchParams.get('id') || '';
       if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
       const runs = loadRuns();
+      if (notYours(req, id, runs)) { sendJson(res, 404, NOT_FOUND); return true; }
       const t = agentQueue ? agentQueue.threadOf(id) : null;
       const chain = t ? t.runs : runs.filter((r) => r.id === id);
       if (!chain.length) { sendJson(res, 404, { ok: false, error: 'run not found' }); return true; }
@@ -379,6 +451,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       if (!agentQueue) { sendJson(res, 503, { ok: false, error: 'the message queue is not available' }); return true; }
       readJsonBody(req, 16 * 1024)
         .then(async (b) => {
+          if (notYours(req, b.runId || b.threadId)) return sendJson(res, 404, NOT_FOUND);
           if (url.pathname === '/api/agents/queue') {
             // Idle agent: send now (a follow-up). Working agent: queue it.
             const t = agentQueue.threadOf(String(b.runId || ''));
@@ -416,6 +489,57 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
         .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
       return true;
     }
+    if ((url.pathname === '/api/agents/changes' || url.pathname === '/api/agents/changes/file') && req.method === 'GET') {
+      // Files changed on a run's draft copy (run-changes.js): the list, or one
+      // file's diff. Owner or admin only; read-only.
+      const id = url.searchParams.get('id') || '';
+      if (!RUN_ID_RE.test(id)) { sendJson(res, 400, { ok: false, error: 'bad run id' }); return true; }
+      if (!runChanges) { sendJson(res, 503, { ok: false, error: 'change view is not available' }); return true; }
+      const runs = loadRuns();
+      const run = runs.find((r) => r.id === id);
+      if (!run || notYours(req, id, runs)) { sendJson(res, 404, NOT_FOUND); return true; }
+      const file = url.pathname.endsWith('/file') ? String(url.searchParams.get('path') || '') : null;
+      (file === null ? runChanges.summary(run) : runChanges.fileDiff(run, file))
+        .then((r) => sendJson(res, r.ok ? 200 : r.status || 500, r.ok ? r : { ok: false, error: r.error }))
+        .catch(() => sendJson(res, 500, { ok: false, error: 'could not read the changes' }));
+      return true;
+    }
+    if (url.pathname === '/api/agents/make-changes' && req.method === 'POST') {
+      // "Make these changes" under an answer or document: a new Change request
+      // (plan first, then Go ahead) on the same project, carrying that reply.
+      // Follow-ups keep their thread's kind, so this is the way from read-only
+      // findings to edits.
+      if (!isSameSiteJson(req)) { sendJson(res, 403, { ok: false, error: 'cross-site request refused' }); return true; }
+      if (!dispatchRun) { sendJson(res, 503, { ok: false, error: 'run now is not available' }); return true; }
+      readJsonBody(req, 1024)
+        .then(async (b) => {
+          const runs = loadRuns();
+          if (notYours(req, b.runId, runs)) return sendJson(res, 404, NOT_FOUND);
+          const src = runs.find((r) => r.id === String(b.runId || ''));
+          if (!src) return sendJson(res, 404, NOT_FOUND);
+          if (!['answer', 'document'].includes(src.kind)) return sendJson(res, 400, { ok: false, error: 'only an answer or a document can be turned into changes' });
+          if (src.status !== 'done') return sendJson(res, 409, { ok: false, error: 'wait for the reply to finish first' });
+          const j = path.dirname(path.resolve(String(src.log || ''))) === runsDir ? resultOf(src) : null;
+          const findings = j && j.result ? String(j.result).slice(0, 8000) : '';
+          if (!findings.trim()) return sendJson(res, 409, { ok: false, error: 'that reply has no text to act on' });
+          const agent = String(b.agent || src.agent || 'hermes');
+          if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
+          const t = agentQueue ? agentQueue.threadOf(src.id) : null;
+          const root = t && t.runs.length ? t.runs[0] : src;
+          const request = String(root.task || '').replace(/\s+/g, ' ').trim();
+          const focus = String(b.focus || '').trim().slice(0, 2000);
+          const task = `Make the changes from: ${request.slice(0, 120)}\n\n`
+            + (focus ? `What to do now: ${focus}\n\n` : 'What to do now: the most valuable fixes below, smallest first.\n\n')
+            + `Original request: ${request.slice(0, 2000)}\n\nThe ${src.kind} to act on:\n${findings}`;
+          const repo = path.basename(String(src.repo || '').replace(/[\\/]+$/, ''));
+          const r = await dispatchRun({
+            agent, repo, task, branch: `agent/run-${now().toString(36)}`, canAsk: true, kind: 'change',
+          }, { by: actorOf(req) });
+          return sendJson(res, r.status, r.body);
+        })
+        .catch(() => sendJson(res, 400, { ok: false, error: 'bad request body' }));
+      return true;
+    }
     if (url.pathname === '/api/agents/run' && req.method === 'POST') {
       // Run now on any registered repo: no GitHub issue; the work lands on a
       // new branch in its own worktree. Same checks and paid cap as dispatch.
@@ -430,9 +554,11 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           const agent = String(b.agent || 'hermes');
           if (!AGENTS.includes(agent)) return sendJson(res, 400, { ok: false, error: `agent must be one of: ${AGENTS.join(', ')}` });
           const task = details ? `${title}\n\n${details}` : title;
+          if (b.kind != null && !REQUEST_KINDS.includes(b.kind)) return sendJson(res, 400, { ok: false, error: `kind is one of: ${REQUEST_KINDS.join(', ')}` });
           const r = await dispatchRun({
             agent, repo: String(b.repo || ''), task, specialist: b.specialist || null,
             branch: `agent/run-${now().toString(36)}`, canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
+            ...(b.kind ? { kind: b.kind } : {}),
           }, { by: actorOf(req) });
           if (r.status < 300 && recommender) recommender.invalidate();
           return sendJson(res, r.status, r.body);
@@ -459,6 +585,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       return true;
     }
     if (url.pathname === '/api/agents/log' && req.method === 'GET') {
+      if (notYours(req, url.searchParams.get('id'))) { sendJson(res, 404, NOT_FOUND); return true; }
       const r = log(url.searchParams.get('id'));
       sendJson(res, r.status, r.body);
       return true;
@@ -469,11 +596,18 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
         return true;
       }
       if (!settings || !isAdmin(req)) {
-        sendJson(res, 403, { ok: false, error: 'only an admin can change the daily limit' });
+        sendJson(res, 403, { ok: false, error: 'only an admin can change agent settings' });
         return true;
       }
       readJsonBody(req, 1024)
         .then((b) => {
+          if (b.teammateMode !== undefined) {
+            if (!teammateModeSetting) return sendJson(res, 404, { ok: false, error: 'teammate mode is not available here' });
+            const t = teammateModeSetting.set(b.teammateMode, actorOf(req));
+            if (!t.ok) return sendJson(res, 400, { ok: false, error: t.error });
+            console.log(`teammate run mode set to ${t.value.mode} by ${t.value.updatedBy}`);
+            return sendJson(res, 200, { ok: true, teammateMode: teammateModeSetting.describe() });
+          }
           const r = settings.setCap(b.dailyPaidRuns, actorOf(req));
           if (!r.ok) return sendJson(res, 400, { ok: false, error: r.error });
           console.log(`dispatch cap set to ${r.value.dailyPaidRuns} by ${r.value.updatedBy}`);
@@ -488,6 +622,13 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
       // grants), and a browser-sent Origin must be this host.
       if (!isSameSiteJson(req)) {
         sendJson(res, 403, { ok: false, error: 'cross-site request refused' });
+        return true;
+      }
+      // An issue runs later under the poller, which cannot tell who asked, so
+      // teammates may queue issues only when their runs are unrestricted
+      // (sandbox mode); otherwise they use Run now, where the mode applies.
+      if (!isAdmin(req) && teammateModeSetting && teammateModeSetting.get() !== 'sandbox') {
+        sendJson(res, 403, { ok: false, error: 'GitHub issue tasks are for admins in the current teammate mode; use Run now.' });
         return true;
       }
       readJsonBody(req, 16 * 1024)

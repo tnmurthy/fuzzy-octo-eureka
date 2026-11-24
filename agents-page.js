@@ -30,23 +30,12 @@
 
   const bySlug = new Map(); // specialist slug -> catalog entry (filled by loadSpecialists)
 
-  // ---- UI Experience Mode (Friendly vs Pro) ------------------------------
-  function setUiMode(mode) {
-    const isFriendly = mode === 'friendly';
-    document.body.classList.toggle('mode-friendly', isFriendly);
-    document.body.classList.toggle('mode-pro', !isFriendly);
-    const btnFriendly = $('btn-mode-friendly');
-    const btnPro = $('btn-mode-pro');
-    if (btnFriendly) btnFriendly.classList.toggle('active', isFriendly);
-    if (btnPro) btnPro.classList.toggle('active', !isFriendly);
-    try { localStorage.setItem('agents.uiMode', mode); } catch (_) {}
-  }
-
-  if ($('btn-mode-friendly')) $('btn-mode-friendly').addEventListener('click', () => setUiMode('friendly'));
-  if ($('btn-mode-pro')) $('btn-mode-pro').addEventListener('click', () => setUiMode('pro'));
-  let savedMode = 'friendly';
-  try { savedMode = localStorage.getItem('agents.uiMode') || 'friendly'; } catch (_) {}
-  setUiMode(savedMode);
+  // One plain-English voice for everyone (the Friendly/Developer toggle was
+  // removed 2026-11-23): body keeps class mode-friendly, so pro-only text stays
+  // hidden. Forget a choice saved by the old toggle.
+  document.body.classList.add('mode-friendly');
+  document.body.classList.remove('mode-pro');
+  try { localStorage.removeItem('agents.uiMode'); } catch (_) {}
 
   let activeSelectedRepo = 'fuzzy-octo-eureka';
 
@@ -166,86 +155,6 @@
   }
   window.pushRunAndOpenPr = pushRunAndOpenPr;
 
-  // ---- In-Browser Code & File Viewer ------------------------------------
-  let currentFileCode = '';
-
-  async function openFilePreview(fileName) {
-    const box = $('preview-code-viewer');
-    const titleEl = $('code-viewer-filename');
-    const metaEl = $('code-viewer-meta');
-    const contentEl = $('code-viewer-content');
-    if (!box || !titleEl || !contentEl) return;
-
-    box.style.display = 'block';
-    titleEl.textContent = fileName;
-    if (metaEl) metaEl.textContent = 'Loading...';
-    contentEl.textContent = 'Reading file contents...';
-
-    // Highlight active chip
-    document.querySelectorAll('.file-chip-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.file === fileName);
-    });
-
-    try {
-      const repo = activeSelectedRepo || 'fuzzy-octo-eureka';
-      const res = await fetch(`/api/agents/repo/file?repo=${encodeURIComponent(repo)}&file=${encodeURIComponent(fileName)}`);
-      const data = await res.json();
-      if (!data.ok) {
-        if (metaEl) metaEl.textContent = 'Error';
-        contentEl.textContent = data.error || 'Failed to read file.';
-        return;
-      }
-
-      if (data.isDirectory) {
-        if (metaEl) metaEl.textContent = `Folder · ${(data.items || []).length} items`;
-        contentEl.textContent = (data.items || []).map(i => `${i.isDirectory ? '📁' : '📄'} ${i.name}`).join('\n') || '(Empty folder)';
-        currentFileCode = contentEl.textContent;
-        return;
-      }
-
-      if (data.isBinary) {
-        if (metaEl) metaEl.textContent = `Binary · ${(data.size / 1024).toFixed(1)} KB`;
-        contentEl.textContent = `Binary file (${data.ext || 'unknown format'}, ${data.size} bytes). Direct viewing is not supported in text mode.`;
-        currentFileCode = '';
-        return;
-      }
-
-      if (metaEl) {
-        const sizeKb = (data.size / 1024).toFixed(1);
-        metaEl.textContent = `${data.lines} lines · ${sizeKb} KB${data.truncated ? ' (first 512KB shown)' : ''}`;
-      }
-      currentFileCode = data.content || '';
-      contentEl.textContent = data.content || '(Empty file)';
-      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } catch (err) {
-      if (metaEl) metaEl.textContent = 'Error';
-      contentEl.textContent = `Error loading file: ${err.message}`;
-    }
-  }
-
-  function closeFileViewer() {
-    const box = $('preview-code-viewer');
-    if (box) box.style.display = 'none';
-    document.querySelectorAll('.file-chip-btn').forEach(btn => btn.classList.remove('active'));
-    currentFileCode = '';
-  }
-
-  function copyCurrentFileCode() {
-    if (!currentFileCode) return;
-    navigator.clipboard.writeText(currentFileCode).then(() => {
-      const btn = $('btn-copy-code');
-      if (btn) {
-        const old = btn.textContent;
-        btn.textContent = '✅ Copied!';
-        setTimeout(() => { btn.textContent = old; }, 2000);
-      }
-    }).catch(() => {});
-  }
-
-  window.openFilePreview = openFilePreview;
-  window.closeFileViewer = closeFileViewer;
-  window.copyCurrentFileCode = copyCurrentFileCode;
-
   // ---- Universal Collapsible Toggle -------------------------------------
   window.toggleSection = function(btn, targetId) {
     const target = $(targetId) || document.getElementById(targetId);
@@ -261,7 +170,6 @@
   // ---- Cockpit Segmented Tab Navigation ---------------------------------
   const cockpitTabs = [
     { btn: 'tab-btn-live', view: 'view-live' },
-    { btn: 'tab-btn-preview', view: 'view-preview' },
     { btn: 'tab-btn-board', view: 'view-board' },
     { btn: 'tab-btn-threads', view: 'view-threads' },
   ];
@@ -274,9 +182,6 @@
       if (b) b.classList.toggle('active', isTarget);
       if (v) v.classList.toggle('active', isTarget);
     });
-    if (btnId === 'tab-btn-preview') {
-      loadWorkspacePreview(activeSelectedRepo);
-    }
   }
 
   cockpitTabs.forEach(({ btn }) => {
@@ -428,16 +333,9 @@
         filesCard.append(el('h4', {}, `📁 Files & Artifacts Created or Updated (${filesModified.size})`));
         const fileList = el('div', { className: 'deliverable-files-list' });
         for (const f of filesModified) {
-          const item = el('div', { className: 'file-item', style: 'cursor:pointer;', title: 'Click to inspect in Preview Tab' },
-            el('span', { className: 'file-name', textContent: f }),
-            el('span', { className: 'file-badge', textContent: '✓ Inspect' })
-          );
-          item.onclick = () => {
-            if (deliverableModal) deliverableModal.classList.remove('open');
-            switchCockpitTab('tab-btn-preview');
-            openFilePreview(f);
-          };
-          fileList.append(item);
+          fileList.append(el('div', { className: 'file-item' },
+            el('span', { className: 'file-name', textContent: f })
+          ));
         }
         filesCard.append(fileList);
         content.append(filesCard);
@@ -620,6 +518,49 @@
       alert(`Not saved: ${err.message}`);
     }
   });
+
+  // ---- teammate run mode: admins switch it, teammates see it -------------
+  let tmBusy = false;
+  function renderTeammateMode(admin, t) {
+    const box = $('tm-box');
+    const sel = $('tm-mode');
+    if (!box || !sel) return;
+    if (!t) { box.hidden = true; return; }
+    box.hidden = false;
+    if (tmBusy || document.activeElement === sel) return;
+    if (sel.options.length !== t.modes.length) {
+      sel.textContent = '';
+      for (const m of t.modes) sel.append(new Option(m.label, m.value));
+    }
+    sel.value = t.mode;
+    sel.disabled = !admin;
+    box.title = t.source === 'admin'
+      ? `Set by ${t.updatedBy} on ${new Date(t.updatedAt).toLocaleString()} (default ${t.envDefault}). Admins are never restricted.`
+      : `Default from .env (${t.envDefault}). Admins are never restricted.`;
+  }
+  if ($('tm-mode')) {
+    $('tm-mode').addEventListener('change', async (e) => {
+      const sel = e.target;
+      const label = sel.options[sel.selectedIndex].text;
+      if (!confirm(`Teammates' agent runs will be: ${label}.\nThis applies from their next run. Continue?`)) { refresh(); return; }
+      tmBusy = true;
+      try {
+        const r = await fetch('/api/agents/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teammateMode: sel.value }),
+        });
+        const b = await r.json();
+        if (!r.ok || !b.ok) throw new Error(b.error || `HTTP ${r.status}`);
+      } catch (err) {
+        alert(`Not saved: ${err.message}`);
+      } finally {
+        tmBusy = false;
+        sel.blur();
+        refresh();
+      }
+    });
+  }
 
   function renderCap(cap) {
     if (!cap) return;
@@ -987,6 +928,7 @@
       const b = await r.json();
       renderCap(b.cap);
       renderCapAdmin(b.admin, b.capSettings);
+      renderTeammateMode(b.admin, b.teammateMode);
       renderRunning(b.running || []);
       renderBoard(b.queue);
       lastRecent = b.recent || [];
@@ -1218,114 +1160,15 @@
     });
   }
 
-  // ---- Workspace Preview & Interactive Teammate Chat --------------------
-  async function loadWorkspacePreview(repoName) {
-    const repo = repoName || activeSelectedRepo || 'fuzzy-octo-eureka';
-    const pathEl = $('preview-repo-path');
-    const filesEl = $('preview-files-list');
-    const readmeEl = $('preview-readme-text');
-    const delivEl = $('preview-latest-deliverable-body');
-    const badgeEl = $('preview-latest-run-badge');
-
-    if (pathEl) pathEl.textContent = 'Fetching preview...';
-
-    try {
-      const res = await fetch(`/api/agents/repo/preview?repo=${encodeURIComponent(repo)}`);
-      const data = await res.json();
-      if (!data.ok) {
-        if (pathEl) pathEl.textContent = data.error || 'Preview unavailable';
-        return;
-      }
-
-      if (pathEl) {
-        let archBadge = '';
-        if (data.architecture) {
-          const eps = (data.architecture.entryPoints || []).length ? ` (${data.architecture.entryPoints.join(', ')})` : '';
-          archBadge = ` · ⚡ ${data.architecture.stack}${eps}`;
-        }
-        pathEl.textContent = (data.path || repo) + archBadge;
-      }
-
-      if (filesEl) {
-        filesEl.replaceChildren();
-        if (Array.isArray(data.files) && data.files.length > 0) {
-          data.files.forEach(f => {
-            const isDir = !f.includes('.');
-            const btn = el('button', {
-              type: 'button',
-              className: 'file-chip-btn',
-              title: isDir ? `Browse folder ${f}` : `Click to preview ${f} code`,
-              onclick: () => openFilePreview(f)
-            }, `${isDir ? '📁' : '📄'} ${f}`);
-            btn.dataset.file = f;
-            filesEl.appendChild(btn);
-          });
-        } else {
-          filesEl.appendChild(el('span', { className: 'muted' }, 'No files found in root.'));
-        }
-      }
-
-      if (readmeEl) {
-        readmeEl.textContent = data.readme || 'No README.md found in this repository.';
-      }
-
-      if (delivEl && badgeEl) {
-        if (data.latestRun) {
-          const lr = data.latestRun;
-          badgeEl.textContent = `Run ${lr.id} · ${lr.agent || 'agent'} · Status: ${lr.status || 'finished'}`;
-          delivEl.replaceChildren();
-          const card = el('div', { style: 'font-size:0.82rem; line-height:1.5;' },
-            el('div', { style: 'font-weight:600; color:#fff; margin-bottom:4px;' }, `Task: ${lr.task || 'Autonomous Execution'}`),
-            el('div', { className: 'muted', style: 'margin-bottom:8px;' }, lr.branch ? `Branch: ${lr.branch}` : ''),
-            el('div', { style: 'display:flex; gap:8px; flex-wrap:wrap;' },
-              lr.branch ? el('button', {
-                className: 'btn-sm btn-push-pr',
-                type: 'button',
-                textContent: '🚀 Push to GitHub & Open PR',
-                onclick: (e) => pushRunAndOpenPr(lr.id, e.currentTarget)
-              }) : null,
-              el('button', {
-                className: 'btn-sm',
-                type: 'button',
-                textContent: '📜 Inspect Full Log',
-                onclick: () => openLog(lr.id)
-              }),
-              el('button', {
-                className: 'btn-sm',
-                type: 'button',
-                textContent: '💬 Open Follow-up Thread',
-                onclick: () => {
-                  switchCockpitTab('tab-btn-threads');
-                  toggleFollowUp(lr, $('threads-container'));
-                }
-              })
-            )
-          );
-          delivEl.appendChild(card);
-        } else {
-          badgeEl.textContent = 'No past runs for this repo yet';
-          delivEl.replaceChildren(el('div', { className: 'empty' }, `Ready to run your first task on ${repo}! Assign a task in Step 2.`));
-        }
-      }
-    } catch (err) {
-      if (pathEl) pathEl.textContent = 'Error loading preview: ' + err.message;
-    }
-  }
-
-  window.loadWorkspacePreview = loadWorkspacePreview;
+  // ---- Interactive Teammate Chat --------------------------------------
 
   window.onRepoSelectionChanged = function(repoName) {
     if (!repoName) return;
     activeSelectedRepo = repoName;
-    const previewRepoEl = $('preview-active-repo');
-    if (previewRepoEl) previewRepoEl.textContent = repoName;
     const chatRepoLabel = $('agents-chat-repo-label');
     if (chatRepoLabel) chatRepoLabel.textContent = repoName;
     const chatRepoChip = $('agents-chat-repo-chip');
     if (chatRepoChip) chatRepoChip.textContent = repoName;
-
-    // Load preview if the preview tab is visible
-    loadWorkspacePreview(repoName);
   };
 
   async function sendAgentsPageChatMessage() {

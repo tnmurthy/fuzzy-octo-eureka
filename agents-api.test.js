@@ -20,6 +20,7 @@ function setup({ runs = [], active = {}, github = null } = {}) {
     capNow: () => ({ used: 2, cap: 20 }),
     repos: REPOS,
     github,
+    actorOf: () => 'local operator', // owner of runs without `by`
   });
   return { api, dir };
 }
@@ -130,6 +131,7 @@ test('createTask refuses without a token or with bad input', async () => {
 
 // ---- admin: change the daily limit ----------------------------------------
 const { Readable } = require('stream');
+const { createTeammateModeSetting } = require('./teammate-mode');
 const { createDispatchSettings } = require('./dispatch-settings');
 
 function call(api, { method = 'POST', url, body, headers = {} }) {
@@ -149,12 +151,13 @@ function call(api, { method = 'POST', url, body, headers = {} }) {
 function settingsApi(admin) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-set-'));
   const settings = createDispatchSettings({ file: path.join(dir, 's.json'), envCap: 20 });
+  const teammateModeSetting = createTeammateModeSetting({ file: path.join(dir, 'tm.json'), envMode: 'sandbox' });
   const api = createAgentsApi({
     runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 'st.json'),
     readRuns: () => ({ runs: [] }), capNow: () => ({ used: 0, cap: settings.cap() }),
-    repos: REPOS, github: null, settings, isAdmin: () => admin, actorOf: () => 'sriad',
+    repos: REPOS, github: null, settings, teammateModeSetting, isAdmin: () => admin, actorOf: () => 'sriad',
   });
-  return { api, settings };
+  return { api, settings, teammateModeSetting };
 }
 
 test('an admin can change the daily limit; it applies at once and is reported', async () => {
@@ -276,7 +279,7 @@ test('overview shows an open question until a follow-up answers it', async () =>
     { id: 'q2', status: 'done', log: log('q2') },
     { id: 'f1', status: 'done', parent: 'q2', log: log('f1') },
   ];
-  const api = createAgentsApi({ runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}), repos: REPOS, github: null });
+  const api = createAgentsApi({ runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}), repos: REPOS, github: null, actorOf: () => 'local operator' });
   const byId = (o) => Object.fromEntries(o.recent.map((r) => [r.id, r.question]));
   assert.deepEqual(byId(await api.overview({ headers: {} })), { q1: 'Postgres or SQLite?', q2: null, f1: null });
   runs = [...runs, { id: 'f2', status: 'running', parent: 'q1' }];
@@ -352,7 +355,7 @@ function threadApi({ runs, dispatchRun, runControl } = {}) {
     runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs: current }), capNow: () => ({}),
     repos: REPOS, github: null, queueFile: path.join(dir, 'q.json'),
     dispatchRun: dispatchRun || (async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: `n${sent.length}` } }; }),
-    runControl,
+    runControl, actorOf: () => 'local operator',
   });
   return { api, sent, setRuns: (r) => { current = r; }, runs: () => current };
 }
@@ -418,4 +421,188 @@ test('run now records the signed-in person from the server, not from the body', 
   await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'hermes', title: 'Explain', by: 'someone-else' } });
   assert.deepEqual(ctxs[0].ctx, { by: 'sriad' });
   assert.equal('by' in ctxs[0].p, false);
+});
+
+test('only an admin switches the teammate mode; everyone sees it; issues follow it', async () => {
+  const admin = settingsApi(true);
+  const r = await call(admin.api, { url: '/api/agents/settings', body: { teammateMode: 'readonly' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.payload.teammateMode.mode, 'readonly');
+  assert.equal(admin.teammateModeSetting.get(), 'readonly');
+  assert.equal((await call(admin.api, { url: '/api/agents/settings', body: { teammateMode: 'everything' } })).status, 400);
+
+  const user = settingsApi(false);
+  assert.equal((await call(user.api, { url: '/api/agents/settings', body: { teammateMode: 'sandbox' } })).status, 403);
+  assert.equal((await user.api.overview({ headers: {} })).teammateMode.mode, 'sandbox');
+
+  // a teammate cannot route around the mode through a GitHub issue
+  user.teammateModeSetting.set('readonly', 'owner');
+  const issue = await call(user.api, { url: '/api/agents/task', body: { repo: REPOS[0], title: 'x' } });
+  assert.equal(issue.status, 403);
+  assert.match(issue.payload.error, /use Run now/);
+});
+
+test('GET /api/agents/mine lists only the caller\'s threads, with mode and admin flag', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-mine-'));
+  const started = new Date(Date.now() - 60e3).toISOString();
+  const runs = [
+    { id: 'r-mine', agent: 'hermes', status: 'done', task: 'Explain auth', by: 'asha@example.com', started_at: started, finished_at: started, repo: '/x/app' },
+    { id: 'r-other', agent: 'hermes', status: 'done', task: 'Other', by: 'ravi@example.com', started_at: started, finished_at: started },
+  ];
+  const teammateModeSetting = createTeammateModeSetting({ file: path.join(dir, 'tm.json'), envMode: 'readonly' });
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'r.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }),
+    capNow: () => ({ used: 1, cap: 20 }), repos: REPOS, github: null, teammateModeSetting,
+    isAdmin: () => false, actorOf: () => 'asha@example.com',
+  });
+  const r = await call(api, { method: 'GET', url: '/api/agents/mine' });
+  assert.equal(r.status, 200);
+  assert.equal(r.payload.admin, false);
+  assert.equal(r.payload.teammateMode, 'readonly');
+  assert.deepEqual(r.payload.threads.map((t) => t.threadId), ['r-mine']);
+  assert.equal(r.payload.threads[0].repo, 'app');
+});
+
+test('Ask page kinds: run passes the kind, bad kinds are refused, plans are approved once', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-kind-'));
+  const runsFile = path.join(dir, 'runs.jsonl');
+  const planLog = path.join(dir, 'p1.log');
+  fs.writeFileSync(planLog, '');
+  fs.writeFileSync(path.join(dir, 'p1.hermes.json'), JSON.stringify({ result: '1. Add a check\n2. Show a message' }));
+  const runs = [
+    { by: 'asha@example.com', id: 'p1', agent: 'hermes', kind: 'plan', helper: 'claude', status: 'done', task: 'Signup accepts empty emails', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { by: 'asha@example.com', id: 'a1', agent: 'hermes', kind: 'answer', status: 'done', task: 'What is this?', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+    { by: 'asha@example.com', id: 'p2', agent: 'hermes', kind: 'plan', status: 'running', task: 'x', log: planLog, started_at: '2026-11-23T10:00:00Z' },
+  ];
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile, stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, isAdmin: () => false, actorOf: () => 'asha@example.com', now: () => 1_700_000_000_000,
+    dispatchRun: async (p, ctx) => { sent.push({ p, ctx }); return { status: 202, body: { ok: true, runId: 'new' } }; },
+    classifyKind: async () => ({ kind: 'document', source: 'model' }),
+  });
+  await call(api, { url: '/api/agents/run', body: { repo: 'app', agent: 'claude', title: 'Fix signup', kind: 'change' } });
+  assert.equal(sent[0].p.kind, 'change');
+  assert.equal((await call(api, { url: '/api/agents/run', body: { repo: 'app', title: 'x', kind: 'plan' } })).status, 400, 'plan is not a request kind');
+
+  assert.equal((await call(api, { url: '/api/agents/plan/approve', body: { runId: 'a1' } })).status, 400);
+  assert.equal((await call(api, { url: '/api/agents/plan/approve', body: { runId: 'p2' } })).status, 409);
+  const ok = await call(api, { url: '/api/agents/plan/approve', body: { runId: 'p1' } });
+  assert.equal(ok.status, 202);
+  const last = sent.at(-1);
+  assert.equal(last.p.followUpOf, 'p1');
+  assert.equal(last.p.approvePlan, true);
+  assert.match(last.p.task, /Original request: Signup accepts empty emails/);
+  assert.match(last.p.task, /Approved plan:\n1\. Add a check/);
+  assert.deepEqual(last.ctx, { by: 'asha@example.com' });
+
+  runs.push({ id: 'p1b', parent: 'p1', agent: 'hermes', kind: 'plan', status: 'done', task: 'y', started_at: '2026-11-23T11:00:00Z' });
+  assert.equal((await call(api, { url: '/api/agents/plan/approve', body: { runId: 'p1' } })).status, 409, 'an older plan cannot be approved');
+
+  const g = await call(api, { method: 'GET', url: '/api/agents/request-kind?q=write%20a%20report' });
+  assert.deepEqual(g.payload, { ok: true, kind: 'document', source: 'model' });
+});
+
+test('a request is visible only to the person who started it, and admins', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-own-'));
+  const logFile = path.join(dir, 'a.log');
+  fs.writeFileSync(logFile, 'step 1\n');
+  const runs = [
+    { id: 'a', by: 'asha@example.com', agent: 'hermes', kind: 'plan', status: 'done', task: 'Asha task', log: logFile, started_at: '2026-11-23T10:00:00Z' },
+    { id: 'r', by: 'ravi@example.com', agent: 'hermes', status: 'running', task: 'Ravi task', log: logFile, started_at: '2026-11-23T10:00:00Z' },
+  ];
+  let actor = 'ravi@example.com';
+  let admin = false;
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, queueFile: path.join(dir, 'q.json'), isAdmin: () => admin, actorOf: () => actor,
+    dispatchRun: async (p) => { sent.push(p); return { status: 202, body: { ok: true, runId: 'n' } }; },
+    runControl: { stop: () => ({ ok: true }), waitForEnd: async () => ({ status: 'stopped' }) },
+  });
+  const tries = [
+    { method: 'GET', url: '/api/agents/thread?id=a' },
+    { method: 'GET', url: '/api/agents/log?id=a' },
+    { url: '/api/agents/followup', body: { runId: 'a', message: 'hi' } },
+    { url: '/api/agents/stop', body: { runId: 'a' } },
+    { url: '/api/agents/redirect', body: { runId: 'a', message: 'other' } },
+    { url: '/api/agents/plan/approve', body: { runId: 'a' } },
+    { url: '/api/agents/queue', body: { runId: 'a', text: 'hi' } },
+    { url: '/api/agents/queue/steer', body: { threadId: 'a', itemId: 'x' } },
+  ];
+  for (const t of tries) assert.equal((await call(api, t)).status, 404, `${t.url} for someone else`);
+  assert.equal(sent.length, 0, 'nothing was dispatched');
+  const ov = await api.overview({ headers: {} });
+  assert.deepEqual([...ov.running, ...ov.recent].map((r) => r.id), ['r'], 'the Ops overview shows only your runs');
+
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/thread?id=r' })).status, 200, 'your own run');
+  actor = 'asha@example.com';
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/thread?id=a' })).status, 200);
+  actor = 'ravi@example.com';
+  admin = true;
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/log?id=a' })).status, 200, 'admins see every run');
+  assert.equal((await api.overview({ headers: {} })).recent.length + (await api.overview({ headers: {} })).running.length, 2);
+});
+
+test('make-changes turns your answer or document into a new Change request', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-mc-'));
+  const logFile = path.join(dir, 'd1.log');
+  fs.writeFileSync(logFile, '');
+  fs.writeFileSync(path.join(dir, 'd1.hermes.json'), JSON.stringify({ result: '| 1 | Add canonical tags |' }));
+  const runs = [
+    { id: 'd1', by: 'asha@example.com', agent: 'hermes', kind: 'document', status: 'done', task: 'Traffic report for vizag', repo: '/h/agent-repos/vizag-live', log: logFile },
+    { id: 'c1', by: 'asha@example.com', agent: 'hermes', kind: 'change', status: 'done', task: 'x', repo: '/h/r/app', log: logFile },
+    { id: 'd2', by: 'asha@example.com', agent: 'hermes', kind: 'answer', status: 'running', task: 'y', repo: '/h/r/app', log: logFile },
+    { id: 'o1', by: 'ravi@example.com', agent: 'hermes', kind: 'answer', status: 'done', task: 'z', repo: '/h/r/app', log: logFile },
+  ];
+  const sent = [];
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, isAdmin: () => false, actorOf: () => 'asha@example.com', now: () => 1_700_000_000_000,
+    dispatchRun: async (p, ctx) => { sent.push({ p, ctx }); return { status: 202, body: { ok: true, runId: 'new1' } }; },
+  });
+  const r = await call(api, { url: '/api/agents/make-changes', body: { runId: 'd1', agent: 'claude', focus: 'fixes 1-3' } });
+  assert.deepEqual([r.status, r.payload.runId], [202, 'new1']);
+  const { p, ctx } = sent[0];
+  assert.equal(p.kind, 'change', 'starts as a change, so it runs as a plan first');
+  assert.equal(p.agent, 'claude');
+  assert.equal(p.repo, 'vizag-live');
+  assert.equal(p.followUpOf, undefined, 'a new request, not a read-only follow-up');
+  assert.match(p.task, /^Make the changes from: Traffic report for vizag/);
+  assert.match(p.task, /What to do now: fixes 1-3/);
+  assert.match(p.task, /The document to act on:\n\| 1 \| Add canonical tags \|/);
+  assert.deepEqual(ctx, { by: 'asha@example.com' });
+
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'c1' } })).status, 400, 'not from a change');
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'd2' } })).status, 409, 'not while running');
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'o1' } })).status, 404, 'not someone else\'s');
+  assert.equal((await call(api, { url: '/api/agents/make-changes', body: { runId: 'd1', agent: 'rm' } })).status, 400);
+  assert.equal(sent.length, 1);
+});
+
+test('changes: owner or admin only, and only for a known run', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-chg-'));
+  const runs = [
+    { id: 'c1', by: 'asha@example.com', kind: 'change', status: 'done', repo: '/r/app', branch: 'agent/run-a', worktree: '/r/app--agent-run-a' },
+  ];
+  const calls = [];
+  let actor = 'asha@example.com';
+  const api = createAgentsApi({
+    runsFile: path.join(dir, 'runs.jsonl'), stateFile: path.join(dir, 's.json'), readRuns: () => ({ runs }), capNow: () => ({}),
+    repos: REPOS, github: null, isAdmin: () => false, actorOf: () => actor,
+    runChanges: {
+      summary: async (run) => { calls.push(['summary', run.id]); return { ok: true, files: [{ path: 'a.ts' }] }; },
+      fileDiff: async (run, file) => { calls.push(['file', run.id, file]); return file === 'a.ts' ? { ok: true, diff: '+x' } : { ok: false, status: 404, error: 'not among the changes' }; },
+    },
+  });
+  const s = await call(api, { method: 'GET', url: '/api/agents/changes?id=c1' });
+  assert.deepEqual([s.status, s.payload.files[0].path], [200, 'a.ts']);
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes/file?id=c1&path=a.ts' })).payload.diff, '+x');
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes/file?id=c1&path=..%2F.env' })).status, 404);
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes?id=nope' })).status, 404);
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes?id=../x' })).status, 400);
+  actor = 'ravi@example.com';
+  const n = calls.length;
+  assert.equal((await call(api, { method: 'GET', url: '/api/agents/changes?id=c1' })).status, 404, 'not someone else\'s');
+  assert.equal(calls.length, n, 'git is not touched for someone else');
 });

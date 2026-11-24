@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ask a Helper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/dashboard.css">
+  <link rel="stylesheet" href="/ask.css">
+</head>
+<body>
+  <!-- Ask page (/agents): the simple view for everyone. Admin controls live on
+       the Ops console (/agents/ops). Script: ask.js. -->
+  <header class="ask-top">
+    <div class="ask-brand">
+      <span class="ask-logo" aria-hidden="true">🤖</span>
+      <div>
+        <h1>Ask a helper</h1>
+        <div class="ask-sub">Describe what you need in plain words. Nothing goes live until someone reviews it.</div>
+      </div>
+    </div>
+    <nav class="ask-nav">
+      <span class="ask-chip" id="budget" title="Expert (paid) runs used today across the team" hidden></span>
+      <a class="ask-link" id="ops-link" href="/agents/ops" hidden>Ops console →</a>
+      <a class="ask-link" href="/">← Dashboard</a>
+    </nav>
+  </header>
+
+  <div class="ask-shell">
+    <aside class="ask-side" aria-label="My requests">
+      <button type="button" class="ask-new" id="new-btn">+ New request</button>
+      <h2 class="ask-side-title">My requests</h2>
+      <div id="threads" class="ask-threads" aria-live="polite">
+        <div class="ask-empty">Loading…</div>
+      </div>
+    </aside>
+
+    <main class="ask-main">
+      <!-- New request -->
+      <section id="view-new" class="ask-view">
+        <h2 class="ask-q">What do you need?</h2>
+        <form id="new-form" autocomplete="off">
+          <label class="ask-label" for="project">Project</label>
+          <select id="project" class="ask-field" required></select>
+          <div class="ask-hint" id="project-hint"></div>
+
+          <div class="ask-starters" id="starters" role="group" aria-label="Kinds of request">
+            <button type="button" data-kind="answer" data-prefix="Explain how this works: ">💡 Explain how it works</button>
+            <button type="button" data-kind="change" data-prefix="Something is wrong: ">🐞 Fix a problem</button>
+            <button type="button" data-kind="change" data-prefix="Please change: ">✏️ Change text or layout</button>
+            <button type="button" data-kind="answer" data-prefix="Check for problems in: ">🔍 Check for issues</button>
+            <button type="button" data-kind="document" data-prefix="Write a short document about: ">📄 Write a document</button>
+          </div>
+
+          <label class="ask-label" for="request">Your request</label>
+          <textarea id="request" class="ask-field ask-text" maxlength="8000" required
+            placeholder="e.g. The signup form accepts empty emails. Or: explain how invoicing works, in simple words."></textarea>
+
+          <div class="ask-kinds" role="radiogroup" aria-label="Kind of request">
+            <span class="ask-muted">I'll treat this as:</span>
+            <button type="button" role="radio" data-kind="answer">💬 Answer</button>
+            <button type="button" role="radio" data-kind="document">📄 Document</button>
+            <button type="button" role="radio" data-kind="change">🔧 Change</button>
+            <span class="ask-muted" id="kind-src"></span>
+          </div>
+          <div class="ask-hint" id="kind-note"></div>
+
+          <fieldset class="ask-helpers" id="helpers">
+            <legend class="ask-label">Helper</legend>
+            <label><input type="radio" name="helper" value="hermes" checked> Free helper <span class="ask-muted">(runs on our own machine)</span></label>
+            <label id="expert-opt"><input type="radio" name="helper" value="claude"> Expert helper <span class="ask-muted" id="expert-note">(uses the team's daily budget)</span></label>
+          </fieldset>
+          <div class="ask-mode" id="mode-note" hidden></div>
+
+          <button type="submit" class="ask-send" id="new-send">Ask the helper →</button>
+          <div class="ask-msg" id="new-msg" role="status"></div>
+          <p class="ask-safe">🛡 The helper works on a private draft copy. Your live site and files stay untouched.</p>
+        </form>
+      </section>
+
+      <!-- One request and its follow-ups -->
+      <section id="view-thread" class="ask-view" hidden>
+        <div class="ask-thread-head">
+          <div>
+            <h2 class="ask-thread-title" id="t-title"></h2>
+            <div class="ask-muted" id="t-meta"></div>
+          </div>
+          <span class="ask-pill" id="t-stage"></span>
+        </div>
+        <nav class="ask-toolbar" aria-label="Conversation">
+          <button type="button" class="ask-tool" id="nav-new" title="Start a new request (Alt+N)">＋ New chat</button>
+          <button type="button" class="ask-tool" id="nav-fold" title="Fold every turn but the latest">⊟ Collapse all</button>
+          <button type="button" class="ask-tool" id="nav-unfold" title="Open every turn">⊞ Expand all</button>
+          <select class="ask-tool" id="nav-jump" aria-label="Go to turn" hidden></select>
+          <span class="ask-tool-gap"></span>
+          <button type="button" class="ask-tool" id="nav-top" title="Top (Alt+↑)">⤒ Top</button>
+          <button type="button" class="ask-tool" id="nav-latest" title="Latest (Alt+↓)">⤓ Latest</button>
+        </nav>
+        <div class="ask-convo" id="convo" aria-live="polite"></div>
+        <form class="ask-reply" id="reply-form" autocomplete="off">
+          <textarea id="reply" class="ask-field" maxlength="8000" rows="2"
+            placeholder="Reply, answer a question, or ask for something more…"></textarea>
+          <div class="ask-reply-actions">
+            <button type="button" class="ask-stop" id="stop-btn" hidden>■ Stop</button>
+            <button type="submit" class="ask-send" id="reply-send">Send</button>
+          </div>
+          <div class="ask-msg" id="reply-msg" role="status"></div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="ask-floats" id="ask-floats" hidden>
+    <button type="button" class="ask-float" id="float-top" title="Back to the top" aria-label="Back to the top" hidden>⤒</button>
+    <button type="button" class="ask-float" id="float-latest" title="Jump to the latest reply" aria-label="Jump to the latest reply" hidden>⤓</button>
+  </div>
+
+  <script src="/run-steps.js"></script>
+  <script src="/ask-nav.js"></script>
+  <script src="/ask-files.js"></script>
+  <script src="/ask.js"></script>
+</body>
+</html>

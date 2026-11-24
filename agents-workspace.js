@@ -308,12 +308,6 @@
   }
   document.querySelectorAll('input[name=mode]').forEach((i) => i.addEventListener('change', renderMode));
 
-  // Re-render mode text when user switches experience mode
-  const btnFriendly = $('btn-mode-friendly');
-  const btnPro = $('btn-mode-pro');
-  if (btnFriendly) btnFriendly.addEventListener('click', () => setTimeout(renderMode, 50));
-  if (btnPro) btnPro.addEventListener('click', () => setTimeout(renderMode, 50));
-
   // ---- submit --------------------------------------------------------------
   $('task-form').addEventListener('submit', async (e) => {
     e.preventDefault();

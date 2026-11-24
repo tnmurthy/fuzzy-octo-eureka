@@ -45,6 +45,9 @@ const agentsGate = require('./agents-gate');
 const IS_DRISYON_PORTAL = PORT == 8788 || process.env.STRICT_TENANT_ISOLATION === 'true';
 const PORTAL_HAS_ACCESS = !IS_DRISYON_PORTAL || Boolean(process.env.ACCESS_AUD);
 
+// Ask page request kinds (request-kinds.js): answer / document / plan / change.
+const requestKinds = require('./request-kinds');
+
 // P0.3-P0.5: one identity per person (identity.js).
 const identity = require('./identity');
 const PORTAL = identity.portalName(IS_DRISYON_PORTAL);
@@ -67,7 +70,11 @@ const RUNS_FILE =
   process.env.AGENT_RUNS_FILE || path.join(STACK_ROOT, '04_internal', 'agent-runs', 'runs.jsonl');
 // Default: the parent of the active-projects folder this dashboard lives in.
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.resolve(DASHBOARD_DIR, '..');
-const { readRuns } = require('./runs-reader');
+const { readRuns: readAllRuns } = require('./runs-reader');
+// P0.6: everything below sees only this portal's runs (portal-scope.js); the
+// Supabase run sync alone reads them all (it is the outbox for every run).
+const portalScope = require('./portal-scope');
+const readRuns = portalScope.scopedReader(readAllRuns, PORTAL);
 const { readOrigin, prUrlOf } = require('./repo-registry');
 const { isSameSiteJson } = require('./agents-api');
 const { recordRunReflection } = require('./task-reflection');
@@ -103,7 +110,7 @@ const blackboard = createBlackboard({ ledgerDB, memoryEngine: memory });
 // Shared team context in Supabase; null (local files only) unless .env has
 // the SUPABASE_* settings and TEAM_ID. See team-store/index.js.
 const teamStore = require('./team-store').createTeamStore(process.env, {
-  readRuns,
+  readRuns: readAllRuns,
   runsFile: RUNS_FILE,
   stateFile: path.join(DASHBOARD_DIR, 'logs', 'run-sync-state.json'),
   callsFile: path.join(DASHBOARD_DIR, 'logs', 'ai-calls.jsonl'),
@@ -329,7 +336,10 @@ function serveStaticFile(req, res) {
   if (urlPath === '/team') urlPath = '/team.html';
   if (urlPath === '/costing') urlPath = '/costing.html';
   if (urlPath === '/invoicing') urlPath = '/invoicing.html';
-  if (urlPath === '/agents') urlPath = '/agents.html';
+  // /agents is the Ask page for everyone (ask.html); the full page is the
+  // admin Ops console at /agents/ops.
+  if (urlPath === '/agents' || urlPath === '/agents/ask') urlPath = '/ask.html';
+  if (urlPath === '/agents/ops') urlPath = '/agents.html';
   if (urlPath === '/context') urlPath = '/context.html';
   if (urlPath === '/cockpit') urlPath = '/cockpit.html';
   if (urlPath === '/onboarding' || urlPath === '/welcome') urlPath = '/onboarding.html';
@@ -873,6 +883,35 @@ async function startDispatch(payload, ctx = {}) {
       readOnly: false,
     };
   }
+  // The request kind (request-kinds.js). A follow-up keeps its thread's kind;
+  // only approving a plan turns a `plan` thread into a `change`.
+  const parentRun = followUp
+    ? (readRuns(RUNS_FILE, 5000).runs || []).find((r) => r.id === followUp.parent) || {}
+    : null;
+  const approvePlan = Boolean(followUp && payload.approvePlan === true && parentRun.kind === 'plan');
+  if (payload.approvePlan === true && !approvePlan) {
+    return { status: 400, body: { ok: false, error: 'only a finished plan can be approved' } };
+  }
+  const kind = requestKinds.resolveKind({
+    requested: payload.kind,
+    parentKind: parentRun ? parentRun.kind : null,
+    approvePlan,
+    followUp: Boolean(followUp),
+  });
+  // A new change starts as a free plan by the local agent; the helper the
+  // person picked is kept (`helper`) and does the approved change.
+  let helper = null;
+  if (!followUp && kind === 'plan') {
+    helper = payload.agent;
+    payload = { ...payload, agent: 'hermes' };
+  } else if (approvePlan) {
+    helper = parentRun.helper || 'hermes';
+    payload = { ...payload, agent: helper };
+  } else if (parentRun && parentRun.helper) {
+    helper = parentRun.helper;
+  }
+  // Another kind or agent than the parent: its session cannot be resumed.
+  if (followUp && (approvePlan || payload.agent !== followUp.agent)) followUp = { ...followUp, session: null };
   const { repo, branch, task } = payload;
   // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
   // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
@@ -895,7 +934,8 @@ async function startDispatch(payload, ctx = {}) {
   if (typeof repo !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(repo)) {
     return { status: 400, body: { ok: false, error: 'repo must be a plain directory name' } };
   }
-  const repoPath = resolveRepoPath(repo);
+  // P0.6: on the Drisyon portal only repos an admin added there may run.
+  const repoPath = IS_DRISYON_PORTAL ? repoRegistry.resolve(repo) : resolveRepoPath(repo);
   if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) {
     return { status: 400, body: { ok: false, error: `not a known repo: ${repo}` } };
   }
@@ -920,16 +960,17 @@ async function startDispatch(payload, ctx = {}) {
       body: { ok: false, error: `level is one of: ${approvalLevels.LEVELS.join(', ')}` },
     };
   }
-  const parentLevel = followUp
-    ? ((readRuns(RUNS_FILE, 5000).runs || []).find((r) => r.id === followUp.parent) || {}).level ||
-      'auto'
-    : null;
-  const level = approvalLevels.effectiveLevel({
-    requested: payload.level,
-    readOnly,
-    parentLevel,
-    fallback: process.env.DISPATCH_DEFAULT_LEVEL || 'auto',
-  });
+  // A plan's `review` level must not cap the change it approves.
+  const parentLevel = followUp && !approvePlan ? parentRun.level || 'auto' : null;
+  // Read-only kinds always run at `review` (claude: read tools only).
+  const level = requestKinds.isReadOnlyKind(kind)
+    ? 'review'
+    : approvalLevels.effectiveLevel({
+        requested: payload.level,
+        readOnly,
+        parentLevel,
+        fallback: process.env.DISPATCH_DEFAULT_LEVEL || 'auto',
+      });
   const reviewBase =
     readOnly &&
     typeof payload.reviewBase === 'string' &&
@@ -962,6 +1003,8 @@ async function startDispatch(payload, ctx = {}) {
       ...(followUp ? { resumeSession: followUp.session, parentRun: followUp.parent } : {}),
       canAsk: payload.canAsk === true && !readOnly,
       by: ctx.by || null,
+      kind,
+      helper,
     });
     return {
       status: 202,
@@ -1009,9 +1052,20 @@ const READ_ONLY_AGENTS = new Set(['claude', 'noop']);
 // The cap: an admin's choice on the Agents page (logs/dispatch-settings.json)
 // else DISPATCH_DAILY_PAID_RUNS.
 const dispatchSettings = require('./dispatch-settings').createDispatchSettings({
-  file: path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'),
+  file: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'dispatch-settings.json'), PORTAL),
   envCap: parseCap(process.env.DISPATCH_DAILY_PAID_RUNS),
 });
+// What teammates' runs may do (teammate-mode.js): an admin's choice on the
+// Agents page (logs/teammate-mode.json), else TEAMMATE_RUN_MODE.
+const teammateMode = require('./teammate-mode');
+const teammateModeSetting = teammateMode.createTeammateModeSetting({
+  file: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'teammate-mode.json'), PORTAL),
+  envMode: process.env.TEAMMATE_RUN_MODE,
+});
+const isAdminAuthor = (by) => {
+  const author = identity.runAuthor(by);
+  return identity.isAdminUser({ local: author === 'local operator', user: author, adminUsers: ADMIN_USERS });
+};
 let pendingPaidRuns = [];
 
 // Admin = someone at this Mac (local request, no tunnel) or a signed-in user
@@ -1088,9 +1142,11 @@ const specialistRecommender = require('./specialist-recommend').createRecommende
 // Repos agents may work on: built-ins (listAvailableRepos) plus local folders
 // and clones an admin added on the Agents page (logs/repos.json).
 const repoRegistry = require('./repo-registry').createRepoRegistry({
-  file: path.join(DASHBOARD_DIR, 'logs', 'repos.json'),
+  file: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'repos.json'), PORTAL),
   cloneDir: process.env.AGENT_REPOS_DIR || path.join(require('os').homedir(), 'agent-repos'),
-  builtins: () => listAvailableRepos(),
+  // P0.6: the Drisyon portal offers only repos an admin added there, never
+  // this Mac's own folders.
+  builtins: () => (IS_DRISYON_PORTAL ? [] : listAvailableRepos()),
 });
 // Approval levels and cards (OMB-1..4): what a run may do unasked, and the
 // Allow/Deny cards for the rest. approval-levels.js, approvals.js, approvals-api.js.
@@ -1116,15 +1172,32 @@ const agentsApi = require('./agents-api').createAgentsApi({
       pending: pendingPaidRuns,
       cap: dispatchSettings.cap(),
     }),
-  repos: pollerRepos(),
+  // The issue poller dispatches to the team portal only.
+  repos: IS_DRISYON_PORTAL ? [] : pollerRepos(),
   settings: dispatchSettings,
+  teammateModeSetting,
+  // Ask page: answer / document / change guess by a local model
+  // (REQUEST_KIND_MODEL, default the suggester's model; `off` = keywords only).
+  classifyKind: requestKinds.createKindClassifier({
+    ask:
+      (process.env.REQUEST_KIND_MODEL || SUGGEST_MODEL) === 'off'
+        ? null
+        : requestKinds.ollamaKindAsker({
+            host: OLLAMA_HOST,
+            port: OLLAMA_PORT,
+            model: process.env.REQUEST_KIND_MODEL || SUGGEST_MODEL,
+            record: (call) => recordAiCall(AI_CALLS_FILE, call),
+          }),
+  }),
   specialists,
   suggester: specialistSuggester,
   recommender: specialistRecommender,
   repoRegistry,
+  // "Files changed" on the Ask page: diffs from a run's own worktree.
+  runChanges: require('./run-changes').createRunChanges(),
   dispatchRun: startDispatch,
   canFollowUp: (run) => followUpStatus(run).ok,
-  queueFile: path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'),
+  queueFile: portalScope.portalFile(path.join(DASHBOARD_DIR, 'logs', 'agent-queue.json'), PORTAL),
   runControl: require('./run-control').createRunControl({
     runsDir: path.dirname(RUNS_FILE),
     loadRuns: () => readRuns(RUNS_FILE, 5000).runs || [],
@@ -1138,13 +1211,11 @@ const agentsApi = require('./agents-api').createAgentsApi({
     : null,
 });
 
-// Queued messages go out when their agent finishes (agent-queue.js). Off on
-// the Drisyon portal, which does not serve the Agents page.
-if (PORT != 8788) {
-  setInterval(() => {
-    agentsApi.tickQueue().catch((err) => console.error('queue tick failed:', err.message));
-  }, 5000).unref();
-}
+// Queued messages go out when their agent finishes (agent-queue.js). Each
+// portal ticks its own queue file over its own runs (P0.6).
+setInterval(() => {
+  agentsApi.tickQueue().catch((err) => console.error('queue tick failed:', err.message));
+}, 5000).unref();
 
 function spawnAgentDispatch({
   agent,
@@ -1161,7 +1232,17 @@ function spawnAgentDispatch({
   reviewBase = null,
   canAsk = false,
   by = null,
+  kind = null,
+  helper = null,
 }) {
+  // Every way to start an agent passes here: apply the teammate mode
+  // (teammate-mode.js) to anyone who is not an admin.
+  const gate = teammateMode.applyTeammateMode({ mode: teammateModeSetting.get(), admin: isAdminAuthor(by), agent });
+  if (!gate.ok) return Promise.reject(Object.assign(new Error(gate.error), { status: gate.status }));
+  if (gate.agent !== agent) {
+    agent = gate.agent;
+    resumeSession = null; // another agent's session cannot be resumed
+  }
   const safeBranch = branch && /^[a-zA-Z0-9._/-]+$/.test(branch) ? branch : `agent/${Date.now()}`;
   const effectiveRunId =
     runId ||
@@ -1197,7 +1278,7 @@ function spawnAgentDispatch({
       // Order: task (its first 160 chars name the run), specialist role, memories.
       fs.writeFileSync(
         promptFile,
-        buildDispatchPrompt(task + specialists.roleBlock(specialist), memories, {
+        buildDispatchPrompt(task + requestKinds.kindBlock(kind) + specialists.roleBlock(specialist), memories, {
           precompactPreserver,
           runId: effectiveRunId,
           directionLayer,
@@ -1254,6 +1335,27 @@ function spawnAgentDispatch({
       // Who asked and on which portal: recorded on the run's start line.
       dispatchEnv.AGENT_BY = identity.runAuthor(by);
       dispatchEnv.AGENT_PORTAL = PORTAL;
+      // Agents never get messaging-bot credentials: with DISCORD_BOT_TOKEN in
+      // the env, every Hermes run started a Discord gateway (and a fresh
+      // read-only home failed with "Gateway draining: not_ready").
+      for (const k of Object.keys(dispatchEnv)) {
+        if (/^(DISCORD|TELEGRAM|SLACK|WHATSAPP|SIGNAL|MATRIX)_/.test(k)) delete dispatchEnv[k];
+      }
+      dispatchEnv.AGENT_RUN_MODE = gate.mode;
+      // Read-only kinds (answer, document, plan) run Hermes read-only for
+      // everyone; otherwise the teammate mode decides.
+      const hermesMode = requestKinds.isReadOnlyKind(kind) ? 'readonly' : gate.hermesMode;
+      if (hermesMode) {
+        // Teammates' and read-only Hermes runs are always boxed, whatever .env says.
+        dispatchEnv.AGENT_HERMES_SANDBOX = 'on';
+        dispatchEnv.AGENT_HERMES_MODE = hermesMode;
+      } else {
+        delete dispatchEnv.AGENT_HERMES_MODE;
+      }
+      if (kind) dispatchEnv.AGENT_KIND = kind;
+      else delete dispatchEnv.AGENT_KIND;
+      if (helper) dispatchEnv.AGENT_HELPER = helper;
+      else delete dispatchEnv.AGENT_HELPER;
       // Approval level -> claude's flags. Levels that ask get a run token for
       // the approval helper; a review never asks (approval-levels.js).
       const runLevel = level || (readOnly ? 'review' : 'auto');
@@ -1547,184 +1649,9 @@ function handleRequest(req, res) {
       .catch(() => sendJson(res, 500, { ok: false, error: 'could not build the context view' }));
     return;
   }
-  if (req.url.startsWith('/api/agents/repo/preview') && req.method === 'GET') {
-    const parsedUrl = new URL(req.url, 'http://localhost');
-    const repoName = parsedUrl.searchParams.get('repo') || path.basename(DASHBOARD_DIR);
-    const repoPath = resolveRepoPath(repoName);
-    if (!repoPath || !fs.existsSync(repoPath)) {
-      return sendJson(res, 404, { ok: false, error: `repository '${repoName}' not found on disk` });
-    }
-
-    let files = [];
-    try {
-      files = fs
-        .readdirSync(repoPath)
-        .filter((f) => !f.startsWith('.') && f !== 'node_modules' && f !== '.git')
-        .slice(0, 30);
-    } catch (_) {}
-
-    let readme = '';
-    try {
-      const readmePath = path.join(repoPath, 'README.md');
-      if (fs.existsSync(readmePath)) {
-        readme = fs.readFileSync(readmePath, 'utf8').slice(0, 4000);
-      }
-    } catch (_) {}
-
-    let latestRun = null;
-    try {
-      const runs = (readRuns(RUNS_FILE, 50).runs || []).filter((r) => r.repo === repoName);
-      latestRun = runs[0] || null;
-    } catch (_) {}
-
-    let stack = 'General Repository';
-    const entryPoints = [];
-    try {
-      const allFiles = fs.readdirSync(repoPath);
-      const isPython = allFiles.some(
-        (f) => f.endsWith('.py') || f === 'requirements.txt' || f === 'pyproject.toml'
-      );
-      const isNode = allFiles.includes('package.json');
-      const isRust = allFiles.includes('Cargo.toml');
-      const isGo = allFiles.includes('go.mod');
-
-      if (isPython) {
-        if (
-          readme.toLowerCase().includes('fastapi') ||
-          fs.existsSync(path.join(repoPath, 'app.py'))
-        ) {
-          stack = 'FastAPI / Python (Async)';
-        } else if (readme.toLowerCase().includes('flask')) {
-          stack = 'Flask / Python';
-        } else {
-          stack = 'Python System';
-        }
-      } else if (isNode) {
-        if (readme.toLowerCase().includes('next') || allFiles.includes('next.config.js')) {
-          stack = 'Next.js / React';
-        } else if (allFiles.includes('server.js')) {
-          stack = 'Node.js Backend';
-        } else {
-          stack = 'Node.js Environment';
-        }
-      } else if (isRust) {
-        stack = 'Rust Engine';
-      } else if (isGo) {
-        stack = 'Go Microservice';
-      }
-
-      [
-        'app.py',
-        'main.py',
-        'server.js',
-        'index.js',
-        'src/index.js',
-        'src/main.py',
-        'src/dashboard.py',
-      ].forEach((ep) => {
-        if (fs.existsSync(path.join(repoPath, ep))) entryPoints.push(ep);
-      });
-    } catch (_) {}
-
-    return sendJson(res, 200, {
-      ok: true,
-      repo: repoName,
-      path: repoPath,
-      files,
-      readme,
-      latestRun,
-      architecture: {
-        stack,
-        entryPoints,
-      },
-    });
-  }
-  if (req.url.startsWith('/api/agents/repo/file') && req.method === 'GET') {
-    const parsedUrl = new URL(req.url, 'http://localhost');
-    const repoName = parsedUrl.searchParams.get('repo') || path.basename(DASHBOARD_DIR);
-    const filePath = parsedUrl.searchParams.get('file') || '';
-    if (!filePath) {
-      return sendJson(res, 400, { ok: false, error: 'file parameter is required' });
-    }
-    const repoPath = resolveRepoPath(repoName);
-    if (!repoPath || !fs.existsSync(repoPath)) {
-      return sendJson(res, 404, { ok: false, error: `repository '${repoName}' not found on disk` });
-    }
-
-    const targetPath = path.resolve(repoPath, filePath);
-    const rel = path.relative(repoPath, targetPath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      return sendJson(res, 403, { ok: false, error: 'path traversal forbidden' });
-    }
-
-    const segments = rel.split(path.sep);
-    if (
-      segments.some((s) => s.startsWith('.env') || s === '.git' || s === '.ssh' || s === 'id_rsa')
-    ) {
-      return sendJson(res, 403, { ok: false, error: 'access to sensitive files is restricted' });
-    }
-
-    if (!fs.existsSync(targetPath)) {
-      return sendJson(res, 404, { ok: false, error: `file '${filePath}' not found` });
-    }
-
-    try {
-      const stat = fs.statSync(targetPath);
-      if (stat.isDirectory()) {
-        const items = fs
-          .readdirSync(targetPath)
-          .filter((f) => !f.startsWith('.') && f !== 'node_modules')
-          .slice(0, 50)
-          .map((f) => {
-            let isDir = false;
-            try {
-              isDir = fs.statSync(path.join(targetPath, f)).isDirectory();
-            } catch (_) {}
-            return { name: f, isDirectory: isDir };
-          });
-        return sendJson(res, 200, {
-          ok: true,
-          isDirectory: true,
-          file: filePath,
-          repo: repoName,
-          items,
-        });
-      }
-
-      const MAX_PREVIEW_BYTES = 512 * 1024;
-      const fd = fs.openSync(targetPath, 'r');
-      const buffer = Buffer.alloc(Math.min(stat.size, MAX_PREVIEW_BYTES));
-      fs.readSync(fd, buffer, 0, buffer.length, 0);
-      fs.closeSync(fd);
-
-      const isBinary = buffer.slice(0, 1024).includes(0);
-      if (isBinary) {
-        return sendJson(res, 200, {
-          ok: true,
-          repo: repoName,
-          file: filePath,
-          isBinary: true,
-          size: stat.size,
-          ext: path.extname(targetPath),
-        });
-      }
-
-      const text = buffer.toString('utf8');
-      return sendJson(res, 200, {
-        ok: true,
-        repo: repoName,
-        file: filePath,
-        isBinary: false,
-        content: text,
-        lines: text.split('\n').length,
-        size: stat.size,
-        ext: path.extname(targetPath),
-        truncated: stat.size > MAX_PREVIEW_BYTES,
-      });
-    } catch (err) {
-      return sendJson(res, 500, { ok: false, error: `failed to read file: ${err.message}` });
-    }
-  }
+  // /api/agents/repo/preview and /repo/file (the Ops console's Preview tab)
+  // were removed 2026-11-23: they read files from any folder for any
+  // signed-in person (`repo` was not validated).
   if (req.url === '/api/agents/run/push-pr' && req.method === 'POST') {
     if (!isSameSiteJson(req)) {
       return sendJson(res, 403, { ok: false, error: 'cross-site request refused' });

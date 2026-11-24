@@ -5,7 +5,8 @@
 // tunnel) are unaffected. Set ACCESS_AUD for the portal to lift the block.
 
 const AGENT_PATHS = [
-  /^\/agents(\.html)?$/,
+  /^\/agents(\.html|\/.*)?$/,
+  /^\/ask\.html$/,
   /^\/api\/agents\//,
   /^\/api\/dispatch\//,
   /^\/api\/team\/dispatch/,

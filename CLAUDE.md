@@ -40,8 +40,21 @@ worktree is kept for inspection).
   (`followup.js` resumes `local-...` sessions with hermes). Hermes reports its
   session id only at the end, so a redirect of a stopped hermes run starts a
   fresh hermes run on the same branch instead of resuming. Approval levels do
-  not apply to hermes: it runs commands with its own guardrails
-  (`terminal.backend: local`); the secret scan still gates every push.
+  not apply to hermes; instead every dispatched hermes run is boxed (#46): a
+  Docker container that sees only its worktree, config from
+  `orchestration/hermes-agent-config.yaml` (`~/.hermes` is the personal
+  setup, not used by dispatch), changes committed on the host with hooks off;
+  the secret scan still gates every push.
+- **Teammate run mode** (`teammate-mode.js`, 2026-11-23): what runs started
+  by non-admins may do, switched by an admin in the /agents header (saved to
+  `logs/teammate-mode.json`, default `TEAMMATE_RUN_MODE`, else `sandbox`):
+  `sandbox` (boxed hermes as above; claude keeps approval cards), `readonly`
+  (hermes only, boxed with no network and file tools, every change discarded;
+  `AGENT_HERMES_MODE=readonly`, own home `~/.hermes-agents-readonly`),
+  `claude` (every run becomes claude, risky steps need an admin's Allow) or
+  `off`. Enforced in `spawnAgentDispatch`, the one path every run takes;
+  teammates may use only hermes/claude/auto/noop, and may queue GitHub issues
+  only in `sandbox` mode. Runs record `mode`. Admins are never restricted.
   Reviews default to `off` when the default agent is hermes (they need
   claude's read-only lock, which is paid).
 - Only issues opened by `POLLER_AUTHORS` (default: the repo owner) run.
@@ -185,8 +198,65 @@ sends (top-level html/css/js/images/fonts, `docs/*.md`); `.env*`, `logs/`,
 json state and server sources are 404. A new asset type or folder needs a
 line there.
 
-**Agents page:** `http://127.0.0.1:8787/agents` (🤖 Agents on the dashboard
-header). A form that queues a task (opens a GitHub issue labelled
+**Ask page** (2026-11-23): `/agents` (🤖 Agents on the dashboard header) is
+the simple view for everyone (`ask.html`, `ask.js`, `ask.css`): a list of
+*my* requests (`GET /api/agents/mine`: threads the signed-in person started,
+grouped request + follow-ups, plain stage from `task-feed.js`; shaping in
+`agents-mine.js`), a new-request form (project, starters, free/expert helper
+per the teammate mode) and the conversation for one request (answer, live
+steps, questions, Stop, reply = follow-up or queued message). Admins get an
+"Ops console" link.
+Request kinds (`request-kinds.js`, runs record `kind` and `helper`): the page
+guesses answer / document / change as you type (`GET
+/api/agents/request-kind`, keywords + local model `REQUEST_KIND_MODEL`,
+default the suggester's, `off` = keywords). Answer, document and plan run
+read-only for everyone (Hermes `AGENT_HERMES_MODE=readonly`, Claude at the
+`review` level); a document gets Copy / Download .md. A change first runs as
+a free read-only `plan` by Hermes; "Go ahead" (`POST
+/api/agents/plan/approve`, latest finished plan only) starts the `change` run
+on the same branch with the picked helper, the request and the plan in its
+task. Follow-ups keep their thread's kind; to act on an answer or document,
+"Make these changes" (`POST /api/agents/make-changes` {runId, agent, focus})
+starts a new Change request (plan first) carrying that reply. Long
+conversations: `ask-nav.js` folds all but the last two turns, clips long
+replies behind "Show all", and adds a sticky toolbar (New chat, Collapse /
+Expand all, Go to turn, Top, Latest; Alt+N / Alt+Up / Alt+Down) and floating
+top / latest buttons. **Files changed** (`ask-files.js`, `run-changes.js`,
+`GET /api/agents/changes?id=` and `/changes/file?id=&path=`, owner or admin):
+under the latest run that may change files, the files changed on its
+worktree since the merge-base with the default branch (committed, "not saved
+yet" and new files, +/- counts, commits) and each file's diff on click (400
+lines max). Reads only the worktree derived from repo + branch
+(`<repo>--<branch with - for />`); a file's diff only for a listed path;
+secret-looking files are listed by name, never shown. The Ask page sidebar
+scrolls on its own (sticky, 100vh) so the page is as tall as the conversation. Agent runs never inherit
+messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
+`DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
+
+**Per-portal runs (P0.6, 2026-11-23, `portal-scope.js`):** both dashboards
+share one run log, but `server.js`'s `readRuns` returns only this portal's
+runs (`portal` on the start line; none = older than #49 = team). So lists,
+threads, logs, stop, follow-ups, the paid cap and `/api/costs` are per portal,
+and the Supabase run sync alone reads every run. Per-portal state files: the
+team keeps `logs/<name>.json`; Drisyon uses `logs/<name>.drisyon.json` for
+dispatch-settings (its own cap, else its `DISPATCH_DAILY_PAID_RUNS`),
+teammate-mode, repos and agent-queue. Drisyon offers no built-in repos and no
+issue queue: only repos an admin adds on its Ops console
+(`127.0.0.1:8788/agents/ops`) can run there.
+
+**Who sees a request (2026-11-23, `agents-mine.js` `mayOpen`):** a run
+belongs to whoever started its thread (the root run's `by`; none = "local
+operator"). Thread, log, follow-up, stop, redirect, plan approval and the
+message queue answer 404 for anyone else's run unless the caller is an admin,
+and the Ops overview lists only the caller's runs for non-admins. On a
+password-only portal everyone shares one name, so they share threads too.
+The Ops console's Preview tab and its `/api/agents/repo/preview` and
+`/api/agents/repo/file` endpoints were removed: `repo` was unvalidated
+(`repo=../../..` read files under home) and they had no admin check.
+
+**Agents page / Ops console:** `http://127.0.0.1:8787/agents/ops` (the full
+page). Styles in `agents.css` + `agents-cockpit.css`; one plain-English voice
+(the Friendly/Developer toggle was removed 2026-11-23). A form that queues a task (opens a GitHub issue labelled
 `agent:ready` + `agent:<name>`), the issue queue as four columns (queued,
 working, needs review, failed; cached 30 s), running agents with a live log
 viewer, and recent runs. API in `agents-api.js` (tests: `agents-api.test.js`):
