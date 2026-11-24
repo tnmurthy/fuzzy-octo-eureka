@@ -256,7 +256,12 @@ script reruns the same task with Hermes on the same branch, always boxed and
 read-only at the `review` level; the end line records `fallback="hermes"`, the
 claude error is kept as `<run>.claude-limit.json` and the Ask page says "Free
 helper (the Expert helper was out of usage)". Never for PR reviews or after
-`auto` already tried locally; `CLAUDE_LIMIT_FALLBACK=off` turns it off. Agent runs never inherit
+`auto` already tried locally; `CLAUDE_LIMIT_FALLBACK=off` turns it off. **Switch helper** (2026-11-24): the reply box has Helper: Expert / Free.
+A switched reply sends `helper` (`/api/agents/queue`, kept on queued items;
+`/api/agents/followup` too) -> `switchTo` -> `followup.js` `switchedHelper`:
+the new helper starts fresh on the same branch with the recap, and later
+replies stay with it. Teammate mode still applies (the picker is hidden in
+`readonly`, `claude` and `off`). Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
 

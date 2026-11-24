@@ -151,19 +151,23 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
    * before it reported one) gets a fresh run of the same agent on its branch.
    * Returns dispatchRun's { status, body }.
    */
-  async function continueWith(run, task0, by = null) {
+  async function continueWith(run, task0, by = null, helper = null) {
     const ctx = { by };
     const task = await withRecap(run.id, task0);
-    let r = await dispatchRun({ followUpOf: run.id, canAsk: true, task }, ctx);
+    const switchTo = helperOf(helper);
+    let r = await dispatchRun({ followUpOf: run.id, canAsk: true, task, ...(switchTo ? { switchTo } : {}) }, ctx);
     if (r.status === 400 && /no session/.test(String(r.body && r.body.error)) && run.agent && run.branch && run.repo) {
       r = await dispatchRun({
-        agent: run.agent, repo: path.basename(String(run.repo).replace(/[\\/]+$/, '')), branch: run.branch, canAsk: true,
+        agent: switchTo || run.agent, repo: path.basename(String(run.repo).replace(/[\\/]+$/, '')), branch: run.branch, canAsk: true,
         task: `${task}\n\n(Your earlier session on this branch could not be resumed; read the code and git log to see where it got to.)`,
       }, ctx);
       r = { ...r, body: { ...r.body, fresh: true } };
     }
     return r;
   }
+
+  /** The helper a person may switch a conversation to: claude (Expert) or hermes (Free). */
+  const helperOf = (h) => (h === 'claude' || h === 'hermes' ? h : null);
 
   /** A follow-up's task plus where the request stands (run-recap.js), framed as data. */
   async function withRecap(runId, task) {
@@ -176,7 +180,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
     file: queueFile,
     loadRuns: () => loadRuns(),
     continueRun: async (run, text, item) => {
-      const r = await continueWith(run, `Follow-up: ${text}`, item && item.by);
+      const r = await continueWith(run, `Follow-up: ${text}`, item && item.by, item && item.helper);
       return r.status < 300 ? { ok: true, runId: r.body.runId } : { ok: false, error: (r.body && r.body.error) || `HTTP ${r.status}` };
     },
     now,
@@ -184,13 +188,13 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
   }) : null;
 
   /** Stop a running agent, wait for its end line, then continue it with `message`. */
-  async function redirectRun(runId, message, by = null) {
+  async function redirectRun(runId, message, by = null, helper = null) {
     const st = runControl.stop(runId);
     if (!st.ok) return { status: st.status || 409, body: { ok: false, error: st.error } };
     const ended = await runControl.waitForEnd(runId);
     if (!ended) return { status: 504, body: { ok: false, error: 'the agent was told to stop but has not finished yet; try again in a moment' } };
     const task = `Follow-up: the person stopped you mid-task and changed direction. Check git status for uncommitted work first. New instruction: ${message}`;
-    const r = await continueWith({ ...ended, id: runId }, task, by);
+    const r = await continueWith({ ...ended, id: runId }, task, by, helper);
     return { status: r.status, body: { ...r.body, stopped: runId } };
   }
 
@@ -345,6 +349,7 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
           // The level is capped at the parent run's by startDispatch (approval-levels.js).
           const r = await dispatchRun({
             followUpOf: String(b.runId || ''), task: await withRecap(String(b.runId || ''), `Follow-up: ${message}`), canAsk: true, ...(b.level ? { level: String(b.level) } : {}),
+            ...(helperOf(b.helper) ? { switchTo: b.helper } : {}),
           }, { by: actorOf(req) });
           return sendJson(res, r.status, r.body);
         })
@@ -473,10 +478,10 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
             if (latest.status !== 'running' && !(agentQueue.view(t.threadId).items.length)) {
               if (!text) return sendJson(res, 400, { ok: false, error: 'write a message' });
               if (text.length > MAX_BODY) return sendJson(res, 400, { ok: false, error: 'message is too long' });
-              const r = await continueWith(latest, `Follow-up: ${text}`, actorOf(req));
+              const r = await continueWith(latest, `Follow-up: ${text}`, actorOf(req), b.helper);
               return sendJson(res, r.status, { ...r.body, sent: r.status < 300 });
             }
-            const r = agentQueue.add({ runId: latest.id, text, by: actorOf(req) });
+            const r = agentQueue.add({ runId: latest.id, text, by: actorOf(req), helper: helperOf(b.helper) });
             return sendJson(res, r.ok ? 201 : r.status, r.ok ? { ok: true, queued: true, threadId: r.threadId, item: r.item } : { ok: false, error: r.error });
           }
           if (url.pathname === '/api/agents/queue/update') {
@@ -492,8 +497,8 @@ function createAgentsApi({ runsFile, stateFile, readRuns, capNow, repos, github,
             if (latest.status !== 'running') return sendJson(res, 409, { ok: false, error: 'the agent is not working; the message will be sent on the next check' });
             const item = agentQueue.take({ threadId: t.threadId, itemId: String(b.itemId || '') });
             if (!item) return sendJson(res, 404, { ok: false, error: 'queued message not found' });
-            const r = await redirectRun(latest.id, item.text, item.by || actorOf(req));
-            if (r.status >= 300) agentQueue.add({ runId: latest.id, text: item.text, by: item.by }); // put it back
+            const r = await redirectRun(latest.id, item.text, item.by || actorOf(req), item.helper);
+            if (r.status >= 300) agentQueue.add({ runId: latest.id, text: item.text, by: item.by, helper: item.helper }); // put it back
             return sendJson(res, r.status, r.body);
           }
           return sendJson(res, 404, { ok: false, error: 'unknown queue action' });

@@ -74,7 +74,7 @@ function createAgentQueue({ file, loadRuns, continueRun, now = Date.now, log = (
     return { threadId: r.root, items: t.items.map((i) => ({ ...i })), inflight: t.inflight };
   }
 
-  function add({ runId, text, by = 'unknown' }) {
+  function add({ runId, text, by = 'unknown', helper = null }) {
     const msg = String(text || '').trim();
     if (!msg) return { ok: false, status: 400, error: 'write a message' };
     if (msg.length > MAX_TEXT) return { ok: false, status: 400, error: 'message is too long' };
@@ -82,7 +82,7 @@ function createAgentQueue({ file, loadRuns, continueRun, now = Date.now, log = (
     if (!r) return { ok: false, status: 404, error: 'run not found' };
     const t = thread(r.root);
     if (t.items.length >= MAX_PER_THREAD) return { ok: false, status: 409, error: `at most ${MAX_PER_THREAD} queued messages per task` };
-    const item = { id: crypto.randomBytes(6).toString('hex'), text: msg, by, createdAt: new Date(now()).toISOString(), error: null };
+    const item = { id: crypto.randomBytes(6).toString('hex'), text: msg, by, createdAt: new Date(now()).toISOString(), error: null, ...(helper ? { helper } : {}) };
     t.items.push(item);
     save();
     return { ok: true, threadId: r.root, item };

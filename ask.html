@@ -105,6 +105,12 @@
           <textarea id="reply" class="ask-field" maxlength="8000" rows="2"
             placeholder="Reply, answer a question, or ask for something more…"></textarea>
           <div class="ask-reply-actions">
+            <label class="ask-helper-pick" id="reply-helper-box" hidden>Helper
+              <select id="reply-helper" class="ask-field" title="Who answers your reply">
+                <option value="claude">Expert</option>
+                <option value="hermes">Free (local)</option>
+              </select>
+            </label>
             <button type="button" class="ask-stop" id="stop-btn" hidden>■ Stop</button>
             <button type="submit" class="ask-send" id="reply-send">Send</button>
           </div>
