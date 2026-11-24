@@ -1786,14 +1786,34 @@ function handleRequest(req, res) {
               });
             }
 
-            return sendJson(res, 200, {
-              ok: true,
-              runId: run.id,
-              branch: run.branch,
-              remote,
-              prUrl,
-              stdout: String(stdout || '').trim(),
-            });
+            // Open the PR itself (pr-open.js, gh on this Mac); without gh or
+            // access the person gets the compare page as before.
+            const { rootOf } = require('./agent-queue');
+            const rootRun = runs.find((r) => r.id === rootOf(runs, run.id)) || run;
+            const result = require('./followup').resultOf(run);
+            const prOpen = require('./pr-open');
+            prOpen
+              .openPr({
+                cwd: pushDir,
+                branch: run.branch,
+                title: prOpen.prTitle(rootRun.task),
+                body: prOpen.prBody({ request: rootRun.task, summary: result && result.result, branch: run.branch }),
+              })
+              .catch((err) => ({ error: err.message }))
+              .then((pr) =>
+                sendJson(res, 200, {
+                  ok: true,
+                  runId: run.id,
+                  branch: run.branch,
+                  remote,
+                  prUrl: pr.url || prUrl,
+                  prOpened: Boolean(pr.url),
+                  prExisting: Boolean(pr.existing),
+                  prNote: pr.url ? null : `Pushed, but the pull request was not opened automatically (${pr.error}). Finish it on GitHub.`,
+                  stdout: String(stdout || '').trim(),
+                })
+              );
+            return undefined;
           }
         );
       })

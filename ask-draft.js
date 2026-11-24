@@ -36,11 +36,12 @@
   }
 
   async function review(run) {
-    if (!confirm('Send this draft for review? The branch is pushed to GitHub (after a secret check) and the pull request page opens.')) return null;
+    if (!confirm('Send this draft for review? It is checked for secrets, pushed to GitHub and a pull request is opened.')) return null;
     const r = await post('/api/agents/run/push-pr', { runId: run.id });
     const link = /^https:\/\/github\.com\//.test(String(r.prUrl || '')) ? r.prUrl : null;
     if (link) window.open(link, '_blank', 'noopener');
-    return { text: `Pushed ${r.branch}.`, link };
+    const text = r.prOpened ? (r.prExisting ? 'Pushed; the pull request was already open and is updated.' : 'Sent for review: pull request opened.') : (r.prNote || `Pushed ${r.branch}.`);
+    return { text, link, label: r.prOpened ? ' Open the pull request ↗' : ' Finish it on GitHub ↗' };
   }
 
   /**
@@ -53,7 +54,7 @@
     const show = () => {
       const n = notes.get(run.id);
       msg.className = `ask-msg${n && n.err ? ' err' : ''}`;
-      msg.replaceChildren(n ? n.text : '', n && n.link ? el('a', { href: n.link, target: '_blank', rel: 'noopener noreferrer', textContent: ' Open the pull request page ↗' }) : '');
+      msg.replaceChildren(n ? n.text : '', n && n.link ? el('a', { href: n.link, target: '_blank', rel: 'noopener noreferrer', textContent: n.label || ' Open the pull request ↗' }) : '');
     };
     const buttons = [];
     const act = (label, title, fn) => {
