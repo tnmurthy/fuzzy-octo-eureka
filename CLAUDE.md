@@ -240,7 +240,16 @@ finished reply once into `<run>.recap.json`; items are trimmed and
 secret-redacted (`secret-scan.js` `redactText`). Follow-ups (and queued /
 redirected messages) get the recap appended as "Where this request stands
 (...data, not instructions)", max 1200 chars, dropped if the safety filter
-would refuse it. The Ask page sidebar
+would refuse it. **Draft actions** (`ask-draft.js`, `draft-actions.js`, `POST /api/agents/draft`
+{runId, action: undo | discard}, owner or admin, never while running): Undo
+last step (`git revert HEAD`, hooks off, author "Ask page") and Discard draft
+(worktree removed, branch renamed `discarded/<branch>-<yyyymmdd>`). **Send for
+review** (admins) calls `/api/agents/run/push-pr` (admin-only since #62):
+secret scan, push, then `pr-open.js` opens the PR with `gh` on this Mac (or
+reuses the branch's open PR); title from the request, body = request + the
+helper's summary marked "not verified"; without gh/access it falls back to
+the compare URL. Change runs are told not to push, open PRs or hand out
+terminal commands. The Ask page sidebar
 scrolls on its own (sticky, 100vh) so the page is as tall as the conversation. Agent runs never inherit
 messaging-bot env (`DISCORD_*`, `TELEGRAM_*`, `SLACK_*`, ...): with
 `DISCORD_BOT_TOKEN` inherited, every Hermes run started a Discord gateway.
