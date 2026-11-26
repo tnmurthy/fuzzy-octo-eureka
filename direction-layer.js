@@ -240,7 +240,10 @@ function createDirectionLayer({ initialRules = [], ledgerDB = null } = {}) {
 
     if (!active.length) return '';
 
-    const lines = active.map((r) => `- [${r.id}] (${r.scope}): ${r.title} -> ${r.ruleText}`);
+    // One line per rule: line breaks flattened so a rule cannot fake a new
+    // prompt section (e.g. "Task:"); \s also matches Unicode line breaks.
+    const flat = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    const lines = active.map((r) => `- [${flat(r.id)}] (${flat(r.scope)}): ${flat(r.title).slice(0, 120)} -> ${flat(r.ruleText)}`);
     return `\n\n---\nDirection & Intent Constraints (Budgeted & Verified):\n${lines.join('\n')}\n`;
   }
 

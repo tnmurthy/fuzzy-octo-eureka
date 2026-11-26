@@ -77,6 +77,7 @@ const portalScope = require('./portal-scope');
 const readRuns = portalScope.scopedReader(readAllRuns, PORTAL);
 const { readOrigin, prUrlOf } = require('./repo-registry');
 const { isSameSiteJson } = require('./agents-api');
+const { promptWriteRefusal } = require('./prompt-write-guard');
 const { recordRunReflection } = require('./task-reflection');
 const { auditDiff } = require('./code-auditor');
 const { createCohortCandidates } = require('./cohort-candidates');
@@ -1931,6 +1932,8 @@ function handleRequest(req, res) {
     return;
   }
   if (req.url === '/api/agents/precompact/save' && req.method === 'POST') {
+    const refused = promptWriteRefusal({ admin: isAdmin(req), headers: req.headers });
+    if (refused) return sendJson(res, refused.status, { ok: false, error: refused.error });
     readJsonBody(req, 128 * 1024)
       .then((b) => {
         const runId = String(b.runId || '').trim();
@@ -2892,24 +2895,19 @@ function handleRequest(req, res) {
     }
 
     if (req.method === 'POST') {
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk;
-      });
-      req.on('end', () => {
-        try {
-          const payload = JSON.parse(body || '{}');
-          const rule = directionLayer.addRule(payload);
-          return sendJson(res, 201, { ok: true, rule });
-        } catch (err) {
-          return sendJson(res, 400, { ok: false, error: err.message });
-        }
-      });
+      const refused = promptWriteRefusal({ admin: isAdmin(req), headers: req.headers });
+      if (refused) return sendJson(res, refused.status, { ok: false, error: refused.error });
+      readJsonBody(req, 16 * 1024)
+        .then((payload) => sendJson(res, 201, { ok: true, rule: directionLayer.addRule(payload) }))
+        .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
       return;
     }
   }
 
   if (req.url.startsWith('/api/direction/rule/') && req.method === 'DELETE') {
+    if (!isAdmin(req) || !isSameSiteJson({ headers: { ...req.headers, 'content-type': 'application/json' } })) {
+      return sendJson(res, 403, { ok: false, error: 'admin only: direction rules go into every agent prompt' });
+    }
     const id = req.url.split('/')[4]?.split('?')[0];
     const success = directionLayer.deactivateRule(id);
     return sendJson(res, success ? 200 : 404, { ok: success });
@@ -3001,19 +2999,11 @@ function handleRequest(req, res) {
   }
 
   if (req.url.startsWith('/api/blackboard/post') && req.method === 'POST') {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk;
-    });
-    req.on('end', () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const fact = blackboard.postFact(payload);
-        return sendJson(res, 201, { ok: true, fact });
-      } catch (err) {
-        return sendJson(res, 400, { ok: false, error: err.message });
-      }
-    });
+    const refused = promptWriteRefusal({ admin: isAdmin(req), headers: req.headers });
+    if (refused) return sendJson(res, refused.status, { ok: false, error: refused.error });
+    readJsonBody(req, 16 * 1024)
+      .then((payload) => sendJson(res, 201, { ok: true, fact: blackboard.postFact(payload) }))
+      .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
     return;
   }
 
