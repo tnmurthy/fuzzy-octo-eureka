@@ -17,6 +17,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { evaluateTrajectory } = require('../trajectory-eval');
 
 const DISPATCH_SCRIPT = path.join(__dirname, '..', 'orchestration', 'agent-dispatch.sh');
 const OUTPUT_TAIL_CHARS = 2000;
@@ -77,16 +78,17 @@ function countToolSteps(logText) {
  * Turns, cost, tokens from the run's files. claude saves num_turns and
  * total_cost_usd; hermes saves tokens only, so its turns are its tool steps.
  */
-function readRunMetrics(runsDir, runId) {
+function readRunMetrics(runsDir, runId, worktree = '') {
   const claude = readJson(path.join(runsDir, `${runId}.claude.json`));
   const hermes = readJson(path.join(runsDir, `${runId}.hermes.json`));
   let logText = '';
   try { logText = fs.readFileSync(path.join(runsDir, `${runId}.log`), 'utf8'); } catch (_) { /* no log */ }
   const steps = countToolSteps(logText);
+  const trajectory = evaluateTrajectory(logText, { worktree });
   const turns = Number(claude && claude.num_turns) || steps || 1;
   const costUsd = Number(claude && claude.total_cost_usd) || 0;
   const tokens = (claude && claude.usage) || (hermes && hermes.tokens) || {};
-  return { turns, toolSteps: steps, costUsd, tokens, isError: Boolean((claude || hermes || {}).is_error) };
+  return { turns, toolSteps: steps, costUsd, tokens, isError: Boolean((claude || hermes || {}).is_error), trajectory };
 }
 
 /** Runs the dispatch script; resolves with its exit code (never rejects). */
@@ -151,7 +153,7 @@ async function runTask(task, o) {
   const wallMs = now() - started;
 
   const record = readRunRecord(o.runsDir, runId) || {};
-  const metrics = readRunMetrics(o.runsDir, runId);
+  const metrics = readRunMetrics(o.runsDir, runId, worktree);
   const hasWorktree = fs.existsSync(worktree);
   let test = { passed: false, timedOut: false, output: 'no worktree: the dispatch did not start' };
   if (hasWorktree) {
@@ -174,6 +176,7 @@ async function runTask(task, o) {
       exitCode: dispatched.code,
       commits: Number(record.commits_ahead) || 0,
       toolSteps: metrics.toolSteps,
+      trajectory: { ok: metrics.trajectory.ok, flags: metrics.trajectory.flags },
       escalated: record.escalated,
       fallback: record.fallback,
       testTimedOut: test.timedOut,

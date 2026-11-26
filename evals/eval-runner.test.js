@@ -58,7 +58,9 @@ test('readRunMetrics: claude turns + cost; hermes falls back to tool steps', () 
   const dir = tmp('metrics-');
   fs.writeFileSync(path.join(dir, 'a.claude.json'), JSON.stringify({ num_turns: 6, total_cost_usd: 0.12, usage: { output_tokens: 9 } }));
   fs.writeFileSync(path.join(dir, 'a.log'), '10:00:01 🔧 Read x\n');
-  assert.deepEqual(runner.readRunMetrics(dir, 'a'), { turns: 6, toolSteps: 1, costUsd: 0.12, tokens: { output_tokens: 9 }, isError: false });
+  const a = runner.readRunMetrics(dir, 'a');
+  assert.deepEqual({ ...a, trajectory: undefined }, { turns: 6, toolSteps: 1, costUsd: 0.12, tokens: { output_tokens: 9 }, isError: false, trajectory: undefined });
+  assert.equal(a.trajectory.steps, 1);
   fs.writeFileSync(path.join(dir, 'b.hermes.json'), JSON.stringify({ tokens: { total: 50 } }));
   fs.writeFileSync(path.join(dir, 'b.log'), '10:00:01 🔧 read_file x\n10:00:02 🔧 patch x\n10:00:03 🔧 terminal y\n');
   const m = runner.readRunMetrics(dir, 'b');
@@ -149,6 +151,8 @@ echo '{"type":"result","subtype":"success","result":"done","is_error":false,"tot
   assert.equal(r.details.commits, 1);
   assert.equal(r.turns, 2);
   assert.equal(r.costUsd, 0.03);
+  // The stub edits and never runs a test: the trajectory check says so.
+  assert.deepEqual(r.details.trajectory.flags.map((f) => f.type), ['unverified-edit']);
   const start = JSON.parse(fs.readFileSync(path.join(work, 'runs', 'runs.jsonl'), 'utf8').split('\n')[0]);
   assert.equal(start.kind, 'eval');
   assert.match(start.task, /^\[eval\] /);
