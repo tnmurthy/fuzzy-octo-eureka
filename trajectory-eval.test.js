@@ -53,6 +53,12 @@ test('file tools outside the worktree', () => {
   assert.deepEqual(r.flags.filter((f) => f.type === 'outside-worktree').map((f) => f.detail), ['/Users/a/.ssh/id_rsa', '/etc/hosts']);
 });
 
+test('macOS /private aliases and temp scratch files are not outside the worktree', () => {
+  const wt = '/var/folders/x/T/arunachala-eval/t-1/repo--eval-t';
+  const r = evaluateTrajectory(log(`🔧 Edit /private${wt}/a.js`, '🔧 Write /tmp/check.js', '🔧 Write /private/var/folders/x/T/arunachala-eval/check.js', '🔧 Read /Users/a/secrets.txt', '🔧 Bash node --test'), { worktree: wt });
+  assert.deepEqual(r.flags.map((f) => f.detail), ['/Users/a/secrets.txt']);
+});
+
 test('the same file read 3 times, however written, is flagged once; an edit resets the count', () => {
   const r = evaluateTrajectory(log(`🔧 Read ${WT}/a.js`, '🔧 read_file ./a.js', '🔧 read_file /workspace/a.js', '🔧 Read a.js'), { worktree: WT });
   assert.deepEqual(types(r), ['repeated-read']);

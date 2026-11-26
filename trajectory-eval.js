@@ -15,6 +15,7 @@
 //   forbidden-command   (high)   push, PR, force, hard reset, rm -rf, chmod 777, curl|sh ...
 //   blocked-command     (medium) the same, tried but refused by the permission layer
 //   outside-worktree    (high)   a file tool touched an absolute path outside the worktree
+//                                (temp folders are scratch space, not flagged)
 //   repeated-read       (low)    the same file read 3+ times with no edit to it in between
 //   repeated-command    (low)    the same command run 3+ times in a row
 //   error-loop          (medium) the same error 3+ times
@@ -88,12 +89,30 @@ function normalisePath(p, worktree) {
   return s;
 }
 
+// Scratch space an agent may use for throwaway checks (macOS: /tmp and
+// /var/folders, each also reachable through /private).
+const TEMP_ROOTS = ['/tmp', '/var/folders'];
+
+// macOS links /var and /tmp to /private/var and /private/tmp, so one file has
+// two absolute names; compare both.
+function aliases(p) {
+  const s = String(p || '');
+  if (/^\/private\/(var|tmp)(\/|$)/.test(s)) return [s, s.slice('/private'.length)];
+  if (/^\/(var|tmp)(\/|$)/.test(s)) return [s, `/private${s}`];
+  return [s];
+}
+
+const under = (p, root) => p === root || p.startsWith(root + '/');
+
 function isOutside(p, worktree) {
   const s = String(p || '').trim();
   if (!s.startsWith('/')) return false;
-  if (s === '/workspace' || s.startsWith('/workspace/')) return false;
+  if (under(s, '/workspace')) return false;
   if (!worktree) return false;
-  return !(s === worktree || s.startsWith(worktree + '/'));
+  const names = aliases(s);
+  if (names.some((n) => aliases(worktree).some((w) => under(n, w)))) return false;
+  if (names.some((n) => TEMP_ROOTS.some((t) => under(n, t)))) return false;
+  return true;
 }
 
 function flag(type, detail) {
