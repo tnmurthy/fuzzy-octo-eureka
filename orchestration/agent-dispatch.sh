@@ -155,6 +155,8 @@ You are working in $worktree on branch $branch. Rules:
 - Wrap 'supabase db reset' and any test suite that uses the local database in
   $HERE/db-lock.sh, e.g. '$HERE/db-lock.sh npm test'. Other agents share it.
 - Follow the AGENTS.md in this repository.
+- If you change code, run its tests (or the code itself) before you finish,
+  and fix what fails. Do not end on an edit you have not run.
 
 Task:
 EOF
@@ -390,7 +392,29 @@ commit_sandbox_changes() {
   return 0
 }
 
+# One local-model run at a time (#66 evals): two hermes runs sharing Ollama
+# both stall - one took 0 steps in 10 minutes, then passed in 19 s alone.
+# The run waits for the lock (its log says for what) before its timeout
+# starts; Stop works while waiting. LOCAL_MODEL_LOCK=off turns it off.
+. "$HERE/dir-lock.sh"
+LOCAL_MODEL_LOCK_DIR="${LOCAL_MODEL_LOCK_DIR:-$HOME/.agent-locks/local-model.lock}"
+_lm_waiting() { echo "== waiting for the local model (busy with: ${1:-another run})"; }
+_lm_not_stopped() { [ -z "$stopped" ]; }
+
 run_hermes() {
+  local rc=0
+  if [ "${LOCAL_MODEL_LOCK:-on}" = off ]; then run_hermes_unlocked "$@" || rc=$?; return "$rc"; fi
+  DIR_LOCK_ON_WAIT=_lm_waiting DIR_LOCK_CANCEL=_lm_not_stopped \
+    dir_lock_acquire "$LOCAL_MODEL_LOCK_DIR" "${LOCAL_MODEL_LOCK_WAIT:-1800}" "${LOCAL_MODEL_LOCK_STALE:-7200}" "run $run_id" || rc=$?
+  if [ "$rc" -eq 130 ]; then echo "== stopped while waiting for the local model"; return 143; fi
+  if [ "$rc" -ne 0 ]; then echo "== the local model stayed busy for ${LOCAL_MODEL_LOCK_WAIT:-1800}s; not started"; return 75; fi
+  trap 'dir_lock_release "$LOCAL_MODEL_LOCK_DIR"' EXIT
+  run_hermes_unlocked "$@" || rc=$?
+  dir_lock_release "$LOCAL_MODEL_LOCK_DIR"
+  return "$rc"
+}
+
+run_hermes_unlocked() {
   local limit="$1" json="$RUNS_DIR/$run_id.hermes.json" rc resume=() model=() boxed=() run_prompt="$prompt" gitfile=""
   if [ "$(basename "$HERMES")" = hermes-local.js ]; then
     run_timeout "$limit" "$HERMES" --in "$worktree" -z "$prompt"
