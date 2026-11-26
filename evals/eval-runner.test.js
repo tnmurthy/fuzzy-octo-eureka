@@ -177,3 +177,20 @@ test('scripts/eval.js: paid agents need --allow-paid and respect the daily cap',
   assert.equal(makePaidGuard({ ...deps, agent: 'claude', allowPaid: true, cap: 3 })().ok, true);
   assert.match(makePaidGuard({ ...deps, agent: 'claude', allowPaid: true, cap: 2 })().error, /Daily cap reached/);
 });
+
+test('model preflight: answers, stuck, unreachable, model from config', async () => {
+  const { probeLocalModel, hermesModel } = require('./model-preflight');
+  const ok = await probeLocalModel({ model: 'm', fetch: async () => ({ ok: true, json: async () => ({}) }) });
+  assert.equal(ok.ok, true);
+  const stuck = await probeLocalModel({
+    model: 'm', timeoutMs: 50,
+    fetch: (_u, o) => new Promise((_r, rej) => o.signal.addEventListener('abort', () => rej(o.signal.reason))),
+  });
+  assert.equal(stuck.ok, false);
+  assert.match(stuck.error, /did not answer a 5-token request .* restart Ollama/);
+  const down = await probeLocalModel({ model: 'm', fetch: async () => { throw new Error('ECONNREFUSED'); } });
+  assert.match(down.error, /cannot reach Ollama: ECONNREFUSED/);
+  assert.equal((await probeLocalModel({ model: null })).ok, false);
+  assert.equal(hermesModel({ HERMES_MODEL: 'x:1b' }), 'x:1b');
+  assert.match(hermesModel({}), /\S+/);
+});

@@ -99,6 +99,23 @@ async function main() {
     }
   }
 
+  // Local agents: refuse to start on a wedged model (its stalls would be
+  // recorded as agent failures). EVAL_PREFLIGHT=off skips it.
+  if (['hermes', 'auto'].includes(o.agent) && process.env.EVAL_PREFLIGHT !== 'off') {
+    const { probeLocalModel, hermesModel } = require('../evals/model-preflight');
+    const probe = await probeLocalModel({
+      model: hermesModel(),
+      host: process.env.OLLAMA_HOST || '127.0.0.1',
+      port: Number(process.env.OLLAMA_PORT) || 11434,
+      timeoutMs: Number(process.env.EVAL_PREFLIGHT_MS) || 30000,
+    });
+    if (!probe.ok) {
+      console.error(`local model check failed, no tasks run: ${probe.error}`);
+      return 3;
+    }
+    if (!o.json) console.error(`local model answered in ${probe.ms} ms`);
+  }
+
   const results = [];
   for (const task of tasks) {
     const gate = checkPaid();
