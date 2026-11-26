@@ -19,7 +19,9 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { evaluateTrajectory } = require('../trajectory-eval');
 
-const DISPATCH_SCRIPT = path.join(__dirname, '..', 'orchestration', 'agent-dispatch.sh');
+// EVAL_DISPATCH_SCRIPT: evaluate another checkout's dispatch script (a branch
+// under test) with this runner and these tasks.
+const DISPATCH_SCRIPT = process.env.EVAL_DISPATCH_SCRIPT || path.join(__dirname, '..', 'orchestration', 'agent-dispatch.sh');
 const OUTPUT_TAIL_CHARS = 2000;
 
 function git(cwd, args) {

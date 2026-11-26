@@ -16,6 +16,7 @@
 // Eval runs log to logs/eval-runs/ (EVAL_RUNS_DIR), never to the dashboard's
 // run log, so they do not appear as anyone's request. Results go to the
 // ledger, shown at GET /api/eval/leaderboard.
+// EVAL_DISPATCH_SCRIPT=<path> grades another checkout's agent-dispatch.sh.
 'use strict';
 
 const path = require('path');
