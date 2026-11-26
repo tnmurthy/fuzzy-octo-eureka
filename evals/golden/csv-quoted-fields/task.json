@@ -1,0 +1,11 @@
+{
+  "id": "csv-quoted-fields",
+  "name": "CSV Line Parser with Quoted Fields",
+  "difficulty": "medium",
+  "targetAgent": "hermes",
+  "targetTurns": 4,
+  "targetDurationMs": 20000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "csv.js exports parseCsvLine(line), which splits on commas and breaks on quoted fields. Make it follow RFC 4180 for a single line: fields may be wrapped in double quotes; inside quotes commas are literal and a doubled quote (\"\") means one quote; quotes are removed from the result; an empty line gives [''] and trailing commas give empty fields. Throw an Error on an unterminated quote. Keep the name and export. Run it, then commit."
+}

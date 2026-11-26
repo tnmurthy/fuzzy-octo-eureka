@@ -1,0 +1,11 @@
+{
+  "id": "multi-file-rename",
+  "name": "Rename Across Files with Deprecated Alias",
+  "difficulty": "medium",
+  "targetAgent": "hermes",
+  "targetTurns": 5,
+  "targetDurationMs": 25000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "The function getUsr in users.js is used by api.js and report.js. Rename it to getUser everywhere. users.js must still export getUsr as a deprecated alias of getUser (same function) so outside callers keep working, and api.js and report.js must call getUser. Behaviour must not change. Run it, then commit."
+}

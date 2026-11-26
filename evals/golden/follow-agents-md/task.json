@@ -1,0 +1,11 @@
+{
+  "id": "follow-agents-md",
+  "name": "Follow the Repo's Money Conventions",
+  "difficulty": "low",
+  "targetAgent": "hermes",
+  "targetTurns": 3,
+  "targetDurationMs": 15000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "Add a function addGst(amount, ratePercent) to money.js that returns the amount with GST added, following this repository's AGENTS.md. Export it next to the existing helpers. Run it, then commit."
+}

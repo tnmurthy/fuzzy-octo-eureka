@@ -25,13 +25,11 @@ function gradeIn(task, layers) {
   return r;
 }
 
-test('golden tasks: loaded, valid, and the same ids as the harness catalog', () => {
-  assert.ok(TASKS.length >= 4);
-  const catalog = new Set(getStandardChallenges().map((c) => c.id));
-  for (const t of TASKS) {
-    assert.ok(catalog.has(t.id), `${t.id} is not in eval-harness STANDARD_CHALLENGES`);
-    assert.ok(fs.existsSync(t.solutionDir), `${t.id} has no reference solution`);
-  }
+test('golden tasks: loaded, valid, every harness catalog challenge has one', () => {
+  assert.ok(TASKS.length >= 12);
+  const ids = new Set(TASKS.map((t) => t.id));
+  for (const c of getStandardChallenges()) assert.ok(ids.has(c.id), `catalog challenge ${c.id} has no golden task`);
+  for (const t of TASKS) assert.ok(fs.existsSync(t.solutionDir), `${t.id} has no reference solution`);
 });
 
 test('golden tasks: a bad task.json is refused', () => {

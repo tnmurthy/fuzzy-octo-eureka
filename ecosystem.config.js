@@ -49,6 +49,17 @@ module.exports = {
       script: path.join(ROOT, 'telemetry-daemon.js'),
     },
     {
+      // Golden evals with the free local agent once a night (scripts/eval-nightly.js).
+      // cron_restart starts it at 02:30; it exits at once outside 01-05 h, so a
+      // daytime pm2 restart never ties up the local model.
+      ...base,
+      name: 'NightlyEval',
+      script: path.join(ROOT, 'scripts', 'eval-nightly.js'),
+      autorestart: false,
+      cron_restart: '30 2 * * *',
+      max_memory_restart: '256M',
+    },
+    {
       // GitHub issues labelled agent:ready -> agent runs -> PRs. Idles (and
       // says so once an hour) until GITHUB_TOKEN is in the secrets file.
       ...base,

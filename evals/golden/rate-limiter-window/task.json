@@ -1,0 +1,11 @@
+{
+  "id": "rate-limiter-window",
+  "name": "Sliding-Window Rate Limiter",
+  "difficulty": "medium",
+  "targetAgent": "claude",
+  "targetTurns": 4,
+  "targetDurationMs": 20000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "limiter.js exports createLimiter({ limit, windowMs, now = Date.now }). Implement it: the returned object has allow(key) -> boolean, true when fewer than `limit` calls for that key were allowed in the last windowMs milliseconds (a sliding window, using the injected now()), and records the call when it allows it. Denied calls are not recorded. Keys are independent. Memory per key must not grow without bound (drop timestamps older than the window). Run it, then commit."
+}
