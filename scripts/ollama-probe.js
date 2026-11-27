@@ -1,59 +1,48 @@
+'use strict';
+// scripts/ollama-probe.js - does the local model really answer?
+// Ollama can hang with /api/tags still answering (the watchdog's check), so
+// this sends one 5-token generation (evals/model-preflight.js), appends the
+// result to logs/ollama-probe.jsonl and exits 0 (ok) or 1 (stuck / down).
+// It never restarts, kills or starts anything.
+//
+//   node scripts/ollama-probe.js        OLLAMA_PROBE_MS (30000), OLLAMA_HOST/PORT
+
 const fs = require('fs');
 const path = require('path');
 const { probeLocalModel, hermesModel } = require('../evals/model-preflight');
 
 /**
- * Runs the Ollama probe, logs the result, and exits.
- * @param {Object} params
- * @param {Function} params.probe - The probe function
- * @param {string} params.model - The model name
- * @param {string} params.logFile - The file path to write the log
- * @param {Date} params.now - The current date/time
+ * @param {{ probe: (model: string) => Promise<{ok: boolean, ms: number, error?: string}>,
+ *           model: string, logFile: string, now?: () => Date, log?: (s: string) => void }} o
+ * @returns {Promise<number>} exit code
  */
-async function runProbe({ probe, model, logFile, now }) {
-  const result = await probe(model);
-  const entry = {
-    at: now.toISOString(),
-    ok: result.ok,
-    ms: result.ms,
-    model: model,
-    error: result.error
-  };
-  
-  const logDir = path.dirname(logFile);
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-  }
+async function runProbe({ probe, model, logFile, now = () => new Date(), log = console.log }) {
+  const r = await probe(model);
+  const entry = { at: now().toISOString(), ok: r.ok, ms: r.ms, model, error: r.error || null };
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
   fs.appendFileSync(logFile, JSON.stringify(entry) + '\n');
-
-  if (result.ok) {
-    console.log(`ollama ok in ${result.ms} ms`);
-    process.exit(0);
-  } else {
-    console.error(`ollama STUCK: ${result.error}`);
-    process.exit(1);
-  }
+  log(r.ok ? `ollama ok in ${r.ms} ms` : `ollama STUCK: ${r.error}`);
+  return r.ok ? 0 : 1;
 }
 
 if (require.main === module) {
-  const model = hermesModel();
-  const logFile = path.join(process.cwd(), 'logs', 'ollama-probe.jsonl');
-  const now = new Date();
-
   runProbe({
-    probe: probeLocalModel({
-      model: model,
-      host: process.env.OLLAMA_HOST || "127.0.0.1",
-      port: Number(process.env.OLLAMA_PORT) || 11434,
-      timeoutMs: Number(process.env.OLLAMA_PROBE_MS) || 30000
-    }),
-    model,
-    logFile,
-    now
-  }).catch(err => {
-    console.error(`ollama STUCK: ${err.message}`);
-    process.exit(1);
-  });
+    probe: (model) =>
+      probeLocalModel({
+        model,
+        host: process.env.OLLAMA_HOST || '127.0.0.1',
+        port: Number(process.env.OLLAMA_PORT) || 11434,
+        timeoutMs: Number(process.env.OLLAMA_PROBE_MS) || 30000,
+      }),
+    model: hermesModel(),
+    logFile: path.join(__dirname, '..', 'logs', 'ollama-probe.jsonl'),
+  }).then(
+    (code) => process.exit(code),
+    (err) => {
+      console.error(`ollama STUCK: ${err.message}`);
+      process.exit(1);
+    }
+  );
 }
 
 module.exports = { runProbe };

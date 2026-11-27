@@ -1,60 +1,28 @@
+'use strict';
 const test = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { runProbe } = require('../scripts/ollama-probe');
+const { runProbe } = require('./ollama-probe');
 
-let exitCalledWith = null;
-const originalExit = process.exit;
-// Mock process.exit to prevent the test runner from terminating
-process.exit = (code) => {
-  exitCalledWith = code;
-};
+const now = () => new Date('2026-11-27T10:00:00Z');
+const lastLine = (f) => JSON.parse(fs.readFileSync(f, 'utf8').trim().split('\n').pop());
 
-test('successful probe', async () => {
-  const logFile = path.join(process.cwd(), 'test-logs', 'ok.jsonl');
-  const mockProbe = async () => ({ ok: true, ms: 100 });
-  const now = new Date();
-  
-  await runProbe({
-    probe: mockProbe,
-    model: 'hermes',
-    logFile,
-    now
-  });
-
-  assert.strictEqual(exitCalledWith, 0, 'Should exit with 0');
-  
-  const logContent = fs.readFileSync(logFile, 'utf8');
-  assert.ok(logContent.includes('"ok":true'), 'Log should contain ok:true');
-  assert.ok(logContent.includes('"model":"hermes"'), 'Log should contain model:hermes');
-  
-  // Cleanup
-  if (fs.existsSync(path.dirname(logFile))) {
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-  }
-  // We don't delete files here to avoid issues with concurrent tests if any, 
-  // but we should probably clean up.
+test('ok: exit 0, one JSON line logged', async () => {
+  const logFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'probe-')), 'logs', 'p.jsonl');
+  const said = [];
+  const code = await runProbe({ probe: async () => ({ ok: true, ms: 42 }), model: 'm1', logFile, now, log: (s) => said.push(s) });
+  assert.equal(code, 0);
+  assert.deepEqual(lastLine(logFile), { at: '2026-11-27T10:00:00.000Z', ok: true, ms: 42, model: 'm1', error: null });
+  assert.deepEqual(said, ['ollama ok in 42 ms']);
 });
 
-test('failed probe', async () => {
-  const logFile = path.join(process.cwd(), 'test-logs', 'fail.jsonl');
-  const mockProbe = async () => ({ ok: false, ms: 0, error: 'stuck' });
-  const now = new Date();
-
-  await runProbe({
-    probe: mockProbe,
-    model: 'hermes',
-    logFile,
-    now
-  });
-
-  assert.strictEqual(exitCalledWith, 1, 'Should exit with 1');
-
-  const logContent = fs.readFileSync(logFile, 'utf8');
-  assert.ok(logContent.includes('"ok":false'), 'Log should contain ok:false');
-  assert.ok(logContent.includes('"error":"stuck"'), 'Log should contain error:stuck');
+test('stuck: exit 1, error logged', async () => {
+  const logFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'probe-')), 'p.jsonl');
+  const said = [];
+  const code = await runProbe({ probe: async () => ({ ok: false, ms: 30000, error: 'stuck' }), model: 'm1', logFile, now, log: (s) => said.push(s) });
+  assert.equal(code, 1);
+  assert.equal(lastLine(logFile).error, 'stuck');
+  assert.deepEqual(said, ['ollama STUCK: stuck']);
 });
-
-// Restore original exit
-process.exit = originalExit;
