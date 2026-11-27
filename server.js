@@ -79,6 +79,8 @@ const { readOrigin, prUrlOf } = require('./repo-registry');
 const { isSameSiteJson } = require('./agents-api');
 const { recordRunReflection } = require('./task-reflection');
 const { auditDiff } = require('./code-auditor');
+const { createCohortCandidates } = require('./cohort-candidates');
+const cohortCandidates = createCohortCandidates({ file: path.join(DASHBOARD_DIR, 'logs', 'cohort-candidates.json') });
 const {
   getInvoicingSummary,
   generateMilestoneSOW,
@@ -2067,6 +2069,30 @@ function handleRequest(req, res) {
   }
   if (req.url.startsWith('/api/tasks')) {
     return handleTasks(req, res);
+  }
+  if (req.url.startsWith('/api/cohort/candidates')) {
+    const parts = req.url.split('?')[0].split('/');
+    const candidateId = parts[4];
+    if (req.method === 'GET' && !candidateId) {
+      return sendJson(res, 200, { ok: true, candidates: cohortCandidates.list() });
+    }
+    if (req.method === 'POST' && !candidateId) {
+      return readJsonBody(req, MAX_TASK_BODY_BYTES)
+        .then((input) => {
+          const r = cohortCandidates.create(input || {});
+          return r.ok ? sendJson(res, 201, r) : sendJson(res, 400, r);
+        })
+        .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    }
+    if (req.method === 'PATCH' && candidateId) {
+      return readJsonBody(req, MAX_TASK_BODY_BYTES)
+        .then((input) => {
+          const r = cohortCandidates.updateStage(candidateId, input && input.stage);
+          return r.ok ? sendJson(res, 200, r) : sendJson(res, 400, r);
+        })
+        .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
+    }
+    return sendJson(res, 405, { ok: false, error: 'use GET/POST /api/cohort/candidates or PATCH /api/cohort/candidates/<id>' });
   }
   if (req.url.startsWith('/api/agent/transcripts')) {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
