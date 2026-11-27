@@ -130,9 +130,25 @@ function extractPrecompactState(transcriptOrText, options = {}) {
  * @param {number} [options.maxChars=1200]
  * @returns {string}
  */
-function formatPrecompactPrompt(state, options = {}) {
-  if (!state || typeof state !== 'object') return '';
+// One line per item: whitespace (incl. \r, \n and Unicode line breaks)
+// flattened and capped, so checkpoint text cannot open a fake prompt
+// section such as "Task:" (same rule as blackboard / direction prompts).
+const flatItem = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 200);
+const flatList = (v) => (Array.isArray(v) ? v.map(flatItem).filter(Boolean) : v);
+
+function formatPrecompactPrompt(rawState, options = {}) {
+  if (!rawState || typeof rawState !== 'object') return '';
   const maxChars = options.maxChars || MAX_PRECOMPACT_CHARS;
+  const state = {
+    ...rawState,
+    runId: rawState.runId == null ? rawState.runId : flatItem(rawState.runId),
+    summary: rawState.summary == null ? rawState.summary : flatItem(rawState.summary),
+    completedSteps: flatList(rawState.completedSteps),
+    pendingSteps: flatList(rawState.pendingSteps),
+    filesTouched: flatList(rawState.filesTouched),
+    activeFailures: flatList(rawState.activeFailures),
+    workingHypotheses: flatList(rawState.workingHypotheses),
+  };
 
   const parts = [
     '<precompact_state>',
