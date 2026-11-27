@@ -6,7 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
+
+// Every run here takes the local-model lock: keep it away from the real one.
+process.env.LOCAL_MODEL_LOCK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'lm-lock-')) + '/local-model.lock';
 
 const BASH = process.env.DISPATCH_BASH_BIN || (process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash');
 const SCRIPT = path.join(__dirname, 'agent-dispatch.sh');
@@ -258,7 +261,7 @@ echo '{"type":"tool_use","name":"write_file","input":{"path":"boxed.txt"}}'
 echo '{"type":"result","session_id":"local-0123456789abcdef0123","exit_code":0,"text":"done"}'
 `;
 
-function boxed(t, { docker = 'ok', evil = false, readonly = false, sandboxOff = false } = {}) {
+function boxed(t, { docker = 'ok', evil = false, readonly = false, sandboxOff = false, env = {} } = {}) {
   fs.writeFileSync(path.join(t.bin, 'hermes-stub'), BOXED_HERMES, { mode: 0o755 });
   fs.writeFileSync(path.join(t.bin, 'docker'), `#!/usr/bin/env bash\n${docker === 'ok' ? 'exit 0' : 'exit 1'}\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(t.bin, 'orb'), '#!/usr/bin/env bash\nexit 1\n', { mode: 0o755 });
@@ -279,6 +282,7 @@ function boxed(t, { docker = 'ok', evil = false, readonly = false, sandboxOff = 
       SANDBOX_EVIL: evil ? '1' : '',
       ...(readonly ? { AGENT_HERMES_MODE: 'readonly', AGENT_RUN_MODE: 'readonly' } : {}),
       ...(sandboxOff ? { AGENT_HERMES_SANDBOX: 'off' } : {}),
+      ...env,
     },
   });
   const wt = path.join(t.dir, 'repo--task-x');
@@ -477,4 +481,64 @@ test('no fallback for a PR review, or when switched off', () => {
     assert.equal(r.end.fallback, undefined);
     assert.equal(r.seenHome, null, 'hermes never ran');
   }
+});
+
+// ---- local-model lock + run-what-you-changed rule (2026-11-26) -----------------
+test('every agent is told to run what it changed before finishing', () => {
+  const t = setup({ withTests: false });
+  const r = boxed(t);
+  assert.match(r.seenPrompt, /run its tests \(or the code itself\) before you finish/);
+});
+
+test('local-model lock: released after a hermes run', () => {
+  const t = setup({ withTests: false });
+  const lock = path.join(t.dir, 'lm.lock');
+  const r = boxed(t, { env: { LOCAL_MODEL_LOCK_DIR: posix(lock) } });
+  assert.equal(r.end.status, 'done', r.log);
+  assert.equal(fs.existsSync(lock), false, 'lock released');
+});
+
+test('local-model lock: a busy model makes the run wait, then give up', () => {
+  const t = setup({ withTests: false });
+  const lock = path.join(t.dir, 'lm.lock');
+  const holder = spawn('sleep', ['30']);
+  try {
+    fs.mkdirSync(lock);
+    fs.writeFileSync(path.join(lock, 'owner'), `${holder.pid} run other-run\n`);
+    const r = boxed(t, { env: { LOCAL_MODEL_LOCK_DIR: posix(lock), LOCAL_MODEL_LOCK_WAIT: '2', DIR_LOCK_POLL: '1' } });
+    assert.match(r.log, /waiting for the local model \(busy with: run other-run\)/);
+    assert.match(r.log, /stayed busy for 2s; not started/);
+    assert.equal(r.end.status, 'failed');
+    assert.equal(r.end.exit_code, 75);
+    assert.equal(r.seenHome, null, 'hermes never started');
+    assert.ok(fs.existsSync(lock), "someone else's lock is left alone");
+  } finally {
+    holder.kill();
+  }
+});
+
+test('local-model lock: a lock whose holder died is broken', () => {
+  const t = setup({ withTests: false });
+  const lock = path.join(t.dir, 'lm.lock');
+  const dead = spawnSync('bash', ['-c', 'echo $$']).stdout.toString().trim();
+  fs.mkdirSync(lock);
+  fs.writeFileSync(path.join(lock, 'owner'), `${dead} run crashed-run\n`);
+  const r = boxed(t, { env: { LOCAL_MODEL_LOCK_DIR: posix(lock), LOCAL_MODEL_LOCK_WAIT: '5', DIR_LOCK_POLL: '1' } });
+  assert.equal(r.end.status, 'done', r.log);
+  assert.equal(fs.existsSync(lock), false);
+});
+
+test('db-lock.sh: runs the command, releases, breaks a dead holder', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dblock-'));
+  const lock = path.join(dir, 'db.lock');
+  const env = { ...process.env, DB_LOCK_DIR: lock };
+  const ok = spawnSync(BASH, [posix(path.join(__dirname, 'db-lock.sh')), 'bash', '-c', 'cat "$DB_LOCK_DIR/owner"'], { encoding: 'utf8', env });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.match(ok.stdout, /^\d+ agent=human dir=.* cmd=bash -c/);
+  assert.equal(fs.existsSync(lock), false);
+  fs.mkdirSync(lock);
+  fs.writeFileSync(path.join(lock, 'owner'), '999999 agent=gone\n');
+  const broke = spawnSync(BASH, [posix(path.join(__dirname, 'db-lock.sh')), 'true'], { encoding: 'utf8', env });
+  assert.equal(broke.status, 0);
+  assert.match(broke.stderr, /breaking db\.lock held \d+s by: 999999 agent=gone/);
 });

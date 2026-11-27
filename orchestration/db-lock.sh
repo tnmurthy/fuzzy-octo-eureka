@@ -10,8 +10,8 @@
 # anything else (typecheck, lint, unit tests with no database) does not need it.
 #
 # The lock is a directory, because mkdir is atomic on every filesystem here. A
-# lock older than DB_LOCK_STALE seconds is assumed abandoned (its holder was
-# killed before its trap ran) and is broken with a message.
+# lock whose holder pid is gone, or older than DB_LOCK_STALE seconds, is
+# assumed abandoned and is broken with a message (orchestration/dir-lock.sh).
 set -euo pipefail
 
 LOCK_DIR="${DB_LOCK_DIR:-$HOME/.agent-locks/supabase-local.lock}"
@@ -21,28 +21,11 @@ POLL_SECONDS=5
 
 [ $# -ge 1 ] || { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
-mkdir -p "$(dirname "$LOCK_DIR")"
-waited=0
-
-while ! mkdir "$LOCK_DIR" 2>/dev/null; do
-  holder="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)"
-  age=$(( $(date +%s) - $(stat -c %Y "$LOCK_DIR" 2>/dev/null || date +%s) ))
-  if [ "$age" -ge "$STALE_SECONDS" ]; then
-    echo "db-lock: breaking a lock held ${age}s by: $holder" >&2
-    rm -rf "$LOCK_DIR"
-    continue
-  fi
-  if [ "$waited" -ge "$WAIT_SECONDS" ]; then
-    echo "db-lock: gave up after ${waited}s; held by: $holder" >&2
-    exit 75
-  fi
-  [ "$waited" -eq 0 ] && echo "db-lock: waiting for the local database; held by: $holder" >&2
-  sleep "$POLL_SECONDS"
-  waited=$(( waited + POLL_SECONDS ))
-done
-
-trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
-printf '%s pid=%s agent=%s dir=%s cmd=%s\n' \
-  "$(date -Iseconds)" "$$" "${AGENT_NAME:-human}" "$PWD" "$*" > "$LOCK_DIR/owner"
+. "$(cd "$(dirname "$0")" && pwd)/dir-lock.sh"
+_db_waiting() { echo "db-lock: waiting for the local database; held by: $1" >&2; }
+DIR_LOCK_POLL=$POLL_SECONDS DIR_LOCK_ON_WAIT=_db_waiting \
+  dir_lock_acquire "$LOCK_DIR" "$WAIT_SECONDS" "$STALE_SECONDS" "agent=${AGENT_NAME:-human} dir=$PWD cmd=$*" \
+  || { echo "db-lock: gave up after ${WAIT_SECONDS}s; held by: $(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)" >&2; exit 75; }
+trap 'dir_lock_release "$LOCK_DIR"' EXIT INT TERM
 
 "$@"
