@@ -2094,30 +2094,6 @@ function handleRequest(req, res) {
     }
     return sendJson(res, 405, { ok: false, error: 'use GET/POST /api/cohort/candidates or PATCH /api/cohort/candidates/<id>' });
   }
-  if (req.url.startsWith('/api/cohort/candidates')) {
-    const parts = req.url.split('?')[0].split('/');
-    const candidateId = parts[4];
-    if (req.method === 'GET' && !candidateId) {
-      return sendJson(res, 200, { ok: true, candidates: cohortCandidates.list() });
-    }
-    if (req.method === 'POST' && !candidateId) {
-      return readJsonBody(req, MAX_TASK_BODY_BYTES)
-        .then((input) => {
-          const r = cohortCandidates.create(input || {});
-          return r.ok ? sendJson(res, 201, r) : sendJson(res, 400, r);
-        })
-        .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
-    }
-    if (req.method === 'PATCH' && candidateId) {
-      return readJsonBody(req, MAX_TASK_BODY_BYTES)
-        .then((input) => {
-          const r = cohortCandidates.updateStage(candidateId, input && input.stage);
-          return r.ok ? sendJson(res, 200, r) : sendJson(res, 400, r);
-        })
-        .catch((err) => sendJson(res, 400, { ok: false, error: err.message }));
-    }
-    return sendJson(res, 405, { ok: false, error: 'use GET/POST /api/cohort/candidates or PATCH /api/cohort/candidates/<id>' });
-  }
   if (req.url.startsWith('/api/agent/transcripts')) {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const agentFilter = parsedUrl.searchParams.get('agent');
