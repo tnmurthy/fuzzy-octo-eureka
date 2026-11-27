@@ -1,0 +1,11 @@
+{
+  "id": "sqlite-wal-concurrency",
+  "name": "SQLite Concurrent Write Lock Handler",
+  "difficulty": "medium",
+  "targetAgent": "hermes",
+  "targetTurns": 4,
+  "targetDurationMs": 20000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "db.js exports openDb(file) and withRetry(fn, opts). Writers collide with SQLITE_BUSY. Fix both: (1) openDb must switch the database to WAL mode (PRAGMA journal_mode = WAL) before returning it. (2) withRetry(fn, { retries = 5, baseMs = 20, sleep }) must call the async or sync fn and, when it throws an error whose code is 'SQLITE_BUSY' or 'ERR_SQLITE_ERROR' with a message containing 'database is locked', wait baseMs * 2^attempt (attempt 0, 1, 2 ...) using opts.sleep(ms) (default: a setTimeout promise) and try again, up to retries extra attempts; then rethrow the last error. Any other error is rethrown at once without waiting. It returns fn's result. Keep the names and exports. Commit your change."
+}

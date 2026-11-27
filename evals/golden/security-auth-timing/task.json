@@ -1,0 +1,11 @@
+{
+  "id": "security-auth-timing",
+  "name": "Constant-Time Authentication Signature Guard",
+  "difficulty": "high",
+  "targetAgent": "claude",
+  "targetTurns": 5,
+  "targetDurationMs": 25000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "verify.js exports verifySignature(payload, signature, secret), which checks a hex HMAC-SHA256 signature of payload. It compares strings with ===, which leaks timing. Fix it: compare with crypto.timingSafeEqual, check lengths first, and return false (never throw) when the signature is the wrong length, is not valid hex, or is not a string. Keep the same name and export. Commit your change."
+}

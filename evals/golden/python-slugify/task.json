@@ -1,0 +1,11 @@
+{
+  "id": "python-slugify",
+  "name": "Python URL Slug Helper",
+  "difficulty": "low",
+  "targetAgent": "hermes",
+  "targetTurns": 3,
+  "targetDurationMs": 15000,
+  "testCommand": "python3 -m unittest -q grader_test",
+  "testTimeoutMs": 60000,
+  "prompt": "slug.py defines slugify(text, max_len=60). Implement it: lower-case; turn accented Latin letters into plain ASCII (e.g. é -> e) and drop other non-ASCII; every run of characters that are not a-z or 0-9 becomes one hyphen; no leading or trailing hyphen; cut to max_len without ending on a hyphen; return '' when nothing is left. Standard library only, and it must run on Python 3.9 (no match statements, no X | Y type hints). Run it, then commit."
+}

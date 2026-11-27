@@ -1,0 +1,11 @@
+{
+  "id": "json-prototype-sanitizer",
+  "name": "JSON Schema & Prototype Pollution Guard",
+  "difficulty": "medium",
+  "targetAgent": "claude",
+  "targetTurns": 4,
+  "targetDurationMs": 18000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "safe-json.js exports safeParse(text) and merge(target, source). Both are open to prototype pollution. Fix them: safeParse must drop every key named __proto__, constructor or prototype at any depth (inside arrays too) and keep everything else as JSON.parse would; invalid JSON still throws SyntaxError. merge (a deep merge of plain objects) must skip those same keys, so merging parsed input can never change Object.prototype. Keep the names and exports. Commit your change."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "off-by-one-pagination",
+  "name": "Pagination Off-By-One Bug",
+  "difficulty": "low",
+  "targetAgent": "hermes",
+  "targetTurns": 3,
+  "targetDurationMs": 15000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "page.js exports paginate(items, page, size): page is 1-based (page 1 is the first `size` items). Users report page 1 skips the first items and the last page is sometimes missing. Fix the bug. It must return { items, page, totalPages }, totalPages is at least 1, and a page past the end returns an empty items array. Keep the name and export. Run it, then commit."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "pure-function-refactor",
+  "name": "Pure Function Algorithmic Refactor",
+  "difficulty": "low",
+  "targetAgent": "hermes",
+  "targetTurns": 3,
+  "targetDurationMs": 15000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "pairs.js exports hasPairWithSum(nums, target): true when two different positions in the array nums hold numbers that add up to target. It is too slow for large arrays (nested loops) and it sorts the caller's array in place. Rewrite it to run in O(N) time without changing the input array. Keep the same name, export and results. Commit your change."
+}

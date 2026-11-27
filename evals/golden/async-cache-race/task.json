@@ -1,0 +1,11 @@
+{
+  "id": "async-cache-race",
+  "name": "Single In-Flight Async Config Load",
+  "difficulty": "medium",
+  "targetAgent": "claude",
+  "targetTurns": 4,
+  "targetDurationMs": 20000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "config.js exports createConfig(load), where load() is an async function that fetches config. get() caches the result, but concurrent get() calls before the first load finishes each call load() again, and a failed load is cached forever. Fix it: concurrent get() calls share one in-flight load; once loaded, get() returns the cached value without calling load; if load rejects, every waiting caller gets the rejection and the next get() tries load() again. Keep the names and exports. Run it, then commit."
+}

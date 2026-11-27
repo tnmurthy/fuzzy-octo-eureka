@@ -1,0 +1,11 @@
+{
+  "id": "path-traversal-guard",
+  "name": "Path Traversal Guard for File Downloads",
+  "difficulty": "high",
+  "targetAgent": "claude",
+  "targetTurns": 4,
+  "targetDurationMs": 20000,
+  "testCommand": "node --test grader.test.js",
+  "testTimeoutMs": 60000,
+  "prompt": "files.js exports resolveSafe(root, userPath), used to serve downloads from the folder root. It joins the paths without checks, so '../' can escape root. Fix it: return the absolute resolved path when it is root itself or inside root; throw an Error with code 'EOUTSIDE' when the result would be outside root (including '..' segments, encoded forms are not decoded here, absolute userPath outside root, and sibling folders whose name starts with root's name, e.g. /srv/data-old for root /srv/data); throw code 'EBADPATH' when userPath is not a string or contains a NUL byte. Keep the name and export. Run it, then commit."
+}
