@@ -920,7 +920,7 @@ async function startDispatch(payload, ctx = {}) {
   }
   // Another kind or agent than the parent: its session cannot be resumed.
   if (followUp && (approvePlan || payload.agent !== followUp.agent)) followUp = { ...followUp, session: null };
-  const { repo, branch, task } = payload;
+  const { repo, branch, task, issueRepo, issueNumber, taskId } = payload;
   // DISPATCH_LOCAL_FIRST=true: a claude request runs as `auto` - the local
   // agent first, claude only if the repo's tests fail (agent-dispatch.sh).
   const agent =
@@ -1013,6 +1013,9 @@ async function startDispatch(payload, ctx = {}) {
       by: ctx.by || null,
       kind,
       helper,
+      issueRepo: typeof issueRepo === 'string' ? issueRepo : null,
+      issueNumber: typeof issueNumber === 'number' ? issueNumber : null,
+      taskId: typeof taskId === 'string' ? taskId : null,
     });
     return {
       status: 202,
@@ -1262,6 +1265,9 @@ function spawnAgentDispatch({
   by = null,
   kind = null,
   helper = null,
+  issueRepo = null,
+  issueNumber = null,
+  taskId = null,
 }) {
   // Every way to start an agent passes here: apply the teammate mode
   // (teammate-mode.js) to anyone who is not an admin.
@@ -1352,6 +1358,12 @@ function spawnAgentDispatch({
       dispatchEnv.AGENT_TASK_TITLE = String(task).slice(0, 160);
       if (specialist && specialists.get(specialist)) dispatchEnv.AGENT_SPECIALIST = specialist;
       else delete dispatchEnv.AGENT_SPECIALIST;
+      if (issueRepo) dispatchEnv.AGENT_ISSUE_REPO = issueRepo;
+      else delete dispatchEnv.AGENT_ISSUE_REPO;
+      if (issueNumber != null) dispatchEnv.AGENT_ISSUE_NUMBER = String(issueNumber);
+      else delete dispatchEnv.AGENT_ISSUE_NUMBER;
+      if (taskId) dispatchEnv.AGENT_TASK_ID = taskId;
+      else delete dispatchEnv.AGENT_TASK_ID;
       // Follow-ups: resume the earlier session; record which run this continues.
       if (resumeSession) dispatchEnv.AGENT_RESUME_SESSION = resumeSession;
       else delete dispatchEnv.AGENT_RESUME_SESSION;

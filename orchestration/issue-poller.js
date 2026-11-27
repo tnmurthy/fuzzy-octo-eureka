@@ -363,7 +363,7 @@ function createPoller(deps) {
     try {
       git(['fetch', 'origin', base], target.path);
       git(['branch', branch, `origin/${base}`], target.path);
-      const { runId } = await dispatch({ agent, repo: target.name, branch, task: buildTask(repo, issue), confirmed, ...(specialist ? { specialist } : {}) });
+      const { runId } = await dispatch({ agent, repo: target.name, branch, task: buildTask(repo, issue), confirmed, issueRepo: repo, issueNumber: issue.number, ...(specialist ? { specialist } : {}) });
       state.active[runId] = {
         repo, number, branch, base, agent, ...(specialist ? { specialist } : {}), path: target.path, name: target.name,
         title: issue.title, issueBody: String(issue.body || '').slice(0, 3000), dispatchedAt: now(),

@@ -166,6 +166,33 @@ test('without a specialist the run log has no specialist field', () => {
   assert.equal(start.task, 'make the tests pass');
 });
 
+test('the run log records issueRepo, issueNumber and taskId', () => {
+  const t = setup({ withTests: false });
+  const res = spawnSync(BASH, [posix(SCRIPT), 'noop', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], {
+    encoding: 'utf8',
+    env: { ...process.env, AGENT_RUNS_DIR: posix(t.runs), AGENT_ISSUE_REPO: 'tnmurthy/fuzzy-octo-eureka', AGENT_ISSUE_NUMBER: '70', AGENT_TASK_ID: 'task-123' },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal(start.issueRepo, 'tnmurthy/fuzzy-octo-eureka');
+  assert.equal(start.issueNumber, 70);
+  assert.equal(start.taskId, 'task-123');
+});
+
+test('without issueRepo/issueNumber/taskId the run log has none of those fields', () => {
+  const t = setup({ withTests: false });
+  const env = { ...process.env, AGENT_RUNS_DIR: posix(t.runs) };
+  delete env.AGENT_ISSUE_REPO;
+  delete env.AGENT_ISSUE_NUMBER;
+  delete env.AGENT_TASK_ID;
+  const res = spawnSync(BASH, [posix(SCRIPT), 'noop', posix(t.repo), 'task/x', posix(t.prompt), 'run-1'], { encoding: 'utf8', env });
+  assert.equal(res.status, 0, res.stderr);
+  const start = JSON.parse(fs.readFileSync(path.join(t.runs, 'runs.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal('issueRepo' in start, false);
+  assert.equal('issueNumber' in start, false);
+  assert.equal('taskId' in start, false);
+});
+
 test('a follow-up resumes the earlier claude session and records its parent run', () => {
   const t = setup({ withTests: false });
   const argsFile = path.join(t.dir, 'claude-args');
