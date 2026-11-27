@@ -207,6 +207,20 @@ test('syncOnce signs in, uploads, and saves state so a restart does not resend',
   assert.equal(again.calls.length, 0);
 });
 
+test('moveTask with a runId sends it alongside status', async () => {
+  const fetch = fakeFetch([tokenReply('t1'), { status: 200, json: [{ id: 'u1', status: 'done', run_id: 'run-123' }] }]);
+  const deps = { readRuns: () => ({ runs: [] }), runsFile: 'x', stateFile: tmpState(), log: () => {}, fetch };
+  await createTeamStore(fullEnv, deps).moveTask('u1', 'done', 'run-123');
+  assert.deepEqual(fetch.calls[1].body, { status: 'done', run_id: 'run-123' });
+});
+
+test('moveTask without a runId sends only status, never clearing an existing run_id', async () => {
+  const fetch = fakeFetch([tokenReply('t1'), { status: 200, json: [{ id: 'u1', status: 'done' }] }]);
+  const deps = { readRuns: () => ({ runs: [] }), runsFile: 'x', stateFile: tmpState(), log: () => {}, fetch };
+  await createTeamStore(fullEnv, deps).moveTask('u1', 'done');
+  assert.deepEqual(fetch.calls[1].body, { status: 'done' });
+});
+
 test('syncOnce logs an outage once, not every interval', async () => {
   const logs = [];
   const down = { throw: new Error('fetch failed') };

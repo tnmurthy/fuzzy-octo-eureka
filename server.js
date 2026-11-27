@@ -724,10 +724,19 @@ function handleTasks(req, res) {
             ok: false,
             error: 'status must be backlog, in_progress or done',
           });
+        // run_id: optional, Supabase-backed board only (local TASKS.md has
+        // no equivalent field). Omit it to leave an existing run_id as is.
+        let runId;
+        if (input.run_id !== undefined) {
+          if (typeof input.run_id !== 'string' || !input.run_id.trim() || input.run_id.length > 100) {
+            return sendJson(res, 400, { ok: false, error: 'run_id must be a non-empty string, at most 100 characters' });
+          }
+          runId = input.run_id.trim();
+        }
         if (teamStore) {
           if (!UUID_RE.test(id))
             return sendJson(res, 400, { ok: false, error: 'task id must be a UUID' });
-          return teamStore.moveTask(id, input.status).then((task) => {
+          return teamStore.moveTask(id, input.status, runId).then((task) => {
             if (task) recordTaskTransitionAudit(id, task, input.status, actor);
             return task
               ? sendJson(res, 200, { ok: true, task })
