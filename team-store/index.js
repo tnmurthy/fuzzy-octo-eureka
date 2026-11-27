@@ -162,8 +162,11 @@ function createTeamStore(env, {
       return rows[0] || null;
     },
     // Resolves to the moved row, or null when no visible task has that id.
-    async moveTask(id, status) {
-      const rows = await rest.update('arunachala_tasks', { id: `eq.${id}`, team_id: `eq.${teamId}` }, { status });
+    // runId: the agent run now working this task, or undefined to leave it
+    // untouched (a plain status move does not clear an existing run_id).
+    async moveTask(id, status, runId) {
+      const patch = runId !== undefined ? { status, run_id: runId } : { status };
+      const rows = await rest.update('arunachala_tasks', { id: `eq.${id}`, team_id: `eq.${teamId}` }, patch);
       return rows[0] || null;
     },
   };
