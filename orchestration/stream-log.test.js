@@ -52,6 +52,7 @@ test('hermes events become the same log lines and a normalised result', () => {
   assert.deepEqual(f({ type: 'tool_use', name: 'read_file', input: { path: 'a.txt' } }).lines, ['10:00:05 🔧 read_file a.txt']);
   assert.deepEqual(f({ type: 'tool_result', is_error: false, output: 'ok' }).lines, []);
   assert.deepEqual(f({ type: 'tool_result', is_error: true, output: 'boom' }).lines, ['10:00:05    ↳ error: boom']);
+  assert.deepEqual(f({ type: 'tool_result', is_error: true, output: "line one\nDid you mean one of these permissions?\n  x" }).lines, ['10:00:05    ↳ error: line one Did you mean one of these permissions? x']);
   assert.deepEqual(f({ type: 'text', text: '\n\nhello' }).lines, ['10:00:05 💬 hello']);
   const r = f({ type: 'result', session_id: 'local-abc', exit_code: 0, text: 'done\nQUESTION: which?', tokens: { total: 1200 } });
   assert.deepEqual(r.lines, ['10:00:05 == hermes finished: success · 1200 tokens (local)']);

@@ -44,7 +44,7 @@ function formatEvent(event, now = new Date(), agent = 'claude') {
   if (agent === 'hermes') {
     if (event.type === 'system' && event.subtype === 'init') return { lines: [`${t} == hermes started${event.model ? ` (model ${event.model})` : ''}`] };
     if (event.type === 'tool_use') return { lines: [`${t} 🔧 ${toolSummary(event.name, event.input || {})}`] };
-    if (event.type === 'tool_result' && event.is_error) return { lines: [`${t}    ↳ error: ${clip(event.output, MAX_TEXT)}`] };
+    if (event.type === 'tool_result' && event.is_error) return { lines: [`${t}    ↳ error: ${clip(typeof event.output === 'string' ? event.output : JSON.stringify(event.output), MAX_TEXT)}`] };
     if (event.type === 'text' && String(event.text || '').trim()) return { lines: [`${t} 💬 ${clip(event.text, MAX_TEXT)}`] };
     if (event.type === 'result') {
       const ok = Number(event.exit_code || 0) === 0;
@@ -74,7 +74,7 @@ function formatEvent(event, now = new Date(), agent = 'claude') {
     const lines = [];
     for (const part of event.message.content) {
       if (part.type === 'tool_result' && part.is_error) {
-        const text = Array.isArray(part.content) ? part.content.map((c) => c.text || '').join(' ') : part.content;
+        const text = Array.isArray(part.content) ? part.content.map((c) => c.text || '').join(' ') : (typeof part.content === 'string' ? part.content : JSON.stringify(part.content));
         lines.push(`${t}    ↳ error: ${clip(text, MAX_TEXT)}`);
       }
     }
