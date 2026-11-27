@@ -14,8 +14,14 @@
 
 DIR_LOCK_POLL="${DIR_LOCK_POLL:-2}"
 
-# mtime in epoch seconds: BSD stat (macOS) first, then GNU.
-_dir_lock_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || date +%s; }
+# mtime in epoch seconds: GNU stat (-c, Linux) first, then BSD (macOS).
+# Order matters: GNU's -f means --file-system, not "format" (BSD's -f FORMAT).
+# A wrong-platform `stat -f %m "$1"` on GNU parses %m as a second filename,
+# fails to stat it, but still prints verbose text for the real path before
+# exiting non-zero - that leaks into the caller's arithmetic. GNU's -c on
+# BSD fails cleanly instead (no such option, no file touched), so trying it
+# first is safe either way.
+_dir_lock_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || date +%s; }
 
 dir_lock_acquire() {
   local dir="$1" wait="$2" stale="$3" label="$4" waited=0 told="" owner pid age
