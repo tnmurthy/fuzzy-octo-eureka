@@ -184,7 +184,9 @@ node "$(native "$HERE/runlog.mjs")" "$runs" id="$run_id" agent="$agent" repo="$r
   ${AGENT_SPECIALIST:+"specialist=$AGENT_SPECIALIST"} ${AGENT_PARENT_RUN:+"parent=$AGENT_PARENT_RUN"} \
   ${AGENT_LEVEL:+"level=$AGENT_LEVEL"} ${AGENT_BY:+"by=$AGENT_BY"} \
   ${AGENT_PORTAL:+"portal=$AGENT_PORTAL"} ${AGENT_RUN_MODE:+"mode=$AGENT_RUN_MODE"} \
-  ${AGENT_KIND:+"kind=$AGENT_KIND"} ${AGENT_HELPER:+"helper=$AGENT_HELPER"} started_at="$(iso_date)"
+  ${AGENT_KIND:+"kind=$AGENT_KIND"} ${AGENT_HELPER:+"helper=$AGENT_HELPER"} \
+  ${AGENT_ISSUE_REPO:+"issueRepo=$AGENT_ISSUE_REPO"} ${AGENT_ISSUE_NUMBER:+"issueNumber:=$AGENT_ISSUE_NUMBER"} \
+  ${AGENT_TASK_ID:+"taskId=$AGENT_TASK_ID"} started_at="$(iso_date)"
 
 # Stop (Agents page -> run-control.js): the dashboard signals this script and
 # every process under it. The trap lets the script outlive the signal and

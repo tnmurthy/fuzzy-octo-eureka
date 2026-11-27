@@ -273,6 +273,13 @@ test('without a specialist label the dispatch payload has no specialist key', as
   assert.equal('specialist' in dispatched[0], false);
 });
 
+test('the dispatch payload carries issueRepo and issueNumber', async () => {
+  const { poller, dispatched } = setup({ issues: [issue(70)] });
+  await poller.tick();
+  assert.equal(dispatched[0].issueRepo, REPO);
+  assert.equal(dispatched[0].issueNumber, 70);
+});
+
 test('reviews use the configured review specialist', async () => {
   const { poller, dispatched } = setup({ state: { active: { r1: jobWithMeta } }, runs: [prRun], reviewAgent: 'claude', reviewSpecialist: 'engineering-code-reviewer' });
   await poller.tick();
